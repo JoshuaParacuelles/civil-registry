@@ -4,7 +4,7 @@ import {
   fetchExternalIndividuals,
   fetchExternalIndividual,
 } from "../../assets/services/externalIndividualsService";
-import "./ExternalIndividualsLookup.css";
+import "./Externalindividualslookup.css";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
