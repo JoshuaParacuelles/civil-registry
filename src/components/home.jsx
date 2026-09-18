@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import ChangePassword from "./Account Settings/ChangePassword";
 import AuditLogs from "./Account Settings/Auditlogs";
-import RoleManagement from "./Account Settings/RoleManagement";
+import RoleManagement from "./Account Settings/Rolemanagement";
 import AccessDenied from "./Account Settings/AccessDenied";
 
 import UnifiedBirthRegistry from "./Vital Records Management/birth/Birthverifier";
@@ -9,7 +9,7 @@ import UnifiedMarriageRegistry from "./Vital Records Management/marriage/Marriag
 import DeathVerifier from "./Vital Records Management/death/Deathverifier";
 import PaymentInventory from "./dashboard/dashboard";
 import Heatmaps from "./Heatmaps/Heatmaps";
-import ExternalIndividualsLookup from "./External Individuals/ExternalIndividualsLookup";
+import ExternalIndividualsLookup from "./External Individuals/Externalindividualslookup";
 import DocumentTracking from "./document tracking/document_tracking";
 
 import { usePermissions } from "./PermissionContext";
