@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import ChangePassword from "./Account Settings/ChangePassword";
-import AuditLogs from "./Account Settings/Auditlogs";
-import RoleManagement from "./Account Settings/Rolemanagement";
+import AuditLogs from "./Account Settings/AuditLogs";
+import RoleManagement from "./Account Settings/RoleManagement";
 import AccessDenied from "./Account Settings/AccessDenied";
 
 import UnifiedBirthRegistry from "./Vital Records Management/birth/Birthverifier";
