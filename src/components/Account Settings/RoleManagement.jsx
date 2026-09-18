@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { usePermissions } from "../PermissionContext";
-import "./Rolemanagement.css";
+import "./RoleManagement.css";
 
 // Use empty string to route via Vite proxy, avoiding CORS/Cookie domain mismatches
 const API = "";
@@ -721,7 +721,7 @@ export default function Rolemanagement() {
 
 // ─── USERS TABLE ──────────────────────────────────────────────────────────────
 // NOTE: every <td> below carries a data-label attribute. On desktop this is
-// ignored, but the mobile media query in Rolemanagement.css uses
+// ignored, but the mobile media query in RoleManagement.css uses
 // `content: attr(data-label)` to turn each row into a labeled stacked card,
 // so every column stays visible on narrow screens instead of being clipped
 // or requiring horizontal scrolling to find.
