@@ -1,0 +1,1029 @@
+/* ══════════════════════════════════════════════════════════════
+   ANALYTICS DASHBOARD — dashboard.css
+   Matched to home.css design system (an-* prefix)
+   ══════════════════════════════════════════════════════════════ */
+
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=DM+Mono:wght@400;500&display=swap");
+
+/* ─── CSS Variables — inherits from home.css :root ───────────── */
+:root {
+  --an-bg:             var(--bg-base,        #f1f5f9);
+  --an-surface:        var(--bg-surface,     #ffffff);
+  --an-surface-soft:   var(--bg-surface-soft,#f8fafc);
+  --an-surface-raised: var(--bg-raised,      #f1f5f9);
+  --an-surface-hover:  var(--bg-hover,       #e8eef6);
+
+  --an-border:         var(--border,         rgba(0,0,0,0.08));
+  --an-border-strong:  var(--border-strong,  rgba(0,0,0,0.14));
+  --an-border-subtle:  var(--border-subtle,  rgba(0,0,0,0.04));
+
+  --an-text:           var(--text-primary,   #0f172a);
+  --an-text-soft:      var(--text-soft,      #475569);
+  --an-text-muted:     var(--text-muted,     #94a3b8);
+  --an-text-dim:       var(--text-dim,       #b0bec5);
+
+  --an-shadow:         var(--shadow-sm,      0 2px 10px rgba(0,0,0,0.07));
+  --an-shadow-hover:   var(--shadow-md,      0 6px 20px rgba(0,0,0,0.10));
+
+  --an-radius:         var(--radius-lg,      8px);
+  --an-radius-sm:      var(--radius-sm,      6px);
+
+  --an-blue:           var(--accent-blue,    #2563eb);
+  --an-green:          #1D9E75;
+  --an-purple:         #7F77DD;
+  --an-amber:          #BA7517;
+  --an-red:            #dc2626;
+}
+
+/* ─── Wrapper ────────────────────────────────────────────────── */
+.an-wrapper {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--an-bg);
+  padding: 20px 24px 40px;
+  min-height: 100%;
+  font-family: var(--font, "DM Sans", system-ui, sans-serif);
+  color: var(--an-text);
+}
+
+/* ─── Header ─────────────────────────────────────────────────── */
+.an-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--an-border);
+  flex-wrap: wrap;
+}
+
+.an-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--an-text-muted);
+  margin-bottom: 5px;
+}
+
+.an-title {
+  margin: 0 0 5px;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--an-text);
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+}
+
+.an-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--an-text-soft);
+  line-height: 1.6;
+  max-width: 640px;
+  font-weight: 500;
+}
+
+.an-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+/* ─── Live Badge ─────────────────────────────────────────────── */
+.an-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  background: rgba(22, 163, 74, 0.08);
+  border: 1px solid rgba(22, 163, 74, 0.22);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #166534;
+}
+
+.an-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #16a34a;
+  animation: anPulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes anPulse {
+  0%, 100% { opacity: 1;   transform: scale(1);    }
+  50%       { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* ─── Refresh Button — matches topbar-toggle style ───────────── */
+.an-refresh-btn {
+  border: 1px solid var(--an-border-strong);
+  border-radius: var(--an-radius-sm);
+  padding: 8px 14px;
+  background: var(--an-surface);
+  color: var(--an-text-soft);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font, "DM Sans", sans-serif);
+  transition: all 0.18s ease;
+}
+
+.an-refresh-btn:hover {
+  background: var(--an-surface-hover);
+  color: var(--an-text);
+  border-color: rgba(0, 0, 0, 0.20);
+}
+
+.an-refresh-btn:active { transform: scale(0.97); }
+
+/* ─── Error Banner ───────────────────────────────────────────── */
+.an-error-banner {
+  margin-bottom: 14px;
+  padding: 11px 16px;
+  border-radius: var(--an-radius-sm);
+  background: rgba(220, 38, 38, 0.06);
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  color: #991b1b;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* ─── KPI Grid ───────────────────────────────────────────────── */
+.an-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* ─── Metric Card — matches content-box style ────────────────── */
+.an-metric-card {
+  background: var(--an-surface);
+  border: 1px solid var(--an-border);
+  border-radius: var(--radius-md, 8px);
+  padding: 16px 18px;
+  transition: border-color 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.an-metric-card:hover {
+  border-color: var(--an-border-strong);
+}
+
+/* ─── Hero / secondary KPI hierarchy ──────────────────────────
+   One prominent primary metric (hero) with smaller, equal-weight
+   secondary metrics beneath it, instead of a row of identical
+   cards — see .an-kpi-hero-row / .an-kpi-secondary-row below. */
+.an-metric-card--hero {
+  padding: 22px 24px;
+}
+
+.an-kpi-hero-row {
+  margin-bottom: 12px;
+}
+
+.an-kpi-secondary-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.an-metric-label {
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--an-text-muted);
+  margin-bottom: 8px;
+}
+
+.an-metric-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.an-metric-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--an-text);
+  line-height: 1.05;
+  margin-bottom: 8px;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.an-metric-card--hero .an-metric-value {
+  font-size: 44px;
+}
+
+.an-metric-period {
+  font-size: 10.5px;
+  color: var(--an-text-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.an-sparkline {
+  display: block;
+  width: 100%;
+  height: 32px;
+  margin-top: 8px;
+}
+
+.an-metric-card--hero .an-sparkline {
+  height: 48px;
+  margin-top: 12px;
+}
+
+.an-metric-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.an-metric-sub {
+  font-size: 11px;
+  color: var(--an-text-muted);
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+/* ─── Growth Badge ───────────────────────────────────────────── */
+.an-growth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.an-growth-up      { color: #15803d; }
+.an-growth-down    { color: #b91c1c; }
+.an-growth-neutral { color: #475569; font-size: 11.5px; font-weight: 700; }
+
+/* ─── Tabs — matches sidebar active style ────────────────────── */
+.an-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 16px;
+  background: var(--an-surface);
+  border: 1px solid var(--an-border);
+  border-radius: var(--radius-md, 8px);
+  padding: 5px;
+  width: 100%;
+  box-sizing: border-box;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.an-tabs::-webkit-scrollbar { display: none; }
+
+.an-tab {
+  padding: 8px 16px;
+  border-radius: var(--an-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--an-text-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font, "DM Sans", sans-serif);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex: 1;
+  text-align: center;
+  min-width: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.an-tab:hover {
+  background: var(--an-surface-raised);
+  color: var(--an-text-soft);
+}
+
+.an-tab.active {
+  background: var(--sidebar-active-bg, #2563eb);
+  color: #ffffff;
+}
+
+/* ─── Tab Content ────────────────────────────────────────────── */
+.an-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ─── Two Column Layout ──────────────────────────────────────── */
+.an-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+/* ─── Three Column Layout ─────────────────────────────────────
+   FIX: this was previously applied as an inline `style` prop in the
+   component (gridTemplateColumns: repeat(3, minmax(0, 1fr))), which
+   always overrides CSS — including the responsive rules below — so
+   on narrow/mobile widths the 3 hotspot-analysis panels stayed
+   locked at 3 equal columns. That squeezed each BarChart row's
+   "80px 1fr 48px" grid down so far that only the truncated label
+   ("San Carlos …") was visible, with the bar track and value
+   clipped out of view. Moving this into a real CSS class lets the
+   breakpoints below take effect. ───────────────────────────────── */
+.an-three-col {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* ─── Panel — matches content-box ────────────────────────────── */
+.an-panel {
+  background: var(--an-surface);
+  border: 1px solid var(--an-border);
+  border-radius: var(--radius-md, 8px);
+  padding: 18px 20px;
+  transition: border-color 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.an-panel > * { position: relative; z-index: 1; }
+
+.an-panel:hover {
+  border-color: var(--an-border-strong);
+}
+
+.an-panel-full {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ─── Panel Head ─────────────────────────────────────────────── */
+.an-panel-head {
+  margin-bottom: 14px;
+}
+
+.an-panel-head h3 {
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--an-text);
+  letter-spacing: -0.01em;
+}
+
+.an-panel-head p {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--an-text-muted);
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+/* ─── Skeleton ───────────────────────────────────────────────── */
+.an-skeleton {
+  border-radius: var(--radius-md, 8px);
+  background: linear-gradient(90deg, var(--an-surface-raised) 25%, var(--an-surface-soft) 50%, var(--an-surface-raised) 75%);
+  background-size: 200% 100%;
+  animation: anShimmer 1.6s infinite linear;
+}
+
+@keyframes anShimmer {
+  0%   { background-position:  200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.an-loading-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* ─── Empty ──────────────────────────────────────────────────── */
+.an-empty {
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--an-text-muted);
+  font-size: 12.5px;
+  border: 1px dashed var(--an-border-strong);
+  border-radius: var(--an-radius-sm);
+  background: var(--an-surface-soft);
+  font-weight: 500;
+}
+
+.an-empty-small {
+  padding: 18px;
+  text-align: center;
+  color: var(--an-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ─── Tooltip ────────────────────────────────────────────────── */
+.an-tooltip {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--an-surface);
+  border: 1px solid var(--an-border-strong);
+  border-radius: var(--radius-md, 8px);
+  padding: 10px 14px;
+  min-width: 130px;
+  font-size: 12px;
+  box-shadow: var(--shadow-md, 0 6px 20px rgba(0,0,0,0.10));
+  pointer-events: none;
+  z-index: 100;
+  white-space: nowrap;
+}
+
+.an-tooltip-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--an-text-muted);
+  margin-bottom: 5px;
+}
+
+.an-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--an-text-soft);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.an-tooltip-row strong {
+  margin-left: auto;
+  color: var(--an-text);
+  font-weight: 800;
+}
+
+.an-tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ─── Legend ─────────────────────────────────────────────────── */
+.an-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.an-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--an-text-soft);
+  font-weight: 600;
+}
+
+.an-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ─── Bar Chart ──────────────────────────────────────────────── */
+.an-bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.an-bar-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 48px;
+  gap: 10px;
+  align-items: center;
+}
+
+.an-bar-label {
+  font-size: 12px;
+  color: var(--an-text-soft);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.an-bar-track {
+  height: 7px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.an-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  opacity: 0.88;
+}
+
+.an-bar-val {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--an-text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, "DM Mono", monospace);
+}
+
+/* ─── Stacked Bar Chart ──────────────────────────────────────── */
+.an-stacked-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.an-stacked-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 56px;
+  gap: 10px;
+  align-items: center;
+}
+
+.an-stacked-label {
+  font-size: 12px;
+  color: var(--an-text-soft);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.an-stacked-track {
+  height: 7px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+}
+
+.an-stacked-seg {
+  height: 100%;
+}
+
+.an-stacked-val {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--an-text);
+  text-align: right;
+  font-family: var(--font-mono, "DM Mono", monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Donut Chart ────────────────────────────────────────────── */
+.an-donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.an-donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.an-donut-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: opacity 0.15s ease;
+}
+
+.an-donut-item:hover { opacity: 0.75; }
+
+.an-donut-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.an-donut-name {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--an-text-soft);
+  font-weight: 500;
+}
+
+.an-donut-count {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--an-text);
+  font-family: var(--font-mono, "DM Mono", monospace);
+}
+
+.an-donut-pct {
+  font-size: 11px;
+  color: var(--an-text-muted);
+  margin-left: 4px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Heatmap ────────────────────────────────────────────────── */
+.an-heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.an-heatmap-row {
+  display: grid;
+  grid-template-columns: 60px repeat(12, 1fr);
+  gap: 4px;
+  align-items: center;
+}
+
+.an-heatmap-header { margin-bottom: 2px; }
+
+.an-heatmap-track-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--an-text-muted);
+}
+
+.an-heatmap-month-label {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--an-text-dim);
+  text-align: center;
+}
+
+.an-heatmap-cell {
+  border-radius: var(--an-radius-sm);
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+  cursor: default;
+}
+
+.an-heatmap-cell:hover { transform: scale(1.08); }
+
+.an-heatmap-cell span {
+  font-size: 9px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.55);
+  font-family: var(--font-mono, "DM Mono", monospace);
+}
+
+/* ─── Municipality Table ─────────────────────────────────────── */
+.an-muni-wrap { display: flex; flex-direction: column; gap: 12px; }
+
+.an-muni-sort {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.an-muni-sort-btn {
+  border: 1px solid var(--an-border-strong);
+  border-radius: var(--an-radius-sm);
+  padding: 6px 12px;
+  background: var(--an-surface);
+  color: var(--an-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font, "DM Sans", sans-serif);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  transition: all 0.15s ease;
+}
+
+.an-muni-sort-btn:hover {
+  background: var(--an-surface-hover);
+  color: var(--an-text);
+  border-color: rgba(0, 0, 0, 0.20);
+}
+
+.an-muni-sort-btn.active { font-weight: 800; }
+
+.an-muni-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.an-muni-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 70px;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--an-border-subtle);
+}
+
+.an-muni-row:last-child { border-bottom: none; }
+
+.an-muni-rank {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--an-text-muted);
+  text-align: center;
+  font-family: var(--font-mono, "DM Mono", monospace);
+}
+
+.an-muni-info { display: flex; flex-direction: column; gap: 5px; }
+
+.an-muni-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--an-text);
+}
+
+.an-muni-bars { display: flex; align-items: center; gap: 8px; }
+
+.an-muni-bar-wrap {
+  flex: 1;
+  height: 5px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.an-muni-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.an-muni-type-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.an-type-pill {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono, "DM Mono", monospace);
+}
+
+.an-muni-total {
+  font-size: 13.5px;
+  font-weight: 800;
+  text-align: right;
+  font-family: var(--font-mono, "DM Mono", monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Growth Table — matches audit-table style ───────────────── */
+.an-growth-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--an-border);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,0.08) transparent;
+}
+
+.an-growth-table-wrap::-webkit-scrollbar { height: 4px; }
+.an-growth-table-wrap::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+}
+
+.an-growth-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 560px;
+}
+
+.an-growth-table th,
+.an-growth-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--an-border-subtle);
+  text-align: left;
+}
+
+.an-growth-table th {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--an-text-muted);
+  background: var(--an-surface-soft);
+  border-bottom: 1px solid var(--an-border);
+}
+
+.an-growth-table tbody tr:hover { background: rgba(37, 99, 235, 0.03); }
+.an-growth-table tbody tr:last-child td { border-bottom: none; }
+
+.an-gt-period { font-weight: 700; color: var(--an-text); font-family: var(--font-mono, "DM Mono", monospace); font-variant-numeric: tabular-nums; }
+.an-gt-total  { font-weight: 800; color: var(--an-text); font-family: var(--font-mono, "DM Mono", monospace); font-variant-numeric: tabular-nums; }
+
+/* ─── Today Panel ────────────────────────────────────────────── */
+.an-today-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.an-today-block {
+  background: var(--an-surface-soft);
+  border: 1px solid var(--an-border);
+  border-radius: var(--radius-md, 8px);
+  padding: 16px;
+}
+
+.an-today-block-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--an-text-muted);
+  margin-bottom: 8px;
+}
+
+.an-today-big {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--an-text);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-bottom: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.an-today-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.an-today-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.an-today-window {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin-top: 4px;
+}
+
+.an-today-window-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--an-text-muted);
+}
+
+.an-today-window-val {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--an-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Footer ─────────────────────────────────────────────────── */
+.an-footer {
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: 1px solid var(--an-border);
+  font-size: 11.5px;
+  color: var(--an-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-weight: 500;
+}
+
+.an-footer code {
+  font-family: var(--font-mono, "DM Mono", monospace);
+  font-size: 10.5px;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px 6px;
+  border-radius: var(--an-radius-sm);
+  color: var(--an-text-soft);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 1280px) {
+  .an-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1024px) {
+  .an-two-col     { grid-template-columns: 1fr; }
+  .an-three-col   { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .an-today-grid  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 768px) {
+  .an-wrapper  { padding: 14px 14px 32px; }
+  .an-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* FIX: tabs were squeezed to equal widths (flex: 1) on narrow screens,
+     which clipped/overlapped labels like "Geographic" and "Growth Rate".
+     Let each tab size to its own content and scroll horizontally instead
+     (.an-tabs already has overflow-x: auto) so labels never collide. */
+  .an-tabs { gap: 2px; padding: 4px; justify-content: flex-start; }
+  .an-tab  {
+    padding: 8px 12px;
+    font-size: 11.5px;
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  /* FIX: the 3 "Hotspot analysis" panels were being forced into 3 equal
+     columns at all widths (see .an-three-col comment above), leaving no
+     room for the bar-chart rows inside each panel. Collapse to a single
+     column on mobile so each hotspot panel gets full width and its
+     BarChart rows (label / track / value) render properly. */
+  .an-three-col { grid-template-columns: 1fr; }
+
+  .an-today-grid    { grid-template-columns: 1fr; }
+  .an-heatmap-row   { grid-template-columns: 50px repeat(12, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .an-kpi-grid          { grid-template-columns: 1fr; }
+  .an-kpi-secondary-row { grid-template-columns: 1fr; }
+  .an-header      { flex-direction: column; }
+  .an-metric-value { font-size: 22px; }
+  .an-metric-card--hero .an-metric-value { font-size: 34px; }
+
+  /* FIX: same overlap issue at the smallest breakpoint — keep tabs at
+     their natural width instead of forcing them into an equal-width
+     flex row, which is what caused "Geographic" and "Growth Rate" to
+     collide visually. */
+  .an-tabs { gap: 2px; padding: 4px; justify-content: flex-start; }
+  .an-tab  {
+    padding: 7px 10px;
+    font-size: 11px;
+    flex: 0 0 auto;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

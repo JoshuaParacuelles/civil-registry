@@ -1,0 +1,1042 @@
+/* ─── ROLEMANAGEMENT.CSS ─────────────────────────────────────────────────────── */
+
+:root {
+  --rm-bg:        #f3f4f6;
+  --rm-surface:   #ffffff;
+  --rm-border:    #e5e7eb;
+  --rm-text-1:    #111827;
+  --rm-text-2:    #374151;
+  --rm-text-3:    #9ca3af;
+  --rm-primary:   #2563eb;
+  --rm-primary-h: #1d4ed8;
+  --rm-danger:    #dc2626;
+  --rm-danger-h:  #b91c1c;
+  --rm-warn:      #d97706;
+  --rm-success:   #16a34a;
+  --rm-radius:    8px;
+  --rm-shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --rm-shadow-lg: 0 10px 25px rgba(0,0,0,.12), 0 4px 10px rgba(0,0,0,.06);
+}
+
+/* ── Wrapper ── */
+.rm-wrap {
+  padding: 24px;
+  background: var(--rm-bg);
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--rm-text-1);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden; /* page itself never scrolls sideways */
+}
+
+.rm-wrap *,
+.rm-wrap *::before,
+.rm-wrap *::after {
+  box-sizing: border-box;
+}
+
+/* ── Credential category buttons ── */
+.rm-category-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.rm-category-tab {
+  padding: 9px 14px;
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  background: var(--rm-surface);
+  color: var(--rm-text-2);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+
+.rm-category-tab:hover {
+  color: var(--rm-primary-h);
+  border-color: var(--rm-primary);
+}
+
+.rm-category-tab.rm-category-tab--active,
+.rm-category-tab.rm-category-tab--active:hover {
+  border-color: var(--rm-primary);
+  background: var(--rm-primary);
+  color: #ffffff;
+}
+
+.rm-category-tab:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, .22);
+  outline-offset: 1px;
+}
+
+/* ── Toolbar (Add User left · Search right) ── */
+.rm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.rm-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+}
+
+.rm-search-icon {
+  position: absolute;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  color: var(--rm-text-3);
+  pointer-events: none;
+}
+
+.rm-search {
+  width: 100%;
+  max-width: 320px;
+  padding: 9px 14px 9px 36px;
+  border: 1.5px solid var(--rm-border);
+  border-radius: var(--rm-radius);
+  background: var(--rm-surface);
+  font-size: 0.875rem;
+  color: var(--rm-text-1);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.rm-search:focus {
+  border-color: var(--rm-primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+}
+
+@media (max-width: 640px) {
+  .rm-category-tabs {
+    flex-wrap: nowrap;      /* was wrap — this is what pushed them to stack */
+    gap: 6px;
+  }
+
+  .rm-category-tab {
+    flex: 1 1 0;            /* was 1 1 auto — lets both share the row equally */
+    min-width: 0;           /* allows text to shrink/wrap instead of overflowing */
+    padding: 9px 8px;       /* tighter padding so labels fit in half-width */
+    font-size: 0.8rem;
+    white-space: normal;    /* let long labels wrap to a second line if needed */
+    text-align: center;
+    line-height: 1.25;
+  }
+}
+
+/* ── Buttons ── */
+.rm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: var(--rm-radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: background .15s, opacity .15s, box-shadow .15s;
+  white-space: nowrap;
+}
+
+.rm-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.rm-btn--primary {
+  background: var(--rm-primary);
+  color: #fff;
+}
+.rm-btn--primary:hover:not(:disabled) { background: var(--rm-primary-h); }
+
+.rm-btn--ghost {
+  background: transparent;
+  color: var(--rm-text-2);
+  border: 1.5px solid var(--rm-border);
+}
+.rm-btn--ghost:hover:not(:disabled) { background: var(--rm-bg); }
+
+.rm-btn--danger {
+  background: var(--rm-danger);
+  color: #fff;
+}
+.rm-btn--danger:hover:not(:disabled) { background: var(--rm-danger-h); }
+
+/* ── Table ── */
+.rm-table-wrap {
+  background: var(--rm-surface);
+  border-radius: var(--rm-radius);
+  box-shadow: var(--rm-shadow);
+  /* Was `overflow: hidden`, which silently clipped columns that didn't fit
+     instead of letting the user reach them. Now it scrolls horizontally
+     on any viewport too narrow for the full table (desktop still unaffected
+     since the table fits without scrolling there). */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.rm-table {
+  width: 100%;
+  min-width: 720px; /* keeps columns readable; wrapper scrolls below this */
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.rm-table thead tr {
+  background: #f9fafb;
+  border-bottom: 1.5px solid var(--rm-border);
+}
+
+.rm-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--rm-text-3);
+  white-space: nowrap;
+}
+
+.rm-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rm-border);
+  vertical-align: middle;
+}
+
+.rm-table tbody tr:last-child td { border-bottom: none; }
+
+.rm-table tbody tr:hover { background: #f9fafb; }
+
+.rm-row--locked { background: #fef2f2 !important; }
+
+/* ── Avatar ── */
+.rm-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--rm-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.rm-avatar--admin { background: #f59e0b; }
+.rm-avatar--lg    { width: 44px; height: 44px; font-size: 1.1rem; }
+.rm-avatar--xl    { width: 52px; height: 52px; font-size: 1.3rem; }
+
+/* ── User cell ── */
+.rm-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Role pill ── */
+.rm-role-pill {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #eff6ff;
+  color: var(--rm-primary);
+  border: 1px solid #bfdbfe;
+  white-space: nowrap;
+}
+
+.rm-role-pill--admin {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+/* ── Chips ── */
+.rm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rm-chips--inline { flex-wrap: nowrap; }
+
+.rm-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  background: #f3f4f6;
+  color: var(--rm-text-2);
+  border: 1px solid var(--rm-border);
+  white-space: nowrap;
+}
+
+.rm-chip--sm    { font-size: 0.7rem; padding: 2px 8px; }
+.rm-chip--admin { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.rm-chip--more  { background: #e0e7ff; color: #4338ca; border-color: #c7d2fe; }
+.rm-chip--none  { color: var(--rm-text-3); font-style: italic; }
+
+/* ── Action buttons ── */
+.rm-action-btns {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rm-pill-btn {
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity .15s, filter .15s;
+  white-space: nowrap;
+}
+
+.rm-pill-btn:hover { filter: brightness(.92); }
+
+/* ── Action buttons (solid colors) ── */
+.rm-pill-btn--view {
+  background: var(--rm-primary);
+  color: #fff;
+  border: 1px solid var(--rm-primary);
+}
+.rm-pill-btn--view:hover {
+  background: var(--rm-primary-h);
+  border-color: var(--rm-primary-h);
+}
+
+.rm-pill-btn--reset {
+  background: #ec4899;
+  color: #fff;
+  border: 1px solid #ec4899;
+}
+.rm-pill-btn--reset:hover {
+  background: #db2777;
+  border-color: #db2777;
+}
+
+.rm-pill-btn--delete {
+  background: var(--rm-danger);
+  color: #fff;
+  border: 1px solid var(--rm-danger);
+}
+.rm-pill-btn--delete:hover {
+  background: var(--rm-danger-h);
+  border-color: var(--rm-danger-h);
+}
+/* ── Locked badge ── */
+.rm-locked-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: #fef2f2;
+  color: var(--rm-danger);
+  border: 1px solid #fecaca;
+}
+
+/* ── Loading / Empty ── */
+.rm-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 0;
+  color: var(--rm-text-3);
+}
+
+.rm-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--rm-border);
+  border-top-color: var(--rm-primary);
+  border-radius: 50%;
+  animation: rm-spin .7s linear infinite;
+}
+
+@keyframes rm-spin { to { transform: rotate(360deg); } }
+
+.rm-empty {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--rm-text-3);
+  font-size: 0.9rem;
+}
+
+/* ── Access denied ── */
+.rm-access-denied {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 80px 20px;
+  color: var(--rm-text-2);
+  text-align: center;
+}
+
+.rm-access-denied__icon { color: var(--rm-text-3); }
+.rm-access-denied h2 { margin: 0; font-size: 1.3rem; }
+.rm-access-denied p  { margin: 0; color: var(--rm-text-3); }
+
+/* ── Overlay & Modal ── */
+.rm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.rm-modal {
+  background: var(--rm-surface);
+  border-radius: 12px;
+  box-shadow: var(--rm-shadow-lg);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  animation: rm-modal-in .18s ease;
+}
+
+@keyframes rm-modal-in {
+  from { opacity: 0; transform: translateY(-10px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+.rm-modal--sm  { max-width: 420px; }
+.rm-modal--md  { max-width: 520px; }
+.rm-modal--view{ max-width: 460px; }
+
+.rm-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--rm-border);
+  flex-shrink: 0;
+}
+
+.rm-modal__head h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--rm-text-1);
+}
+
+.rm-close {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--rm-text-3);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color .15s, background .15s;
+}
+
+.rm-close:hover { color: var(--rm-text-1); background: var(--rm-bg); }
+
+.rm-modal__body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rm-modal__body--noscroll { overflow: hidden; }
+
+.rm-modal__foot {
+  padding: 14px 20px;
+  border-top: 1px solid var(--rm-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* ── Form elements ── */
+.rm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rm-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--rm-text-2);
+}
+
+.rm-req { color: var(--rm-danger); margin-left: 2px; }
+
+.rm-input {
+  padding: 9px 12px;
+  border: 1.5px solid var(--rm-border);
+  border-radius: var(--rm-radius);
+  font-size: 0.875rem;
+  color: var(--rm-text-1);
+  background: var(--rm-surface);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rm-input:focus {
+  border-color: var(--rm-primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+}
+
+/* ── Password field ── */
+.rm-pass-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.rm-pass-wrap .rm-input { padding-right: 40px; }
+
+.rm-eye {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--rm-text-3);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color .15s;
+}
+
+.rm-eye:hover { color: var(--rm-text-1); }
+
+/* ── Hints ── */
+.rm-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  padding: 5px 10px;
+  border-radius: 6px;
+}
+
+.rm-hint--new      { background: #eff6ff; color: var(--rm-primary); }
+.rm-hint--existing { background: #f0fdf4; color: var(--rm-success); }
+.rm-hint--ok       { background: #f0fdf4; color: var(--rm-success); }
+.rm-hint--err      { background: #fef2f2; color: var(--rm-danger); }
+
+/* ── Role preview ── */
+.rm-preview {
+  background: #f9fafb;
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rm-preview__label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--rm-text-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rm-admin-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+/* ── Delete card ── */
+.rm-delete-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  background: #f9fafb;
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius);
+}
+
+.rm-delete-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rm-delete-card__name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--rm-text-1);
+}
+
+.rm-confirm-msg {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--rm-text-2);
+  line-height: 1.5;
+}
+
+.rm-warn-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: var(--rm-radius);
+  padding: 10px 14px;
+  font-size: 0.8rem;
+  color: #92400e;
+}
+
+/* ── View credentials ── */
+.rm-creds-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--rm-border);
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.rm-creds-hero__info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.rm-creds-hero__name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--rm-text-1);
+}
+
+.rm-creds-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rm-cred-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #f3f4f6;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rm-cred-row:last-child { border-bottom: none; }
+
+.rm-cred-row__label {
+  width: 120px;
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--rm-text-3);
+}
+
+.rm-cred-row__value-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rm-cred-row__value {
+  font-size: 0.875rem;
+  color: var(--rm-text-1);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+/* Password field inside creds */
+.rm-cred-pass-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f9fafb;
+  border: 1px solid var(--rm-border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rm-cred-pass-field__text {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--rm-text-1);
+  letter-spacing: .12em;
+}
+
+.rm-cred-eye {
+  background: none;
+  border: none;
+  color: var(--rm-text-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+  transition: color .15s;
+}
+
+.rm-cred-eye:hover { color: var(--rm-text-1); }
+
+/* Status chips */
+.rm-cred-status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.73rem;
+  font-weight: 600;
+}
+
+.rm-cred-status--active { background: #f0fdf4; color: var(--rm-success); border: 1px solid #bbf7d0; }
+.rm-cred-status--locked { background: #fef2f2; color: var(--rm-danger);  border: 1px solid #fecaca; }
+.rm-cred-status--admin  { background: #fffbeb; color: #92400e;           border: 1px solid #fde68a; }
+.rm-cred-status--no     { background: #f3f4f6; color: var(--rm-text-3);  border: 1px solid var(--rm-border); }
+
+/* Copy button */
+.rm-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: #f3f4f6;
+  border: 1px solid var(--rm-border);
+  color: var(--rm-text-3);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  flex-shrink: 0;
+}
+
+.rm-copy-btn:hover { background: var(--rm-border); color: var(--rm-text-1); }
+.rm-copy-btn--copied { background: #f0fdf4; color: var(--rm-success); border-color: #bbf7d0; }
+
+/* ── Read-only permissions section (View Credentials modal) ── */
+.rm-creds-perms {
+  background: #f9fafb;
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rm-creds-perms__label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--rm-text-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rm-creds-perms__count {
+  margin-left: auto;
+  background: var(--rm-border);
+  color: var(--rm-text-2);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+/* ── Toast ── */
+.rm-toast-wrap {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  left: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.rm-toast-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--rm-surface);
+  border: 1px solid var(--rm-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: var(--rm-shadow-lg);
+  width: 100%;
+  min-width: 0;
+  max-width: 360px;
+  position: relative;
+  overflow: hidden;
+  pointer-events: all;
+  animation: rm-toast-in .25s ease;
+}
+
+.rm-toast-item.hiding { animation: rm-toast-out .3s ease forwards; }
+
+@keyframes rm-toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes rm-toast-out {
+  to { opacity: 0; transform: translateX(20px); }
+}
+
+.rm-toast-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.rm-toast-body { flex: 1; min-width: 0; }
+
+.rm-toast-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--rm-text-1);
+}
+
+.rm-toast-msg {
+  font-size: 0.78rem;
+  color: var(--rm-text-3);
+  margin-top: 2px;
+  word-break: break-word;
+}
+
+.rm-toast-close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: var(--rm-text-3);
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  align-self: flex-start;
+}
+
+.rm-toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--rm-bg);
+}
+
+.rm-toast-progress-bar {
+  height: 100%;
+  animation: rm-progress linear forwards;
+}
+
+@keyframes rm-progress {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+/* ── Status badge (Active / Inactive) ── */
+.rm-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rm-status-badge--active {
+  background: #f0fdf4;
+  color: var(--rm-success);
+  border: 1px solid #bbf7d0;
+}
+
+.rm-status-badge--locked {
+  background: #fef2f2;
+  color: var(--rm-danger);
+  border: 1px solid #fecaca;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tablet / narrow desktop ── */
+@media (max-width: 900px) {
+  .rm-wrap { padding: 16px; }
+
+  /* Search keeps its desktop max-width here (no override) so it stays a
+     compact box sitting beside the Add User button instead of stretching
+     to fill the row — only the mobile breakpoint below stacks them. */
+}
+
+/* ── Mobile: stack the toolbar ── */
+@media (max-width: 640px) {
+  .rm-wrap { padding: 12px; }
+
+  .rm-toolbar {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .rm-btn--primary { width: auto; flex-shrink: 0; justify-content: center; }
+
+  .rm-search-wrap { flex: 1; width: auto; min-width: 0; }
+  .rm-search { max-width: none; width: 100%; }
+
+  /* ── Table → stacked cards ──
+     Each row becomes a card; each cell becomes a labeled block using the
+     data-label attribute set in Rolemanagement.jsx. This avoids relying on
+     horizontal scrolling to see Status/Assigned/Actions, which is what was
+     making columns disappear entirely on phones. */
+  .rm-table-wrap {
+    overflow: visible;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  .rm-table,
+  .rm-table thead,
+  .rm-table tbody,
+  .rm-table tr,
+  .rm-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .rm-table thead { display: none; }
+
+  .rm-table tbody tr {
+    background: var(--rm-surface);
+    border: 1px solid var(--rm-border);
+    border-radius: var(--rm-radius);
+    box-shadow: var(--rm-shadow);
+    margin-bottom: 12px;
+    padding: 6px 14px;
+  }
+
+  .rm-table tbody tr:last-child { margin-bottom: 0; }
+
+  .rm-table td {
+    border-bottom: 1px solid #f3f4f6;
+    padding: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .rm-table td:last-child { border-bottom: none; }
+
+  .rm-table td::before {
+    content: attr(data-label);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--rm-text-3);
+    flex-shrink: 0;
+  }
+
+  /* ── Action buttons (mobile) ──
+     FIX: these previously stretched to fill the row (width: 100% on the
+     group, flex: 1 1 calc(50% - 8px) on each pill), which is what made
+     View / Reset / Delete blow up to oversized, full-width bars instead of
+     sitting naturally sized next to each other. Dropped the forced
+     stretch — the group now just wraps left-aligned, and each pill sizes
+     itself to its own label/padding, same as .rm-btn--primary ("+ Add
+     User") already does elsewhere on this page. */
+  .rm-action-btns {
+    width: auto;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .rm-action-btns .rm-pill-btn {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    text-align: center;
+    padding: 7px 16px;
+  }
+
+  .rm-toast-wrap {
+    left: 12px;
+    right: 12px;
+    top: 12px;
+  }
+
+  .rm-toast-item { max-width: none; }
+
+  .rm-overlay { padding: 0; align-items: flex-end; }
+
+  .rm-modal {
+    max-height: 100vh;
+    height: 100%;
+    border-radius: 12px 12px 0 0;
+    max-width: 100% !important;
+  }
+
+  .rm-cred-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .rm-cred-row__label { width: auto; }
+}

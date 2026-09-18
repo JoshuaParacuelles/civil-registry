@@ -1,0 +1,284 @@
+/* ExternalIndividualsLookup.css
+   Styled to match the existing app theme (DM Sans font, blue palette
+   #2563eb / #1d4ed8, rounded cards) seen in home.css and the
+   notification modal in home.jsx. Table layout follows the clean
+   reference design: light gray header row, minimal borders, rounded
+   pill "View" button on the right. */
+
+.external-individuals-lookup {
+  font-family: 'DM Sans', sans-serif;
+  padding: 4px 0 24px;
+}
+
+/* ── Search form ─────────────────────────────────────────────── */
+.external-individuals-lookup__form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.external-individuals-lookup__form input[type="text"] {
+  flex: 1;
+  padding: 11px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: #0f172a;
+  background: #ffffff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.external-individuals-lookup__form input[type="text"]:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.external-individuals-lookup__form input[type="text"]::placeholder {
+  color: #94a3b8;
+}
+
+.external-individuals-lookup__form button {
+  padding: 11px 22px;
+  border-radius: 10px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.external-individuals-lookup__form button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.external-individuals-lookup__form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.external-individuals-lookup__clear-btn {
+  background: #ffffff !important;
+  color: #475569 !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: none !important;
+}
+
+.external-individuals-lookup__clear-btn:hover:not(:disabled) {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* ── Status messages ─────────────────────────────────────────── */
+.external-individuals-lookup__status {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #f0f5ff;
+  border: 1px solid #dbeafe;
+  color: #475569;
+  font-size: 13.5px;
+  font-weight: 500;
+  margin: 0 0 16px;
+}
+
+.external-individuals-lookup__status--error {
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #b91c1c;
+}
+
+/* ── Results table ───────────────────────────────────────────── */
+.external-individuals-lookup__table-wrap {
+  background: #ffffff;
+  border: 1px solid #e5e9f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.external-individuals-lookup__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.external-individuals-lookup__table thead th {
+  text-align: left;
+  padding: 13px 16px;
+  background: #f7f8fa;
+  color: #8a94a6;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.external-individuals-lookup__table tbody td {
+  padding: 13px 16px;
+  border-bottom: 1px solid #f0f2f6;
+  color: #1e2431;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.external-individuals-lookup__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.external-individuals-lookup__table tbody tr:nth-child(even) {
+  background: #fafbfd;
+}
+
+.external-individuals-lookup__table tbody tr:hover {
+  background: #f0f5ff;
+}
+
+.external-individuals-lookup__mono {
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.02em;
+  color: #475569;
+}
+
+.external-individuals-lookup__actions {
+  text-align: right;
+}
+
+.external-individuals-lookup__table tbody td button {
+  padding: 7px 20px;
+  border-radius: 999px;
+  border: none;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.external-individuals-lookup__table tbody td button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.external-individuals-lookup__table tbody td button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ── Footer: count + pager ──────────────────────────────────── */
+.external-individuals-lookup__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.external-individuals-lookup__count {
+  font-size: 12.5px;
+  color: #8a94a6;
+  font-weight: 500;
+}
+
+.external-individuals-lookup__pager {
+  display: flex;
+  gap: 8px;
+}
+
+.external-individuals-lookup__pager button {
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 1px solid #dbeafe;
+  background: #ffffff;
+  color: #1d4ed8;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.external-individuals-lookup__pager button:hover:not(:disabled) {
+  background: #eff6ff;
+}
+
+.external-individuals-lookup__pager button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Detail panel (legacy, unused by modal but kept for compatibility) ── */
+.external-individuals-lookup__detail {
+  margin-top: 20px;
+  padding: 20px 22px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  box-shadow: 0 4px 16px rgba(29, 78, 216, 0.06);
+}
+
+.external-individuals-lookup__detail h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dbeafe;
+}
+
+.external-individuals-lookup__detail dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+}
+
+.external-individuals-lookup__detail dt {
+  font-size: 10px;
+  font-weight: 800;
+  color: #93c5fd;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.external-individuals-lookup__detail dd {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .external-individuals-lookup__form {
+    flex-direction: column;
+  }
+
+  .external-individuals-lookup__table-wrap {
+    overflow-x: auto;
+  }
+
+  .external-individuals-lookup__table {
+    white-space: nowrap;
+  }
+
+  .external-individuals-lookup__footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .external-individuals-lookup__detail dl {
+    grid-template-columns: 1fr;
+  }
+}

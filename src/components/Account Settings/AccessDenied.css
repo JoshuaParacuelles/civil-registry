@@ -1,0 +1,87 @@
+/* src/components/Account Settings/AccessDenied.css
+ *
+ * Works in two contexts:
+ *   1. Full-page route (/access-denied) — .ad-wrap gets full viewport height
+ *   2. Inline inside Home's <main> — .ad-wrap fills the content area height
+ *
+ * No min-height: 100vh here — that would break the inline case by pushing
+ * the layout and causing a scrollbar inside the content panel.
+ * Instead we use height: 100% and let the parent control the size.
+ */
+
+.ad-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Fill whatever container we're placed in */
+  width: 100%;
+  height: 100%;
+  min-height: 400px;          /* comfortable minimum when rendered inline      */
+  padding: 2rem;
+  box-sizing: border-box;
+  background: transparent;    /* inherits Home's main-content background        */
+}
+
+/* When rendered as a standalone route (outside Home), give it a background */
+body > #root > div > .ad-wrap,
+.ad-wrap--standalone {
+  background: #f4f6fb;
+  min-height: 100vh;
+}
+
+.ad-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.10);
+  padding: 3rem 2.5rem;
+  text-align: center;
+  max-width: 420px;
+  width: 100%;
+}
+
+.ad-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  line-height: 1;
+}
+
+.ad-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0 0 0.75rem;
+}
+
+.ad-msg {
+  color: #444;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+.ad-sub {
+  color: #888;
+  font-size: 0.9rem;
+  margin-bottom: 0;           /* no button below in inline mode                */
+}
+
+/* Optional button — only shown when there's something to navigate to.
+   Keep the class so the full-page route version can add it back if needed. */
+.ad-btn {
+  display: inline-block;
+  margin-top: 2rem;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  text-decoration: none;
+}
+
+.ad-btn:hover {
+  background: #2563eb;
+}

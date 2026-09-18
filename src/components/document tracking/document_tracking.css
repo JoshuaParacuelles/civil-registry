@@ -1,0 +1,896 @@
+.dt-root {
+  --backdrop: rgba(15, 23, 42, 0.55); /* dimmed modal overlay, matches dark backdrop in reference screenshot */
+  --card: #ffffff;                 /* == --bg-surface */
+  --ink: #0f172a;                  /* == --text-primary */
+  --ink-soft: #94a3b8;             /* == --text-muted */
+  --ink-mid: #475569;              /* == --text-soft, for readable secondary text */
+  --line: rgba(0, 0, 0, 0.08);     /* == --border */
+  --line-strong: rgba(0, 0, 0, 0.14); /* == --border-strong */
+  --blue: #2563eb;                 /* == --accent-blue */
+  --blue-soft: rgba(37, 99, 235, 0.09); /* == home's notif-icon-wrap.birth tint */
+  --green: #059669;                /* == home's notif-icon-wrap.marriage color */
+  --green-soft: rgba(16, 185, 129, 0.09);
+  --purple: #7c3aed;               /* == --accent-purple */
+  --red: #dc2626;                  /* == home's logout-confirm-btn color */
+  --red-soft: rgba(220, 38, 38, 0.08);
+  --amber: #d97706;                /* == home's notif-icon-wrap.system color */
+  --amber-soft: rgba(245, 158, 11, 0.09);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 0 rgba(15, 23, 42, 0.03); /* == --shadow-sm */
+  font-family: "DM Sans", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: transparent;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.dt-root *, .dt-root *::before, .dt-root *::after { box-sizing: border-box; }
+
+/* Page — no outer padding/max-width, home.jsx's .main-content already frames it */
+.dt-page {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+}
+
+/* Stat cards */
+.dt-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+@media (max-width: 860px) {
+  .dt-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .dt-stats { grid-template-columns: 1fr; }
+}
+.dt-stat-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.dt-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.dt-stat-value { font-size: 26px; font-weight: 700; line-height: 1; }
+.dt-stat-sub { font-size: 12px; color: var(--ink-soft); }
+.dt-c-blue { color: var(--blue); }
+.dt-c-green { color: var(--green); }
+.dt-c-purple { color: var(--purple); }
+
+/* Pill tabs — styled after home.css's .topbar-toggle / .topbar-date chip */
+.dt-tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.dt-tab {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.dt-tab:hover { background: #f1f5f9; color: var(--ink); } /* == --bg-raised */
+.dt-tab[data-active="true"] {
+  background: var(--blue);
+  color: #ffffff;
+}
+.dt-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* Grid */
+.dt-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .dt-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.dt-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px; /* == --radius-lg, matches home's .content-box */
+  box-shadow: var(--shadow);
+  padding: 20px; /* matches home's .content-box padding */
+  min-width: 0;
+  width: 100%;
+}
+.dt-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.dt-card-head h2 { font-size: 15.5px; font-weight: 800; margin: 0 0 3px; line-height: 1.35; color: var(--ink); }
+.dt-card-head p { font-size: 12px; color: var(--ink-soft); margin: 0; }
+
+.dt-search {
+  font-size: 13px;
+  font-family: inherit;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: #f1f5f9; /* == --bg-raised */
+  color: var(--ink);
+  min-width: 190px;
+  flex: 1 1 190px;
+  max-width: 100%;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dt-search:focus { outline: 2px solid var(--blue); outline-offset: 1px; background: #ffffff; }
+
+/* Document list */
+.dt-list { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── Loading skeleton (Documents list) ───────────────────────────
+   Shown only on the genuinely empty initial load (listLoading with
+   no documents yet in state) so the panel doesn't sit blank while
+   the first request is in flight — see the listLoading &&
+   documents.length === 0 guard in document_tracking.jsx. A
+   background refetch (realtime, filter change, etc.) keeps the
+   current rows on screen instead of swapping back to this. Sized to
+   match .dt-row so there's no layout jump once real rows arrive. ── */
+@keyframes dt-shimmer {
+  0% { background-position: -320px 0; }
+  100% { background-position: 320px 0; }
+}
+.dt-skeleton-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f8fafc; /* == --bg-surface-soft, matches .dt-row */
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 11px 13px;
+}
+.dt-skeleton-main {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 160px;
+}
+.dt-skeleton-line {
+  height: 9px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eef2f7 25%, #e2e8f0 37%, #eef2f7 63%);
+  background-size: 320px 100%;
+  animation: dt-shimmer 1.4s ease-in-out infinite;
+}
+.dt-skeleton-id { width: 38%; }
+.dt-skeleton-title { width: 68%; height: 12px; }
+.dt-skeleton-meta { width: 52%; }
+.dt-skeleton-badge {
+  width: 62px;
+  height: 21px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+/* Stagger each placeholder row slightly so the shimmer reads as a
+   soft wave down the list instead of every row pulsing in lockstep. */
+.dt-skeleton-row:nth-child(2) .dt-skeleton-line { animation-delay: 0.08s; }
+.dt-skeleton-row:nth-child(3) .dt-skeleton-line { animation-delay: 0.16s; }
+.dt-skeleton-row:nth-child(4) .dt-skeleton-line { animation-delay: 0.24s; }
+.dt-skeleton-row:nth-child(5) .dt-skeleton-line { animation-delay: 0.32s; }
+
+/* Gentle fade/rise-in as rows mount (first load, and whenever the
+   filtered set changes) so content settles in smoothly instead of
+   popping in abruptly once a fetch resolves. */
+@keyframes dt-row-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dt-row { animation: dt-row-in 0.22s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .dt-row, .dt-skeleton-line { animation: none; }
+}
+
+.dt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  background: #f8fafc; /* == --bg-surface-soft */
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 11px 13px;
+  cursor: pointer;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  flex-wrap: wrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dt-row:hover { background: #e8eef6; } /* == --bg-hover */
+.dt-row[data-selected="true"] {
+  background: var(--blue-soft);
+  border-color: rgba(37, 99, 235, 0.28);
+}
+.dt-row:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.dt-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 160px; }
+.dt-row-id { font-size: 11px; font-weight: 700; color: var(--ink-soft); letter-spacing: 0.2px; }
+.dt-row-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dt-row-meta { font-size: 11.5px; color: var(--ink-soft); }
+
+.dt-row-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.dt-comment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.dt-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dt-empty {
+  font-size: 13px;
+  color: var(--ink-soft);
+  padding: 24px 10px;
+  text-align: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+}
+
+/* ── "Currently handling" row (doc detail panel, above the timeline) ──
+   Previously an unstyled native <select> (default browser chrome:
+   square corners, harsh border, system arrow) that clashed with the
+   rest of the panel. Styled to match .dt-search / .dt-btn-ghost so it
+   reads as part of the same design system. Apply dt-handler-row to the
+   wrapper, dt-handler-label to the "Currently handling:" text, and
+   dt-handler-select to the <select> element. ── */
+.dt-handler-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.dt-handler-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-mid);
+  white-space: nowrap;
+}
+.dt-handler-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 8px 32px 8px 12px;
+  min-width: 180px;
+  max-width: 100%;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.dt-handler-select:hover { border-color: var(--blue); }
+.dt-handler-select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.dt-handler-select:disabled {
+  cursor: default;
+  color: var(--ink-soft);
+  background-color: #f1f5f9; /* == --bg-raised */
+}
+
+/* ── "Add person" combobox (Documents list header) ──────────────
+   Previously an inline-styled white button + white dropdown panel
+   that didn't match the rest of the toolbar. Toggle now matches
+   .dt-search (same filled/rounded look); the panel matches .dt-card
+   (rounded, --shadow, --line) instead of one-off hex values. ── */
+.dt-addperson { position: relative; }
+
+.dt-addperson-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 190px;
+  max-width: 100%;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  color: var(--ink-mid);
+  background: #f1f5f9; /* == --bg-raised, matches .dt-search */
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.dt-addperson-toggle[data-filled="true"] { color: var(--ink); font-weight: 700; }
+.dt-addperson-toggle:hover:not(:disabled) { background: #e8eef6; } /* == --bg-hover */
+.dt-addperson-toggle:disabled { cursor: default; opacity: 0.7; }
+.dt-addperson-toggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+.dt-addperson-toggle-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-addperson-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: 260px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.14);
+  overflow: hidden;
+}
+
+.dt-addperson-search-wrap {
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.dt-addperson-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  padding: 2px 0;
+}
+
+.dt-addperson-section-label {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.dt-addperson-list { max-height: 180px; overflow-y: auto; }
+
+.dt-addperson-empty { padding: 8px 12px; font-size: 13px; color: var(--ink-soft); }
+
+.dt-addperson-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.12s;
+}
+.dt-addperson-option:hover { background: #f8fafc; } /* == --bg-surface-soft */
+.dt-addperson-option[data-match="true"] { background: #f1f5f9; } /* == --bg-raised */
+
+/* ── Remove-person button (trash icon in each Personnel row) ─────
+   Previously unclassed in CSS — the button fell back to the browser's
+   default control chrome (a boxy border around the icon, visible in
+   the screenshot), which clashed with the borderless option row it
+   sits in. Styled as a small ghost icon button matching the rest of
+   this dropdown: transparent by default, a red tint on hover to signal
+   the destructive action, quiet disabled state while a removal is in
+   flight. ── */
+.dt-addperson-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.dt-addperson-remove:hover:not(:disabled) {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.dt-addperson-remove:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+.dt-addperson-remove:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.dt-addperson-add-row { border-top: 1px solid var(--line); }
+.dt-addperson-add-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  background: transparent;
+  border: none;
+  color: var(--blue);
+  cursor: pointer;
+  font-family: inherit;
+}
+.dt-addperson-add-btn:hover { background: #f8fafc; }
+
+.dt-addperson-newname-label {
+  padding: 10px 12px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.dt-addperson-newname-body { padding: 4px 12px 8px; }
+.dt-addperson-newname-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.dt-addperson-newname-input:focus { border-color: var(--blue); }
+.dt-addperson-error { margin: 6px 0 0; font-size: 12px; color: var(--red); }
+
+.dt-addperson-actions { display: flex; gap: 8px; padding: 8px 12px 12px; }
+.dt-addperson-confirm {
+  flex: 1;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 6px;
+  border: none;
+  background: var(--blue);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.dt-addperson-confirm:hover:not(:disabled) { background: #1d4ed8; }
+.dt-addperson-confirm:disabled {
+  background: #f1f5f9;
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+.dt-addperson-cancel {
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.dt-addperson-cancel:hover:not(:disabled) { background: #f1f5f9; }
+.dt-addperson-cancel:disabled { cursor: default; }
+
+/* Timeline */
+.dt-timeline { list-style: none; margin: 0; padding: 0; }
+.dt-step {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding-bottom: 16px;
+}
+.dt-step:last-child { padding-bottom: 0; }
+.dt-step::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--line);
+}
+.dt-step:last-child::before { display: none; }
+.dt-step-dot {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid #cbd5e1;
+  z-index: 1;
+}
+.dt-step[data-done="true"] .dt-step-dot { border-color: var(--blue); background: var(--blue); }
+.dt-step[data-flag="true"] .dt-step-dot { border-color: var(--red); background: var(--red); }
+.dt-step[data-active="true"] .dt-step-dot {
+  border-color: var(--blue);
+  background: var(--card);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+.dt-step-body { flex: 1; min-width: 0; }
+
+/* Clickable stage header (label + date + optional comment chip) */
+.dt-step-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+.dt-step-header[data-clickable="true"] { cursor: pointer; }
+.dt-step-header[data-clickable="true"]:hover .dt-step-label { color: var(--blue); }
+.dt-step-header:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.dt-step-header:disabled { cursor: default; }
+
+.dt-step-heading-text { min-width: 0; flex: 1 1 140px; }
+
+.dt-step-label { font-size: 13px; font-weight: 700; margin: 0 0 2px; transition: color 0.12s; color: var(--ink); }
+.dt-step[data-done="false"] .dt-step-label { color: var(--ink-mid); font-weight: 600; }
+.dt-step[data-active="true"] .dt-step-label { color: var(--ink); }
+.dt-step-detail { font-size: 12px; color: var(--ink-soft); margin: 0 0 2px; }
+.dt-step-date { font-size: 11px; color: var(--ink-soft); margin: 0; }
+
+/* Comment count chip on a stage — click target that expands the thread */
+.dt-step-comment-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  background: var(--blue-soft);
+  border-radius: 6px;
+  padding: 5px 9px;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.dt-step-header:hover .dt-step-comment-btn { background: rgba(37, 99, 235, 0.16); }
+.dt-step-comment-btn[data-open="true"] { background: var(--blue); color: #ffffff; }
+
+.dt-step-chevron { transition: transform 0.15s ease; }
+.dt-step-comment-btn[data-open="true"] .dt-step-chevron { transform: rotate(180deg); }
+
+/* Inline comment thread, expanded under the stage that was clicked */
+.dt-comment-list {
+  list-style: none;
+  margin: 10px 0 4px;
+  padding: 12px;
+  background: #f8fafc; /* == --bg-surface-soft */
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dt-comment {
+  display: flex;
+  gap: 9px;
+}
+.dt-comment-avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 10.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dt-comment-body { min-width: 0; flex: 1; }
+.dt-comment-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+  flex-wrap: wrap;
+}
+.dt-comment-author { font-size: 12px; font-weight: 700; color: var(--ink); }
+.dt-comment-date { font-size: 10.5px; color: var(--ink-soft); }
+.dt-comment-text {
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Active-stage action panel (advance / flag / comment) ───────── */
+.dt-active-panel {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--blue-soft);
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dt-active-panel-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+}
+/* Admin gets status/location only — no action buttons, quieter styling
+   so it visually reads as "informational", not "actionable". Kept for
+   backward compatibility; no longer used by default now that Admin has
+   an active sign/authorize panel below, but left in place in case it's
+   still referenced elsewhere. */
+.dt-active-panel-readonly {
+  background: #f1f5f9; /* == --bg-raised */
+  border-color: var(--line-strong);
+}
+.dt-active-panel-readonly .dt-active-panel-label {
+  color: var(--ink-soft);
+}
+/* Admin sign/authorize panel — same layout as .dt-active-panel, but an
+   amber tint so it visually reads as an administrative override rather
+   than the normal assigned-handler flow. */
+.dt-active-panel-admin {
+  background: var(--amber-soft);
+  border-color: rgba(217, 119, 6, 0.28);
+}
+.dt-active-panel-admin .dt-active-panel-label {
+  color: var(--amber);
+}
+/* Unassigned block — active stage exists but no handler is assigned,
+   so nobody (admin included) can work it yet. Neutral gray so it
+   reads as "waiting on setup", distinct from both the blue
+   assigned-handler panel and the amber admin-override panel. */
+.dt-active-panel-blocked {
+  background: #f1f5f9; /* == --bg-raised */
+  border-color: var(--line-strong);
+  gap: 4px;
+}
+.dt-active-panel-blocked .dt-active-panel-label {
+  color: var(--ink-soft);
+}
+.dt-action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dt-btn {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 13px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.dt-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.dt-btn-primary { background: var(--blue); color: #fff; }
+.dt-btn-primary:hover { background: #1d4ed8; }
+.dt-btn-ghost { background: #fff; color: var(--ink); border-color: var(--line-strong); }
+.dt-btn-ghost:hover { background: #f1f5f9; } /* == --bg-raised */
+.dt-btn-danger { background: #fff; color: var(--red); border-color: rgba(220, 38, 38, 0.25); }
+.dt-btn-danger:hover { background: var(--red-soft); }
+
+.dt-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dt-comment-textarea {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  resize: vertical;
+  min-height: 56px;
+  background: #fff;
+}
+.dt-comment-textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+.dt-pipeline-done {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  background: var(--green-soft);
+  padding: 9px 12px;
+  border-radius: 7px;
+}
+.dt-pipeline-blocked {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--red);
+  background: var(--red-soft);
+  padding: 9px 12px;
+  border-radius: 7px;
+}
+
+.dt-save-note {
+  font-size: 11px;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── SMOOTH-LOADING FIX (detail panel) ──────────────────────────
+   Mirrors the Documents list treatment above, applied to the detail
+   panel on the right. document_tracking.jsx now only shows a full
+   skeleton (dt-detail-skeleton below) on a genuine first load — when
+   nothing is cached for the detail panel yet. Switching between
+   documents, or a background realtime refresh of the one currently
+   shown, keeps the existing detail panel mounted instead of tearing
+   it down; .dt-detail-card[data-loading="true"] just dims it and
+   suspends interaction for that moment via the opacity/pointer-events
+   below, then fades back to normal once the fresh data arrives —
+   no blank flash, no content popping back in from scratch. ── */
+.dt-detail-card {
+  transition: opacity 0.18s ease;
+}
+.dt-detail-card[data-loading="true"] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dt-detail-card { transition: none; }
+}
+
+.dt-detail-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dt-detail-skeleton-title { width: 46%; height: 15px; }
+.dt-detail-skeleton-meta { width: 28%; }
+.dt-detail-skeleton-handler { width: 38%; margin-bottom: 6px; }
+.dt-detail-skeleton-stages {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 4px;
+}
+.dt-detail-skeleton-stage {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.dt-detail-skeleton-dot {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: #e2e8f0;
+}
+.dt-detail-skeleton-stage-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.dt-detail-skeleton-stage-label { width: 34%; height: 10px; }
+.dt-detail-skeleton-stage-detail { width: 72%; }
+/* Same soft staggered wave as the list skeleton, applied per stage
+   placeholder instead of per row. */
+.dt-detail-skeleton-stage:nth-child(2) .dt-skeleton-line { animation-delay: 0.08s; }
+.dt-detail-skeleton-stage:nth-child(3) .dt-skeleton-line { animation-delay: 0.16s; }
+.dt-detail-skeleton-stage:nth-child(4) .dt-skeleton-line { animation-delay: 0.24s; }
+
+/* ── Modal pop-in animation (New Document / Request changes / Confirm) ──
+   Applied via .dt-modal-overlay (the fixed, full-viewport backdrop)
+   and .dt-modal-card (the white panel inside it). This is purely
+   additive: the modals' own width/background/border-radius/box-shadow
+   and positioning stay exactly as already set inline in
+   document_tracking.jsx — these two classes only add the fade-in /
+   pop-in timing on top of that, so nothing about their existing
+   layout, sizing, or behavior changes. */
+@keyframes dt-modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dt-modal-pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.dt-modal-overlay {
+  animation: dt-modal-backdrop-in 0.16s ease both;
+}
+.dt-modal-card {
+  animation: dt-modal-pop-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dt-modal-overlay,
+  .dt-modal-card {
+    animation: none;
+  }
+}
+
+/* ── Small-screen tuning ─────────────────────────────────────── */
+@media (max-width: 640px) {
+  .dt-card { padding: 14px; }
+  .dt-card-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .dt-search { width: 100%; min-width: 0; flex: 1 1 auto; }
+  .dt-stat-value { font-size: 22px; }
+  .dt-row { padding: 10px 11px; }
+}
+
+@media (max-width: 380px) {
+  .dt-row-side { width: 100%; justify-content: flex-start; }
+  .dt-handler-select { min-width: 0; flex: 1 1 auto; }
+}

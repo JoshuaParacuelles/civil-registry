@@ -1,0 +1,502 @@
+/* ── Reset / Base ── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ════════════════════════════════════
+   PAGE SHELL
+════════════════════════════════════ */
+.login-page {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ════════════════════════════════════
+   RIGHT PANEL — full-bleed image (sits behind)
+════════════════════════════════════ */
+.login-right {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.login-right-bg {
+  position: absolute;
+  inset: 0;
+  /* Zoomed past 100% to crop out the white/gray margin
+     baked into the source photo (home.jpg) */
+  background-size: 100% auto;
+  background-position: 65% 55%;
+  margin-left: 45%;
+
+}
+
+.login-right-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+/* ════════════════════════════════════
+   LEFT PANEL — white form with S-curve edge
+
+   Panel is 55vw wide.
+   S-curve center at 50vw = 50/55 ≈ 90.91% of panel.
+
+   Cubic bezier bows:
+     +0.073 outward (right) at 25% height
+     -0.073 inward  (left)  at 75% height
+════════════════════════════════════ */
+.login-left {
+  position: relative;
+  z-index: 2;
+  width: 55%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  padding: 48px 40px;
+  clip-path: url(#loginCurve);
+}
+
+.login-left-inner {
+  width: 100%;
+  max-width: 360px;
+  /* keep form content comfortably left of the S-curve */
+  margin-right: 48px;
+  animation: fadeInLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInLeft {
+  from { opacity: 0; transform: translateX(-28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Logo ── */
+.login-logo {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* ── Header ── */
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.3px;
+  margin-bottom: 10px;
+}
+
+.login-header hr {
+  border: none;
+  height: 3px;
+  width: 48px;
+  margin: 0 auto;
+  background: linear-gradient(90deg, #1a73e8, #60a5fa);
+  border-radius: 2px;
+  transition: width 0.35s ease;
+}
+
+.login-left-inner:hover .login-header hr {
+  width: 80px;
+}
+
+/* ── Lock Banner ── */
+.lock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(231, 76, 60, 0.08);
+  border: 1px solid rgba(231, 76, 60, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  color: #c0392b;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* ── Shake ── */
+.shake-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  18%       { transform: translateX(-8px); }
+  36%       { transform: translateX(8px); }
+  54%       { transform: translateX(-6px); }
+  72%       { transform: translateX(6px); }
+  90%       { transform: translateX(-3px); }
+}
+
+.shake-wrapper.shake {
+  animation: shake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* ── Input Group ── */
+.input-group {
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border-radius: 10px;
+  margin-bottom: 22px;
+  position: relative;
+  border: 1.5px solid #d1d5db;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.input-group:hover { border-color: #9ca3af; }
+
+.input-group:focus-within {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+}
+
+.input-group.input-locked { border-color: rgba(231, 76, 60, 0.5); }
+
+.input-group.input-locked:focus-within {
+  border-color: #e74c3c;
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+}
+
+/* ── Floating Label ── */
+.floating-label {
+  position: absolute;
+  left: 44px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: #9ca3af;
+  pointer-events: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0 4px;
+  line-height: 1;
+  white-space: nowrap;
+  background: transparent;
+}
+
+.input-group:focus-within .floating-label,
+.input-group.has-value .floating-label {
+  top: 0;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: #1a73e8;
+  background: #ffffff;
+}
+
+.input-group.has-value:not(:focus-within) .floating-label {
+  color: #6b7280;
+  background: #ffffff;
+}
+
+.input-group.input-locked:focus-within .floating-label,
+.input-group.input-locked.has-value .floating-label {
+  color: #e74c3c;
+  background: #ffffff;
+}
+
+/* ── Input ── */
+.input-group input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  padding: 16px 14px 16px 0;
+  background: transparent;
+  color: #111827;
+}
+
+.input-group input::placeholder { color: transparent; }
+
+.input-group input:-webkit-autofill,
+.input-group input:-webkit-autofill:hover,
+.input-group input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
+  -webkit-text-fill-color: #111827;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* ── Left Icon ── */
+.icon-left {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  flex-shrink: 0;
+  align-self: stretch;
+  color: #c4c9d4;
+  transition: color 0.25s;
+}
+
+.input-group:focus-within .icon-left { color: #1a73e8; }
+.input-group.input-locked .icon-left { color: #e74c3c; }
+
+/* ── Eye Icon ── */
+.password-group .icon-right {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 6px;
+  border-radius: 6px;
+  color: #9ca3af;
+  transition: background 0.2s, color 0.2s;
+}
+
+.password-group .icon-right:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #374151;
+}
+
+/* ── Login Button ── */
+.login-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 14px;
+  border: none;
+  background: linear-gradient(135deg, #1a73e8 0%, #1565c0 100%);
+  color: #fff;
+  font-size: 15.5px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  letter-spacing: 0.4px;
+  transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 14px rgba(26, 115, 232, 0.35);
+}
+
+.login-btn:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(26, 115, 232, 0.4);
+}
+
+.login-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
+}
+
+.login-btn.btn-locked {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  box-shadow: 0 4px 14px rgba(231, 76, 60, 0.3);
+  cursor: not-allowed;
+}
+
+.login-btn.btn-locked:hover { opacity: 1; transform: none; }
+/* ── Login Button (loading state) ── */
+.login-btn.btn-loading {
+  cursor: wait;
+  opacity: 1;
+  position: relative;
+  overflow: hidden;
+  animation: btnPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes btnPulse {
+  0%, 100% { box-shadow: 0 4px 14px rgba(26, 115, 232, 0.35); }
+  50%      { box-shadow: 0 4px 22px rgba(26, 115, 232, 0.6); }
+}
+
+/* subtle shimmer sweep across the button while loading */
+.login-btn.btn-loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.25) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 150% 0; }
+  100% { background-position: -50% 0; }
+}
+
+/* ── Spinner (dual-tone, smoother easing) ── */
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-right-color: rgba(255, 255, 255, 0.8);
+  animation: spin 0.8s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+  vertical-align: middle;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ════════════════════════════════════
+   TOAST SYSTEM
+════════════════════════════════════ */
+.toast-wrap {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  padding: 14px 16px;
+  min-width: 280px;
+  max-width: 360px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: all;
+  animation: slideInRight 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(60px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.toast.hiding { animation: slideOutRight 0.3s ease forwards; }
+
+@keyframes slideOutRight { to { opacity: 0; transform: translateX(60px); } }
+
+.toast-icon { width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; }
+
+.toast-body { flex: 1; }
+
+.toast-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 2px;
+}
+
+.toast-msg { font-size: 0.75rem; color: #6b7280; line-height: 1.5; }
+
+.toast-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.toast-close:hover { color: #111827; }
+
+.toast-progress {
+  height: 3px;
+  background: #f3f4f6;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  overflow: hidden;
+}
+
+.toast-progress-bar { height: 100%; animation: shrink linear forwards; }
+
+@keyframes shrink { from { width: 100%; } to { width: 0%; } }
+
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear { display: none; }
+
+/* ════════════════════════════════════
+   RESPONSIVE — mobile stacked
+════════════════════════════════════ */
+@media (max-width: 768px) {
+  .login-page {
+    flex-direction: column;
+    /* FIX: flat white page background on mobile, so nothing but the
+       form panel is ever visible (see .login-right below). */
+    background: #ffffff;
+  }
+
+  /* FIX: the background photo panel used to stay visible (position:
+     absolute; inset: 0) behind/around the curved form panel on
+     mobile, bleeding through at the top corners where the wave
+     clip-path exposes it. Hiding it entirely keeps mobile fully
+     white, matching the reference layout. */
+  .login-right {
+    display: none;
+  }
+
+  .login-left {
+    width: 100%;
+    min-height: auto;
+    /* on mobile: simple bottom wave instead of S-curve */
+    clip-path: ellipse(110% 100% at 50% 0%);
+    padding: 48px 28px 80px;
+  }
+
+  .login-left-inner {
+    max-width: 100%;
+    margin-right: 0;
+  }
+
+  /* FIX: notification moved from the bottom of the screen to the
+     upper-right corner (matching the desktop position), instead of
+     stretching full-width across the bottom. */
+  .toast-wrap {
+    top: 20px;
+    bottom: auto;
+    right: 20px;
+    left: auto;
+  }
+
+  .toast {
+    /* FIX: previously stretched edge-to-edge (width: 100%), which
+       also made the corner radius look uneven/square-ish at the
+       right edge since the box had no room to actually curve.
+       Capping the width and rounding all four corners equally
+       fixes both the width and the right-corner appearance. */
+    min-width: 0;
+    max-width: min(340px, calc(100vw - 40px));
+    width: auto;
+    border-radius: 10px;
+  }
+}
