@@ -6,12 +6,23 @@ import "./Login.css";
 import bgImage from "../../assets/home.jpg";
 import loginLogo from "../../assets/scc.png";
 
-// Route via Vite proxy (same as Rolemanagement.jsx) so the session cookie
-// set here is usable by every other same-origin request. Calling the
-// backend on an absolute http://localhost:5000 URL made this a cross-origin
-// credentialed request, which silently fails to persist the cookie unless
-// CORS + cookie attributes are configured exactly right on the backend.
-const API = "https://civil-registry.onrender.com";
+// BUG FIX: this was hardcoded to the absolute Render URL
+// ("https://civil-registry.onrender.com"), which made every login
+// request cross-origin/cross-site relative to the page — even in local
+// dev, since it pointed at the deployed backend instead of localhost.
+// That meant the session cookie Set-Cookie'd back by the login response
+// was a third-party cookie from the browser's point of view, which
+// modern browsers block or drop by default. The result: login appeared
+// to succeed, but the cookie never actually stuck, so the very next
+// /api/session check (in PermissionContext) came back unauthenticated
+// and bounced the user straight back to the login page.
+//
+// Relative by default — same pattern as PermissionContext.jsx. In local
+// dev this goes through the Vite proxy to localhost:5000; in production
+// it goes through the vercel.json rewrite to the Render backend. Either
+// way the request stays same-origin from the browser's perspective, so
+// the cookie is set and sent as first-party.
+const API = import.meta.env.VITE_API_BASE_URL || "";
 
 /* ── Icons ─────────────────────────────────────────────────────── */
 const UserIcon = () => (
