@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import "./AuditLogs.css";
 
-const API_URL = "http://localhost:5000/api";
+// Relative on purpose. In dev, the Vite proxy forwards /api to Flask; on
+// Vercel, the rewrite in vercel.json forwards /api to Render. Either way the
+// browser only ever talks to its own origin, so the session cookie is
+// first-party and no CORS is involved. Never hardcode http://localhost here.
+const API_URL = "/api";
 
 const ACTION_CONFIG = {
   LOGIN:          { label: "Login",           icon: "🔐", color: "#16a34a", bg: "rgba(22,163,74,0.09)",   border: "rgba(22,163,74,0.25)"   },
@@ -24,6 +28,7 @@ export const logAction = async (action, description, meta = {}) => {
   try {
     await fetch(`${API_URL}/audit/log`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, description, meta }),
     });
@@ -70,6 +75,13 @@ const parseMeta = (meta) => {
     try { return JSON.parse(meta.replace(/'/g, '"')); }
     catch { return meta; }
   }
+};
+
+const describeLoadError = (error) => {
+  const msg = error?.message || "";
+  if (msg.includes("401")) return "Your session has expired. Please log in again.";
+  if (msg.includes("403")) return "Your account doesn't have permission to view audit logs.";
+  return `The server didn't respond (${msg || "unknown error"}). If it was idle, it may still be waking up — try Refresh in a minute.`;
 };
 
 const AnimatedCount = ({ value }) => {
@@ -122,6 +134,9 @@ const buildPageRange = (currentPage, totalPages) => {
 
 const ROWS_PER_PAGE = 12;
 const FETCH_LIMIT = 100;
+// How often new log rows are checked for in the background. Kept generous so
+// a slow or cold-starting backend isn't hammered.
+const POLL_MS = 30000;
 
 const AuditLogs = () => {
   const [logs, setLogs] = useState([]);
@@ -130,6 +145,7 @@ const AuditLogs = () => {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [filterAction, setFilterAction] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -138,8 +154,16 @@ const AuditLogs = () => {
 
   const sentinelRef = useRef(null);
 
+  // Latest values for the background refresh, so it can merge new rows
+  // without depending on (and re-creating itself for) every state change.
+  const logsRef = useRef([]);
+  const filterRef = useRef(filterAction);
+  useEffect(() => { logsRef.current = logs; }, [logs]);
+  useEffect(() => { filterRef.current = filterAction; }, [filterAction]);
+
   const fetchInitial = useCallback(async () => {
     setLoading(true);
+    setError(null);
     setLogs([]);
     setOffset(0);
     setHasMore(true);
@@ -147,7 +171,9 @@ const AuditLogs = () => {
     try {
       const params = new URLSearchParams({ limit: String(FETCH_LIMIT), offset: "0" });
       if (filterAction) params.append("action", filterAction);
-      const response = await fetch(`${API_URL}/audit/history?${params.toString()}`);
+      const response = await fetch(`${API_URL}/audit/history?${params.toString()}`, {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const json = await response.json();
       const data = Array.isArray(json) ? json : json.data ?? [];
@@ -155,11 +181,12 @@ const AuditLogs = () => {
       setOffset(data.length);
       setHasMore(data.length === FETCH_LIMIT);
       setCurrentPage(1);
-    } catch (error) {
-      console.error("Failed to fetch audit logs:", error);
+    } catch (err) {
+      console.error("Failed to fetch audit logs:", err);
       setLogs([]);
       setOffset(0);
       setHasMore(false);
+      setError(describeLoadError(err));
     } finally {
       setLoading(false);
     }
@@ -171,28 +198,61 @@ const AuditLogs = () => {
     try {
       const params = new URLSearchParams({ limit: String(FETCH_LIMIT), offset: String(offset) });
       if (filterAction) params.append("action", filterAction);
-      const response = await fetch(`${API_URL}/audit/history?${params.toString()}`);
+      const response = await fetch(`${API_URL}/audit/history?${params.toString()}`, {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const json = await response.json();
       const data = Array.isArray(json) ? json : json.data ?? [];
       setLogs((prev) => [...prev, ...data]);
       setOffset((prev) => prev + data.length);
       setHasMore(data.length === FETCH_LIMIT);
-    } catch (error) {
-      console.error("Failed to load more audit logs:", error);
+    } catch (err) {
+      console.error("Failed to load more audit logs:", err);
     } finally {
       setLoadingMore(false);
     }
   }, [filterAction, hasMore, loadingMore, offset]);
 
+  // Background refresh: fetches the newest page and PREPENDS only rows we
+  // don't already have. It never clears the table, never shows the loading
+  // spinner, and never throws away pages the user has already scrolled
+  // through, so the table doesn't flicker on a slow backend.
+  const refreshSilently = useCallback(async () => {
+    const filterAtStart = filterAction;
+    try {
+      const params = new URLSearchParams({ limit: String(FETCH_LIMIT), offset: "0" });
+      if (filterAtStart) params.append("action", filterAtStart);
+      const response = await fetch(`${API_URL}/audit/history?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) return;
+      const json = await response.json();
+      const data = Array.isArray(json) ? json : json.data ?? [];
+
+      // The filter changed while this request was in flight; drop the result.
+      if (filterRef.current !== filterAtStart) return;
+
+      const known = new Set(logsRef.current.map((log) => log.id));
+      const fresh = data.filter((log) => !known.has(log.id));
+      if (fresh.length === 0) return;
+
+      setLogs((prev) => [...fresh, ...prev]);
+      setOffset((prev) => prev + fresh.length);
+    } catch (err) {
+      console.warn("Background audit refresh failed:", err);
+    }
+  }, [filterAction]);
+
   useEffect(() => { fetchInitial(); }, [fetchInitial]);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (!loadingMore) fetchInitial();
-    }, 5000);
+      if (document.hidden || loading || loadingMore) return;
+      refreshSilently();
+    }, POLL_MS);
     return () => clearInterval(timer);
-  }, [fetchInitial, loadingMore]);
+  }, [refreshSilently, loading, loadingMore]);
 
   useEffect(() => {
     const element = sentinelRef.current;
@@ -235,15 +295,18 @@ const AuditLogs = () => {
 
   const handleClear = async () => {
     try {
-      const response = await fetch(`${API_URL}/audit/clear`, { method: "DELETE" });
+      const response = await fetch(`${API_URL}/audit/clear`, {
+        method: "DELETE",
+        credentials: "include",
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setLogs([]);
       setOffset(0);
       setHasMore(false);
       setCurrentPage(1);
       setExpandedId(null);
-    } catch (error) {
-      console.error("Clear failed:", error);
+    } catch (err) {
+      console.error("Clear failed:", err);
     } finally {
       setShowClearConfirm(false);
     }
@@ -395,8 +458,8 @@ const AuditLogs = () => {
           ) : (
             <div className="audit-empty">
               <div style={{ padding: 48, textAlign: "center" }}>
-                <h3>No records found</h3>
-                <p>We couldn't find any audit logs for the selected filters.</p>
+                <h3>{error ? "Couldn't load audit logs" : "No records found"}</h3>
+                <p>{error || "We couldn't find any audit logs for the selected filters."}</p>
                 <div style={{ marginTop: 14 }}>
                   <button className="audit-btn-refresh" onClick={fetchInitial}>↻ Retry</button>
                 </div>
