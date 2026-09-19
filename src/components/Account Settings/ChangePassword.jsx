@@ -49,7 +49,11 @@ const ShieldIcon = () => (
 
 // ── CONFIG ─────────────────────────────────────────────────────────────────
 
-const API_BASE = "http://localhost:5000";
+// Relative on purpose. In dev, the Vite proxy forwards /api to Flask; on
+// Vercel, the rewrite in vercel.json forwards /api to Render. Either way the
+// browser only ever talks to its own origin, so the session cookie is
+// first-party and no CORS is involved. Never hardcode http://localhost here.
+const API_BASE = "";
 
 const MODULE_CONFIGS = {
   archiveBirth: {
@@ -234,12 +238,10 @@ const SectionDivider = ({ label }) => (
   </div>
 );
 
-// FIX: accepts an `id` prop now, used on the <input> AND as the
-// label's `htmlFor`, so every field is properly associated with its
-// label (fixes "No label associated with a form field") and has a
-// globally-unique id (fixes "neither an id nor a name attribute" /
-// duplicate-id autofill confusion when the same component is reused
-// across the Password tab, Username tab, and the three archive forms).
+// Accepts an `id` prop, used on the <input> AND as the label's `htmlFor`, so
+// every field is properly associated with its label and has a globally-unique
+// id even though this component is reused across the Password tab, Username
+// tab, and the three archive forms.
 const PasswordField = ({ id, label, name, value, onChange, show, onToggle, placeholder, autoComplete }) => (
   <div className="cp-field">
     <label className="cp-label" htmlFor={id}>{label}</label>
