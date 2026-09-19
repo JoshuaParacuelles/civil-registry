@@ -11,7 +11,7 @@ import loginLogo from "../../assets/scc.png";
 // backend on an absolute http://localhost:5000 URL made this a cross-origin
 // credentialed request, which silently fails to persist the cookie unless
 // CORS + cookie attributes are configured exactly right on the backend.
-const API = "";
+const API = "https://civil-registry.onrender.com";
 
 /* ── Icons ─────────────────────────────────────────────────────── */
 const UserIcon = () => (
