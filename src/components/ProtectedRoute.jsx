@@ -1,7 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { usePermissions } from "./PermissionContext";
 
-const LoadingScreen = () => (
+const LoadingScreen = ({ waking }) => (
   <div style={{
     display: "flex", flexDirection: "column",
     alignItems: "center", justifyContent: "center",
@@ -14,41 +14,26 @@ const LoadingScreen = () => (
       borderRadius: "50%",
       animation: "spin 0.8s linear infinite",
     }} />
-    <p style={{ margin: 0 }}>Loading...</p>
+    {/* BUG FIX: without this, a cold-start wait (50-90s+ on a free-tier
+        backend) just looks like a frozen spinner, and users assume the
+        app is broken. Naming what's actually happening (and that it can
+        take up to a minute) sets the right expectation instead. */}
+    <p style={{ margin: 0 }}>
+      {waking ? "Waking up the server, this can take up to a minute…" : "Loading..."}
+    </p>
     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
   </div>
 );
 
 export default function ProtectedRoute({ module, adminOnly = false, children }) {
-  const { hasAccess, is_admin, loading } = usePermissions();
+  const { hasAccess, is_admin, loading, waking } = usePermissions();
 
   // 1. Show loading screen while context is fetching /api/session
-  if (loading) return <LoadingScreen />;
+  if (loading) return <LoadingScreen waking={waking} />;
 
-  // BUG FIX: "name/role suddenly change to Admin/Administrator after
-  // refreshing" — this used to also allow through anyone with a stale
-  // sessionStorage "isAuthenticated" flag:
-  //
-  //   const isAuth = sessionStorage.getItem("isAuthenticated") === "true";
-  //   if (!isAuth && !hasAccess("dashboard")) { ...redirect... }
-  //
-  // That flag is a leftover local value — it isn't guaranteed to be
-  // cleared or refreshed in lockstep with the real, server-verified
-  // session. If the backend session ever became invalid behind the
-  // scenes (e.g. the Flask dev server restarting while you edit code,
-  // which invalidates the session cookie) while the OLD "true" value was
-  // still sitting in sessionStorage from before, that stale flag alone
-  // was enough to stop this guard from redirecting to login. The route
-  // would then keep rendering with PermissionContext's just-reset
-  // defaults instead of a real identity, which is how the sidebar ended
-  // up showing the fallback "Admin" name and "Administrator"-style admin
-  // state instead of the actual current user.
-  //
-  // `hasAccess("dashboard")` already comes entirely from PermissionContext,
-  // which itself is only ever set from a successful /api/session response
-  // (see PermissionContext.jsx). It is true if and only if the server
-  // currently considers this session authenticated, so it's the only
-  // signal this guard needs — no local sessionStorage flag required.
+  // hasAccess("dashboard") comes entirely from PermissionContext, which is
+  // only ever set from a successful /api/session response. It is true if
+  // and only if the server currently considers this session authenticated.
   if (!hasAccess("dashboard")) {
     return <Navigate to="/" replace />;
   }
