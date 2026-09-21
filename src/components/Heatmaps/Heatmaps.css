@@ -15,7 +15,10 @@
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-sm: 8px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  /* Single, consistent elevation — a soft contact shadow, not a blurred "floating" glow */
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --focus-ring: 0 0 0 3px rgba(46, 95, 232, 0.18);
 
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
@@ -54,16 +57,37 @@
   font-weight: 500;
   min-width: 140px;
 }
-.filter select { cursor: pointer; }
+/* Flat, custom dropdown chevron so selects don't fall back to the default
+   OS control (a common "unfinished" tell) — matches the muted text color. */
+.filter select {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  padding-right: 32px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.filter select:hover { border-color: #c7cee3; }
+.filter select:focus-visible,
+.filter__range:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+}
 
 .btn-primary {
   display: inline-flex; align-items: center; gap: 8px;
   background: var(--primary); color: #fff; border: none;
   border-radius: var(--radius-sm); padding: 10px 18px;
   font-size: 13.5px; font-weight: 600; cursor: pointer;
-  align-self: flex-end; transition: background 0.15s ease;
+  align-self: flex-end; transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 .btn-primary:hover { background: var(--primary-dark); }
+.btn-primary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* ════════════════════════════════════
    SHARED CARD
@@ -83,8 +107,10 @@
 .zoom-controls button {
   height: 28px; min-width: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border);
   background: #f8f9fc; cursor: pointer; font-size: 15px; font-weight: 700; color: var(--text);
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.zoom-controls button:hover:not(:disabled) { background: #eef1f8; }
+.zoom-controls button:hover:not(:disabled) { background: #eef1f8; border-color: #c7cee3; }
+.zoom-controls button:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--primary); }
 .zoom-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
 .zoom-controls__reset { font-size: 11px !important; font-weight: 600 !important; }
 
@@ -166,22 +192,24 @@
 
 /* ════════════════════════════════════
    STAT CARDS
+   Summary metrics are the visual hero: larger figure, tighter label,
+   crisper active/dim states so the selected metric reads unambiguously.
 ════════════════════════════════════ */
 .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .stat-card {
   display: flex; align-items: center; gap: 12px; background: var(--card);
   border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px;
-  box-shadow: var(--shadow); transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--shadow-sm); transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .stat-card--dim { opacity: 0.45; }
-.stat-card--active { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(46,95,232,0.15); }
+.stat-card--active { border-color: var(--primary); box-shadow: var(--focus-ring); }
 .stat-card__icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .stat-card--total .stat-card__icon { background: #e8edfd; color: var(--primary); }
 .stat-card--birth .stat-card__icon { background: #e6f7ec; color: var(--birth); }
 .stat-card--marriage .stat-card__icon { background: #fef3e0; color: var(--marriage); }
 .stat-card--death .stat-card__icon { background: #fde5ea; color: var(--death); }
 .stat-card__body { display: flex; flex-direction: column; min-width: 0; }
-.stat-card__value { font-size: 19px; font-weight: 800; line-height: 1.15; }
+.stat-card__value { font-size: 21px; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; }
 .stat-card__label { font-size: 11.5px; color: var(--muted); font-weight: 600; }
 .stat-card__sub { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
 
@@ -196,6 +224,8 @@
   -webkit-overflow-scrolling: touch;
   width: 100%;
   min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 thead th {
@@ -206,9 +236,11 @@ thead th {
 }
 th.th--highlight { background: #eef2ff; color: var(--primary-dark); }
 tbody td { padding: 9px 10px; border-bottom: 1px solid #f0f1f6; transition: background 0.15s ease; white-space: nowrap; }
+tbody tr:last-child td { border-bottom: none; }
 tbody tr { cursor: pointer; }
 tbody tr:hover { background: #f8f9fc; }
 tbody tr.row--active { background: #eef2ff; }
+tbody tr.row--active:hover { background: #e6ebff; }
 .cell--strong { font-weight: 700; }
 .cell--highlight { background: #eef2ff; font-weight: 700; color: var(--primary-dark); border-radius: 6px; }
 .pct-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 700; font-size: 11px; }
@@ -259,6 +291,7 @@ tbody tr.row--active { background: #eef2ff; }
 }
 .link-btn { align-self: flex-start; background: none; border: none; color: var(--primary); font-weight: 700; font-size: 12.5px; cursor: pointer; padding: 0; }
 .link-btn:hover { text-decoration: underline; }
+.link-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
 
 .late-reg { display: flex; flex-direction: column; gap: 6px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
 .late-reg__row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; font-size: 12px; align-items: center; }
@@ -318,9 +351,10 @@ tbody tr.row--active { background: #eef2ff; }
   cursor: pointer;
   font-family: inherit;
   color: var(--text);
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.chip:hover { transform: translateY(-1px); }
+.chip:hover { background: #eef1f8; }
+.chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .chip--reporting { border-color: rgba(22,163,74,0.35); background: #eefbf2; color: #146c34; }
 .chip--reporting:hover { background: #dff5e6; }
 .chip--pending { border-color: rgba(107,114,128,0.35); background: #f3f4f6; color: #4b5563; }
@@ -344,10 +378,11 @@ tbody tr.row--active { background: #eef2ff; }
   background: #fff; color: var(--primary); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 9px 16px;
   font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
 }
 .btn-secondary:hover { background: #f4f6ff; border-color: var(--primary); }
+.btn-secondary:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--primary); }
 
 .cbms-stats {
   display: grid;
@@ -388,9 +423,10 @@ tbody tr.row--active { background: #eef2ff; }
   color: var(--text);
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .toggle-chip:hover { border-color: var(--primary); }
+.toggle-chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .toggle-chip--active { background: var(--primary); border-color: var(--primary); color: #fff; }
 
 .cbms-scope {
@@ -410,6 +446,8 @@ tbody tr.row--active { background: #eef2ff; }
   -webkit-overflow-scrolling: touch;
   width: 100%;
   min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .id-badge {
@@ -598,7 +636,7 @@ tbody tr.row--active { background: #eef2ff; }
 /* ── Small phones ── */
 @media (max-width: 420px) {
   .stat-card { padding: 12px; }
-  .stat-card__value { font-size: 17px; }
+  .stat-card__value { font-size: 18px; }
   .cbms-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
   .cbms-stat { padding: 10px; }
   .legend__items { gap: 8px 12px; }
