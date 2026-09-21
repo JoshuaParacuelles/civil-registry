@@ -23,7 +23,6 @@ import accountIcon   from "../assets/sidebar-icon/account.png";
 import logoutIcon    from "../assets/sidebar-icon/logout.png";
 
 import "./home.css";
-import "./notification-details.css";
 
 const MENU_KEYS = {
   DASHBOARD:         "Dashboard",
