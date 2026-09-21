@@ -186,6 +186,11 @@
   background: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  /* FIX (button-shape): tab buttons sit in a flex row without their own
+     fixed size, so without flex-shrink:0 they could be squeezed/skewed
+     out of their normal pill shape when the header is tight. */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 
 .ubr-tab-btn__icon  { font-size: 13px; }
@@ -386,6 +391,13 @@
   transition: all 0.15s;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  /* FIX (button-shape): base .btn is reused inside several flex rows
+     (upload/cancel footers, modal footers, etc.) that don't set their
+     own align-items. Without a shrink/grow lock, the fixed height:34px
+     above gets overridden by flex "stretch" and the button appears
+     squashed or elongated instead of its normal pill shape. */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 
 .btn-primary {
@@ -449,6 +461,12 @@
   transition: all 0.12s;
   white-space: nowrap;
   touch-action: manipulation;
+  /* FIX (button-shape): table/card action rows (.tbl-acts,
+     .mobile-record-card__actions) are flex rows; lock these to their
+     own content size so they keep a consistent pill shape instead of
+     stretching to match the row height. */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 .tbl-btn:hover      { filter: brightness(0.92); transform: translateY(-1px); }
 .tbl-btn--blue      { background: #2563eb !important; }
@@ -727,6 +745,11 @@
   transition: all 0.15s;
   line-height: 1;
   touch-action: manipulation;
+  /* FIX (button-shape): prevent this button from stretching/squashing
+     inside .result-row__actions on narrow rows so it keeps a consistent
+     rectangular shape matching .select-btn beside it. */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 .view-pdf-btn:hover:not(:disabled) {
   background: #1d4ed8 !important;
@@ -751,6 +774,10 @@
   white-space: nowrap;
   transition: all 0.15s;
   touch-action: manipulation;
+  /* FIX (button-shape): same shrink/grow lock as .view-pdf-btn so the
+     two action buttons stay the same consistent height/shape. */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 .select-btn:hover           { background: #1d4ed8 !important; border-color: #1d4ed8; color: #fff !important; }
 .select-btn--selected       { background: #1d4ed8 !important; color: #fff !important; border-color: #1d4ed8; cursor: default; }
@@ -780,6 +807,10 @@
   font-family: var(--f);
   transition: all 0.15s;
   touch-action: manipulation;
+  /* FIX (button-shape): keep its own content-sized shape wherever it
+     appears (.no-results, .no-match-alt). */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 .neg-btn:hover { background: #1d4ed8 !important; border-color: #1d4ed8; color: #fff !important; }
 
@@ -980,7 +1011,17 @@
 }
 .modal-box h3 { margin: 0 0 7px; font-size: 15px; font-weight: 700; color: var(--txt); font-family: var(--fh); }
 .modal-box p  { margin: 0 0 16px; font-size: 12.5px; color: var(--txt2); line-height: 1.6; }
-.modal-acts   { display: flex; gap: 7px; justify-content: flex-end; flex-wrap: wrap; }
+.modal-acts   {
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  /* FIX (button-shape): this row had no align-items, so it defaulted to
+     "stretch" and the Cancel / Confirm buttons (which have no explicit
+     height) were pulled to match each other's box instead of keeping
+     their natural, consistent pill shape. align-items:center fixes it. */
+}
 
 .modal-cancel {
   padding: 7px 14px;
@@ -994,6 +1035,10 @@
   font-family: var(--f);
   transition: all 0.15s;
   touch-action: manipulation;
+  /* FIX (button-shape): lock to its own content size inside .modal-acts
+     / .negcert-info-modal__acts. */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 .modal-cancel:hover { background: #1d4ed8 !important; color: #ffffff !important; }
 
@@ -1008,6 +1053,10 @@
   font-family: var(--f);
   transition: filter 0.15s, transform 0.15s;
   touch-action: manipulation;
+  /* FIX (button-shape): same shrink/grow lock as .modal-cancel so both
+     modal buttons stay visually consistent. */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 .modal-confirm:hover { filter: brightness(0.92); transform: translateY(-1px); }
 
@@ -1160,6 +1209,11 @@
   white-space: nowrap;
   background: #2563eb !important;
   color: #ffffff !important;
+  /* FIX (button-shape): this submit button shares the (now
+     align-items:center) .modal-acts row with .modal-cancel — add the
+     same shrink/grow lock so both stay a consistent shape. */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 .negcert-info-modal__submit:hover {
   background: #1d4ed8 !important;
@@ -1217,7 +1271,15 @@
   flex-shrink: 0;
   color: var(--txt3);
 }
-.pdf-hdr-btns   { display: flex; gap: 5px; flex-shrink: 0; }
+.pdf-hdr-btns   {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-shrink: 0;
+  /* FIX (button-shape): this inner row previously had no align-items,
+     so it defaulted to "stretch" and could pull the Print/Close buttons
+     to mismatched heights instead of their normal shape. */
+}
 .pdf-body       { flex: 1; overflow: hidden; background: var(--bg); }
 
 .pdf-body__iframe {
@@ -1239,6 +1301,10 @@
   transition: filter 0.12s, transform 0.12s;
   white-space: nowrap;
   touch-action: manipulation;
+  /* FIX (button-shape): lock to its own content size inside
+     .pdf-hdr-btns. */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 .hdr-btn:hover        { filter: brightness(0.92); transform: translateY(-1px); }
 .hdr-btn--print       { background: #2563eb !important; }
@@ -1326,6 +1392,9 @@
   transition: all 0.15s;
   white-space: nowrap;
   touch-action: manipulation;
+  /* FIX (button-shape): explicit flex-grow:0 alongside the existing
+     flex-shrink:0 so this button never gets stretched inside .tab-hdr. */
+  flex-grow: 0;
 }
 .upload-btn:hover { background: #1d4ed8 !important; transform: translateY(-1px); }
 
@@ -1407,7 +1476,15 @@
 .tbl-file__icon  { font-size: 14px; flex-shrink: 0; display: flex; align-items: center; color: var(--txt3); }
 .tbl-file__icon svg { width: 14px; height: 14px; }
 .tbl-file-name   { font-weight: 600; color: var(--txt); font-size: 12.5px; }
-.tbl-acts        { display: flex; gap: 3px; flex-wrap: wrap; }
+.tbl-acts        {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  flex-wrap: wrap;
+  /* FIX (button-shape): row of table action buttons had no
+     align-items, so it defaulted to "stretch" and could distort the
+     buttons' height inside the table cell. */
+}
 
 .tbl-loading {
   padding: 32px;
@@ -1518,6 +1595,9 @@
   margin-left: auto;
   touch-action: manipulation;
   transition: all 0.15s;
+  /* FIX (button-shape): guard against stretching alongside the other
+     .upl-hdr children even though it has fixed width/height. */
+  flex-grow: 0;
 }
 .upl-close:hover { background: #1d4ed8 !important; border-color: #1d4ed8; color: #ffffff !important; }
 
@@ -1531,7 +1611,17 @@
   -webkit-overflow-scrolling: touch;
   background: #ffffff;
 }
-.upl-foot { display: flex; justify-content: flex-end; gap: 7px; padding-top: 6px; flex-wrap: wrap; }
+.upl-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 7px;
+  padding-top: 6px;
+  flex-wrap: wrap;
+  /* FIX (button-shape): this footer row had no align-items, so it
+     defaulted to "stretch" and could distort the Cancel/Upload button
+     pair's shape relative to each other. */
+}
 
 .upl-limit-row         { display: flex; align-items: center; justify-content: space-between; gap: 7px; flex-wrap: wrap; }
 .upl-limit-reached-msg { font-size: 11px; color: var(--red); font-weight: 600; }
@@ -1600,7 +1690,7 @@
   color: var(--blue);
   gap: 7px;
 }
-.upl-queue__clear-btn { background: none; border: none; font-size: 11px; color: var(--blue); font-weight: 700; cursor: pointer; }
+.upl-queue__clear-btn { background: none; border: none; font-size: 11px; color: var(--blue); font-weight: 700; cursor: pointer; flex-shrink: 0; }
 
 .upl-queue__item {
   display: flex;
@@ -1841,6 +1931,9 @@
   transition: all 0.15s;
   box-shadow: 0 2px 8px rgba(37,99,235,0.25);
   touch-action: manipulation;
+  /* FIX (button-shape): explicit flex-grow:0 alongside existing
+     flex-shrink:0 so this button never stretches inside the toolbar. */
+  flex-grow: 0;
 }
 .pdf-inline-print-btn:hover:not(:disabled) { background: #1d4ed8 !important; transform: translateY(-1px); }
 .pdf-inline-print-btn:disabled { opacity: 0.6; cursor: not-allowed; }
