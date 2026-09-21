@@ -40,6 +40,7 @@
 /* ── Credential category buttons ── */
 .rm-category-tabs {
   display: flex;
+  flex-wrap: wrap;      /* safety net: never overflow the row on in-between widths */
   align-items: center;
   gap: 8px;
   margin-bottom: 20px;
@@ -119,23 +120,6 @@
   box-shadow: 0 0 0 3px rgba(37,99,235,.12);
 }
 
-@media (max-width: 640px) {
-  .rm-category-tabs {
-    flex-wrap: nowrap;      /* was wrap — this is what pushed them to stack */
-    gap: 6px;
-  }
-
-  .rm-category-tab {
-    flex: 1 1 0;            /* was 1 1 auto — lets both share the row equally */
-    min-width: 0;           /* allows text to shrink/wrap instead of overflowing */
-    padding: 9px 8px;       /* tighter padding so labels fit in half-width */
-    font-size: 0.8rem;
-    white-space: normal;    /* let long labels wrap to a second line if needed */
-    text-align: center;
-    line-height: 1.25;
-  }
-}
-
 /* ── Buttons ── */
 .rm-btn {
   display: inline-flex;
@@ -177,10 +161,10 @@
   background: var(--rm-surface);
   border-radius: var(--rm-radius);
   box-shadow: var(--rm-shadow);
-  /* Was `overflow: hidden`, which silently clipped columns that didn't fit
-     instead of letting the user reach them. Now it scrolls horizontally
-     on any viewport too narrow for the full table (desktop still unaffected
-     since the table fits without scrolling there). */
+  /* Scrolls horizontally as a last-resort fallback on any viewport too narrow
+     for the full table, instead of silently clipping columns. On tablet and
+     phone widths the table is converted to stacked cards (see the responsive
+     section at the bottom), so this scroll is only ever a safety net. */
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
@@ -420,6 +404,7 @@
   flex-direction: column;
   width: 100%;
   max-height: 90vh;
+  max-height: 90dvh; /* mobile browsers: excludes the collapsing URL bar so the footer is never cut off */
   overflow: hidden;
   animation: rm-modal-in .18s ease;
 }
@@ -437,6 +422,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 18px 20px;
   border-bottom: 1px solid var(--rm-border);
   flex-shrink: 0;
@@ -444,6 +430,8 @@
 
 .rm-modal__head h2 {
   margin: 0;
+  min-width: 0;                 /* lets a long username wrap instead of pushing the ✕ off-screen */
+  overflow-wrap: anywhere;
   font-size: 1rem;
   font-weight: 600;
   color: var(--rm-text-1);
@@ -458,6 +446,7 @@
   padding: 2px 6px;
   border-radius: 4px;
   line-height: 1;
+  flex-shrink: 0;
   transition: color .15s, background .15s;
 }
 
@@ -467,6 +456,7 @@
   padding: 20px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -573,6 +563,7 @@
   color: var(--rm-text-2);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -601,13 +592,17 @@
 .rm-delete-card__info {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
+  min-width: 0;
 }
 
 .rm-delete-card__name {
   font-weight: 600;
   font-size: 0.95rem;
   color: var(--rm-text-1);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .rm-confirm-msg {
@@ -615,6 +610,7 @@
   font-size: 0.875rem;
   color: var(--rm-text-2);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .rm-warn-box {
@@ -640,13 +636,17 @@
 .rm-creds-hero__info {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 5px;
+  min-width: 0;
 }
 
 .rm-creds-hero__name {
   font-size: 1.05rem;
   font-weight: 700;
   color: var(--rm-text-1);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .rm-creds-table {
@@ -846,6 +846,7 @@
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--rm-text-1);
+  overflow-wrap: anywhere;
 }
 
 .rm-toast-msg {
@@ -864,6 +865,7 @@
   padding: 0 2px;
   line-height: 1;
   align-self: flex-start;
+  flex-shrink: 0;
 }
 
 .rm-toast-progress {
@@ -909,37 +911,35 @@
 
 /* ══════════════════════════════════════════════════════════════════════════
    RESPONSIVE
+   Breakpoints (each block only overrides what the wider one left behind):
+     ≤ 1100px  compact table       — tighter cells, chips/buttons may wrap
+     ≤  900px  tablet              — table becomes a grid of labeled cards
+     ≤  640px  phone               — single-column cards, bottom-sheet modals
+     ≤  400px  small phone         — slightly tighter spacing
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Tablet / narrow desktop ── */
+/* ── Narrow desktop: keep the table, but let it compress cleanly ──
+   Chips and action buttons are allowed to wrap onto a second line inside their
+   own cell (instead of forcing the whole table wider than its container), and
+   cell padding is trimmed so all six columns fit in more widths. */
+@media (max-width: 1100px) {
+  .rm-table th,
+  .rm-table td { padding-left: 12px; padding-right: 12px; }
+
+  .rm-chips--inline { flex-wrap: wrap; }
+}
+
+/* ── Tablet: table → grid of stacked cards ──
+   Each row becomes a card; each cell becomes a labeled row using the
+   data-label attribute set in Rolemanagement.jsx. Cards are laid out in an
+   auto-fill grid, so wider tablets get 2+ columns instead of one stretched
+   card, and no column is ever hidden behind a horizontal scroll. */
 @media (max-width: 900px) {
   .rm-wrap { padding: 16px; }
 
-  /* Search keeps its desktop max-width here (no override) so it stays a
-     compact box sitting beside the Add User button instead of stretching
-     to fill the row — only the mobile breakpoint below stacks them. */
-}
+  /* Search keeps its desktop max-width here so it stays a compact box
+     beside the Add User button; only the phone breakpoint changes that. */
 
-/* ── Mobile: stack the toolbar ── */
-@media (max-width: 640px) {
-  .rm-wrap { padding: 12px; }
-
-  .rm-toolbar {
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: nowrap;
-  }
-
-  .rm-btn--primary { width: auto; flex-shrink: 0; justify-content: center; }
-
-  .rm-search-wrap { flex: 1; width: auto; min-width: 0; }
-  .rm-search { max-width: none; width: 100%; }
-
-  /* ── Table → stacked cards ──
-     Each row becomes a card; each cell becomes a labeled block using the
-     data-label attribute set in Rolemanagement.jsx. This avoids relying on
-     horizontal scrolling to see Status/Assigned/Actions, which is what was
-     making columns disappear entirely on phones. */
   .rm-table-wrap {
     overflow: visible;
     background: transparent;
@@ -959,28 +959,42 @@
 
   .rm-table thead { display: none; }
 
+  .rm-table tbody {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+  }
+
   .rm-table tbody tr {
+    min-width: 0;
     background: var(--rm-surface);
     border: 1px solid var(--rm-border);
     border-radius: var(--rm-radius);
     box-shadow: var(--rm-shadow);
-    margin-bottom: 12px;
+    margin: 0;
     padding: 6px 14px;
   }
 
-  .rm-table tbody tr:last-child { margin-bottom: 0; }
-
+  /* Cell = one labeled row inside the card. */
   .rm-table td {
-    border-bottom: 1px solid #f3f4f6;
-    padding: 10px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
     flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 10px 0;
+    min-height: 44px;
+    text-align: right;
   }
 
-  .rm-table td:last-child { border-bottom: none; }
+  /* Divider between rows. These three selectors deliberately match the
+     specificity of the desktop ".tbody tr:last-child td { border-bottom: none }"
+     rule — otherwise the LAST card in the list would lose its dividers and
+     look different from every other card. Order matters: the final
+     td:last-child rule must come last. */
+  .rm-table tbody tr td                  { border-bottom: 1px solid #f3f4f6; }
+  .rm-table tbody tr:last-child td       { border-bottom: 1px solid #f3f4f6; }
+  .rm-table tbody tr td:last-child       { border-bottom: none; }
 
   .rm-table td::before {
     content: attr(data-label);
@@ -988,21 +1002,64 @@
     font-weight: 700;
     letter-spacing: .06em;
     text-transform: uppercase;
+    text-align: left;
     color: var(--rm-text-3);
     flex-shrink: 0;
   }
 
-  /* ── Action buttons (mobile) ──
-     FIX: these previously stretched to fill the row (width: 100% on the
-     group, flex: 1 1 calc(50% - 8px) on each pill), which is what made
-     View / Reset / Delete blow up to oversized, full-width bars instead of
-     sitting naturally sized next to each other. Dropped the forced
-     stretch — the group now just wraps left-aligned, and each pill sizes
-     itself to its own label/padding, same as .rm-btn--primary ("+ Add
-     User") already does elsewhere on this page. */
+  /* USER — avatar + name pushed to the right, long names wrap. */
+  .rm-user-cell {
+    min-width: 0;
+    max-width: 100%;
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .rm-user-cell > div {
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* ROLE — a very long role name wraps inside its pill instead of overflowing. */
+  .rm-table td .rm-role-pill {
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+  }
+
+  /* ACCESS — label on its own line, chips fill the full card width and wrap
+     into clean rows. This is the row that was previously clipped
+     (chips forced to a single non-wrapping line). */
+  .rm-table td[data-label="Access"] {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 8px;
+    text-align: left;
+  }
+
+  .rm-table td[data-label="Access"] .rm-chips,
+  .rm-table td[data-label="Access"] .rm-chips--inline {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .rm-table td .rm-chip {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ACTIONS — natural-sized pills (never stretched), right-aligned; if they
+     don't fit beside the label they drop to the next line, still right-aligned. */
   .rm-action-btns {
     width: auto;
-    justify-content: flex-start;
+    max-width: 100%;
+    margin-left: auto;
+    justify-content: flex-end;
     flex-wrap: wrap;
     gap: 8px;
   }
@@ -1014,7 +1071,47 @@
     text-align: center;
     padding: 7px 16px;
   }
+}
 
+/* ── Phone ── */
+@media (max-width: 640px) {
+  .rm-wrap { padding: 12px; }
+
+  /* Category buttons: share the row equally and match heights, even when one
+     label wraps onto more lines than the other. */
+  .rm-category-tabs {
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .rm-category-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 9px 8px;
+    font-size: 0.8rem;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-align: center;
+    line-height: 1.25;
+  }
+
+  /* Toolbar: Add User + Search stay on one row. */
+  .rm-toolbar {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .rm-btn--primary { width: auto; flex-shrink: 0; justify-content: center; }
+
+  .rm-search-wrap { flex: 1; width: auto; min-width: 0; }
+  .rm-search { max-width: none; width: 100%; }
+
+  /* Cards: exactly one column. */
+  .rm-table tbody { grid-template-columns: minmax(0, 1fr); }
+
+  /* Toasts span the screen width. */
   .rm-toast-wrap {
     left: 12px;
     right: 12px;
@@ -1023,15 +1120,36 @@
 
   .rm-toast-item { max-width: none; }
 
+  /* Modals become bottom sheets. They size to their content (a small delete
+     confirmation is no longer stretched to full screen height) and are capped
+     using dvh, so the footer buttons are never hidden behind the mobile
+     browser's URL bar. */
   .rm-overlay { padding: 0; align-items: flex-end; }
 
   .rm-modal {
-    max-height: 100vh;
-    height: 100%;
+    height: auto;
+    max-height: 92vh;
+    max-height: 92dvh;
     border-radius: 12px 12px 0 0;
     max-width: 100% !important;
   }
 
+  .rm-modal__head { padding: 16px; }
+  .rm-modal__body { padding: 16px; }
+
+  /* Footer buttons share the row; if a label is too long for that, each button
+     takes its own full-width row instead of overflowing. */
+  .rm-modal__foot {
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .rm-modal__foot .rm-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* Credentials modal: label above value, value spans the full width. */
   .rm-cred-row {
     flex-direction: column;
     align-items: flex-start;
@@ -1039,4 +1157,20 @@
   }
 
   .rm-cred-row__label { width: auto; }
+
+  .rm-cred-row__value-wrap { width: 100%; flex: 0 0 auto; }
+}
+
+/* ── Small phone ── */
+@media (max-width: 400px) {
+  .rm-wrap { padding: 10px; }
+
+  .rm-toolbar { gap: 8px; }
+  .rm-btn--primary { padding: 9px 12px; }
+
+  .rm-category-tab { font-size: 0.75rem; padding: 8px 6px; }
+
+  .rm-table tbody tr { padding: 4px 12px; }
+
+  .rm-action-btns .rm-pill-btn { padding: 7px 14px; }
 }
