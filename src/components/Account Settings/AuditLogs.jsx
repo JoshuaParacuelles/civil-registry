@@ -7,22 +7,46 @@ import "./AuditLogs.css";
 // first-party and no CORS is involved. Never hardcode http://localhost here.
 const API_URL = "/api";
 
+// Each action maps to a small set of semantic tones instead of its own
+// colour + emoji. Tones are rendered as a status dot in the table and the
+// summary bar (see AuditLogs.css: .audit-tone-dot--*).
+//   success  – something completed / granted
+//   danger   – failed, blocked or destructive
+//   warning  – changes that alter existing data
+//   info     – read / transfer activity
+//   neutral  – session and navigation noise
 const ACTION_CONFIG = {
-  LOGIN:          { label: "Login",           icon: "🔐", color: "#16a34a", bg: "rgba(22,163,74,0.09)",   border: "rgba(22,163,74,0.25)"   },
-  LOGIN_FAILED:   { label: "Login Failed",    icon: "❌", color: "#dc2626", bg: "rgba(220,38,38,0.09)",   border: "rgba(220,38,38,0.25)"   },
-  LOGIN_LOCKED:   { label: "Account Locked",  icon: "⛔", color: "#b91c1c", bg: "rgba(185,28,28,0.08)",   border: "rgba(185,28,28,0.2)"    },
-  LOGOUT:         { label: "Logout",          icon: "🚪", color: "#475569", bg: "rgba(71,85,105,0.08)",   border: "rgba(71,85,105,0.18)"   },
-  VIEW:           { label: "Viewed",          icon: "👁️", color: "#2563eb", bg: "rgba(37,99,235,0.09)",   border: "rgba(37,99,235,0.25)"   },
-  SEARCH:         { label: "Searched",        icon: "🔍", color: "#7c3aed", bg: "rgba(124,58,237,0.09)",  border: "rgba(124,58,237,0.25)"  },
-  UPLOAD:         { label: "Uploaded",        icon: "⬆️", color: "#b45309", bg: "rgba(180,83,9,0.09)",    border: "rgba(180,83,9,0.25)"    },
-  DOWNLOAD:       { label: "Downloaded",      icon: "⬇️", color: "#0369a1", bg: "rgba(3,105,161,0.09)",   border: "rgba(3,105,161,0.25)"   },
-  ARCHIVE:        { label: "Archived",        icon: "🗂️", color: "#c2410c", bg: "rgba(194,65,12,0.09)",   border: "rgba(194,65,12,0.25)"   },
-  RESTORE:        { label: "Restored",        icon: "♻️", color: "#0f766e", bg: "rgba(15,118,110,0.09)",  border: "rgba(15,118,110,0.25)"  },
-  DELETE:         { label: "Deleted",         icon: "🗑️", color: "#dc2626", bg: "rgba(220,38,38,0.09)",   border: "rgba(220,38,38,0.25)"   },
-  TRANSACTION:    { label: "Transaction",     icon: "💳", color: "#047857", bg: "rgba(4,120,87,0.09)",    border: "rgba(4,120,87,0.25)"    },
-  ACCOUNT_UPDATE: { label: "Account Updated", icon: "⚙️", color: "#9d174d", bg: "rgba(157,23,77,0.09)",   border: "rgba(157,23,77,0.25)"   },
-  NAVIGATE:       { label: "Navigated",       icon: "🧭", color: "#64748b", bg: "rgba(100,116,139,0.09)", border: "rgba(100,116,139,0.2)"  },
+  LOGIN:          { label: "Login",           tone: "success" },
+  LOGIN_FAILED:   { label: "Login Failed",    tone: "danger"  },
+  LOGIN_LOCKED:   { label: "Account Locked",  tone: "danger"  },
+  LOGOUT:         { label: "Logout",          tone: "neutral" },
+  VIEW:           { label: "Viewed",          tone: "info"    },
+  SEARCH:         { label: "Searched",        tone: "info"    },
+  UPLOAD:         { label: "Uploaded",        tone: "info"    },
+  DOWNLOAD:       { label: "Downloaded",      tone: "info"    },
+  ARCHIVE:        { label: "Archived",        tone: "warning" },
+  RESTORE:        { label: "Restored",        tone: "success" },
+  DELETE:         { label: "Deleted",         tone: "danger"  },
+  TRANSACTION:    { label: "Transaction",     tone: "success" },
+  ACCOUNT_UPDATE: { label: "Account Updated", tone: "warning" },
+  NAVIGATE:       { label: "Navigated",       tone: "neutral" },
 };
+
+// Actions that aren't in ACTION_CONFIG (e.g. LOGOUT_BEACON) used to show up
+// as raw SNAKE_CASE. Turn them into a readable label instead.
+const humanizeAction = (action) => {
+  const text = (action || "Unknown")
+    .toString()
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+  return text || "Unknown";
+};
+
+const getActionConfig = (action) =>
+  ACTION_CONFIG[action] || { label: humanizeAction(action), tone: "neutral" };
 
 export const logAction = async (action, description, meta = {}) => {
   try {
@@ -83,6 +107,44 @@ const describeLoadError = (error) => {
   if (msg.includes("403")) return "Your account doesn't have permission to view audit logs.";
   return `The server didn't respond (${msg || "unknown error"}). If it was idle, it may still be waking up — try Refresh in a minute.`;
 };
+
+/* ── Small inline icons (replace the emoji glyphs) ─────────────────────── */
+const IconRefresh = () => (
+  <svg className="audit-icon" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="23 4 23 10 17 10" />
+    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+  </svg>
+);
+
+const IconDownload = () => (
+  <svg className="audit-icon" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+
+const IconTrash = () => (
+  <svg className="audit-icon" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </svg>
+);
+
+const IconSearch = () => (
+  <svg className="audit-icon" viewBox="0 0 24 24" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="11" cy="11" r="8" />
+    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
+
+const IconChevron = () => (
+  <svg className="audit-icon" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
 
 const AnimatedCount = ({ value }) => {
   const [display, setDisplay] = useState(value);
@@ -363,20 +425,25 @@ const AuditLogs = () => {
           </div>
         </div>
         <div className="audit-header-actions">
-          <button className="audit-btn-refresh" onClick={fetchInitial}>↻ Refresh</button>
-          <button className="audit-btn-export" onClick={exportCSV}>Print Auditlogs</button>
-          <button className="audit-btn-clear" onClick={() => setShowClearConfirm(true)}>🗑 Clear Logs</button>
+          <button className="audit-btn-refresh" onClick={fetchInitial}>
+            <IconRefresh /> Refresh
+          </button>
+          <button className="audit-btn-export" onClick={exportCSV}>
+            <IconDownload /> Print Auditlogs
+          </button>
+          <span className="audit-header-divider" aria-hidden="true" />
+          <button className="audit-btn-clear" onClick={() => setShowClearConfirm(true)}>
+            <IconTrash /> Clear Logs
+          </button>
         </div>
       </div>
 
       {/* ── Summary Strip ── */}
       <div className="audit-summary-strip">
         <div className="audit-summary-item">
-          <span className="audit-summary-num" style={{ display: "flex", alignItems: "baseline", gap: 2 }}>
+          <span className="audit-summary-num">
             <AnimatedCount value={logs.length} />
-            {hasMore && (
-              <span style={{ fontSize: 15, color: "#94a3b8", fontWeight: 700, lineHeight: 1 }}>+</span>
-            )}
+            {hasMore && <span className="audit-summary-plus">+</span>}
           </span>
           <span className="audit-summary-label">Total Actions</span>
         </div>
@@ -391,12 +458,15 @@ const AuditLogs = () => {
         <div className="audit-summary-divider" />
 
         {topActions.map(([action, count], index) => {
-          const cfg = ACTION_CONFIG[action] || { label: action, icon: "•" };
+          const cfg = getActionConfig(action);
           return (
             <React.Fragment key={action}>
               <div className="audit-summary-item">
                 <span className="audit-summary-num"><AnimatedCount value={count} /></span>
-                <span className="audit-summary-label">{cfg.icon} {cfg.label}</span>
+                <span className="audit-summary-label">
+                  <span className={`audit-tone-dot audit-tone-dot--${cfg.tone}`} />
+                  {cfg.label}
+                </span>
               </div>
               {index !== topActions.length - 1 && <div className="audit-summary-divider" />}
             </React.Fragment>
@@ -406,7 +476,7 @@ const AuditLogs = () => {
         <div className="audit-summary-divider" />
 
         <div className="audit-summary-item">
-          <span className="audit-summary-num" style={{ fontSize: 12, color: "#64748b" }}>
+          <span className="audit-summary-num audit-summary-num--text">
             {logs[0] ? timeAgo(logs[0].created_at) : "—"}
           </span>
           <span className="audit-summary-label">Last Activity</span>
@@ -416,7 +486,7 @@ const AuditLogs = () => {
       {/* ── Filters ── */}
       <div className="audit-filters">
         <div className="audit-search-wrap">
-          <span className="audit-search-icon">🔍</span>
+          <span className="audit-search-icon"><IconSearch /></span>
           <input
             className="audit-search-input"
             placeholder="Search actions, descriptions, users..."
@@ -436,7 +506,7 @@ const AuditLogs = () => {
           <option value="">All Actions</option>
           {actionTypes.map((action) => (
             <option key={action} value={action}>
-              {ACTION_CONFIG[action]?.icon || ""} {ACTION_CONFIG[action]?.label || action}
+              {ACTION_CONFIG[action]?.label || action}
             </option>
           ))}
         </select>
@@ -461,7 +531,9 @@ const AuditLogs = () => {
                 <h3>{error ? "Couldn't load audit logs" : "No records found"}</h3>
                 <p>{error || "We couldn't find any audit logs for the selected filters."}</p>
                 <div style={{ marginTop: 14 }}>
-                  <button className="audit-btn-refresh" onClick={fetchInitial}>↻ Retry</button>
+                  <button className="audit-btn-refresh" onClick={fetchInitial}>
+                    <IconRefresh /> Retry
+                  </button>
                 </div>
               </div>
             </div>
@@ -481,13 +553,7 @@ const AuditLogs = () => {
               </thead>
               <tbody>
                 {paginated.map((log, idx) => {
-                  const cfg = ACTION_CONFIG[log.action] || {
-                    icon: "•",
-                    label: log.action || "Unknown",
-                    color: "#64748b",
-                    bg: "rgba(100,116,139,0.09)",
-                    border: "rgba(100,116,139,0.2)",
-                  };
+                  const cfg = getActionConfig(log.action);
                   const isExpanded = expandedId === log.id;
                   const parsedMeta = parseMeta(log.meta);
 
@@ -509,15 +575,8 @@ const AuditLogs = () => {
                         </td>
 
                         <td className="audit-td">
-                          <span
-                            className="audit-action-badge"
-                            style={{
-                              color: cfg.color,
-                              background: cfg.bg,
-                              borderColor: cfg.border || "transparent",
-                            }}
-                          >
-                            <span className="audit-action-icon">{cfg.icon}</span>
+                          <span className={`audit-action-badge audit-action-badge--${cfg.tone}`}>
+                            <span className={`audit-tone-dot audit-tone-dot--${cfg.tone}`} />
                             {cfg.label}
                           </span>
                         </td>
@@ -530,8 +589,10 @@ const AuditLogs = () => {
                             <button
                               className={`audit-expand-btn ${isExpanded ? "expanded" : ""}`}
                               onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                              aria-label={isExpanded ? "Hide details" : "Show details"}
+                              aria-expanded={isExpanded}
                             >
-                              {isExpanded ? "▲" : "▼"}
+                              <IconChevron />
                             </button>
                           )}
                         </td>
