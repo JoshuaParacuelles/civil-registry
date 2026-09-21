@@ -781,7 +781,11 @@ function UsersTable({ users, onRemove, onReset, onUnlock, onView }) {
                   </div>
                 </td>
                 <td data-label="Status">
-                  <span className={`rm-status-badge ${isOnline ? "rm-status-badge--active" : "rm-status-badge--locked"}`}>
+                  {/* "Not Active" just means offline right now — it's a neutral
+                      state, not an error, so it no longer reuses the red
+                      "locked" styling (which stays reserved for the separate
+                      Locked badge next to the username above). */}
+                  <span className={`rm-status-badge ${isOnline ? "rm-status-badge--active" : "rm-status-badge--inactive"}`}>
                     {isOnline ? "Active" : "Not Active"}
                   </span>
                 </td>
@@ -1329,7 +1333,7 @@ function ViewCredentialsModal({ user, onClose }) {
                 {user.is_online ? (
                   <span className="rm-cred-status rm-cred-status--active">Active</span>
                 ) : (
-                  <span className="rm-cred-status rm-cred-status--locked">Not Active</span>
+                  <span className="rm-cred-status rm-cred-status--inactive">Not Active</span>
                 )}
               </div>
             </div>
@@ -1399,7 +1403,7 @@ function Overlay({ children, onClose }) {
 function ModalHeader({ title, onClose }) {
   return (
     <div className="rm-modal__head">
-      <h2>{title} +</h2>
+      <h2>{title}</h2>
       <button className="rm-close" onClick={onClose}>✕</button>
     </div>
   );
@@ -1409,7 +1413,7 @@ function ModalFooter({ onClose, onSave, saving, saveLabel = "Save" }) {
   return (
     <div className="rm-modal__foot">
       <button className="rm-btn rm-btn--ghost" onClick={onClose} disabled={saving}>Cancel</button>
-      <button className="rm-btn rm-btn--original" onClick={onSave} disabled={saving}>
+      <button className="rm-btn rm-btn--primary" onClick={onSave} disabled={saving}>
         {saving ? "Saving…" : saveLabel}
       </button>
     </div>
