@@ -443,9 +443,28 @@ export default function DocumentTracking() {
   const detailRequestIdRef = useRef(0);
   const handlersRequestIdRef = useRef(0);
 
-  const loadList = useCallback(async () => {
+  // SILENT-REFRESH FIX (NEW): mirrors the `detail` state so loadDetail()
+  // (a stable useCallback with no deps) can check whether the document
+  // it is about to refresh is ALREADY on screen — see the SILENT-REFRESH
+  // FIX note in loadDetail() below. Kept in sync by an effect next to
+  // the selectedIdRef sync further down.
+  const detailRef = useRef(null);
+
+  // SILENT-REFRESH FIX (NEW): `opts.silent === true` means "refresh the
+  // data in place, without showing any loading state". It is passed by
+  // the post-action refresh in runAction()/submitFlagStage() (the user
+  // who just acted) and by every realtime-triggered refresh (every OTHER
+  // open session — Administrator and other personnel alike). Before,
+  // every one of those flipped listLoading on, so the header line under
+  // "Documents" switched to "Loading…" on each refresh, in every
+  // browser watching. The first load, the Retry button and anything
+  // else that calls loadList() with no argument behave exactly as before
+  // — including when Retry passes the click event, since an event has
+  // no `silent` property.
+  const loadList = useCallback(async (opts) => {
     const requestId = ++listRequestIdRef.current;
-    setListLoading(true);
+    const silent = opts?.silent === true;
+    if (!silent) setListLoading(true);
     setListError(null);
     try {
       const rows = await apiFetch("/api/documents");
@@ -487,14 +506,36 @@ export default function DocumentTracking() {
     }
   }, []);
 
-  const loadDetail = useCallback(async (id) => {
+  // SILENT-REFRESH FIX (NEW): this was the "loading animation" after
+  // Mark complete. Every loadDetail() call used to set detailLoading,
+  // and the render below swaps the whole detail card for a
+  // "Loading document…" placeholder while that is true — so the panel
+  // blanked out and re-appeared on every refresh: for the user who
+  // clicked "Mark complete → next step" (runAction()'s post-action
+  // refresh), and, worse, for the Administrator and every other
+  // personnel who merely had that document open, because each realtime
+  // event on documents / document_stages / document_comments /
+  // document_assignments triggers a loadDetail() in THEIR browser too.
+  //
+  // `opts.silent === true` now skips the loading state, but only when
+  // the detail for this same document is already on screen
+  // (detailRef.current?.id === id), so the current panel stays put and
+  // is simply replaced with the fresh data the moment it arrives.
+  // Selecting a different document, the very first load, and the Retry
+  // button all still show the loading state exactly as before, because
+  // they either don't pass `silent` or have nothing on screen for that
+  // document yet.
+  const loadDetail = useCallback(async (id, opts) => {
     const requestId = ++detailRequestIdRef.current;
     if (id == null) {
       setDetail(null);
       return;
     }
-    setDetailLoading(true);
-    setDetailError(null);
+    const silent = opts?.silent === true && detailRef.current?.id === id;
+    if (!silent) {
+      setDetailLoading(true);
+      setDetailError(null);
+    }
     try {
       const doc = await apiFetch(`/api/documents/${id}`);
       if (detailRequestIdRef.current !== requestId) return; // superseded by a newer call
@@ -574,6 +615,10 @@ export default function DocumentTracking() {
   const selectedIdRef = useRef(selectedId);
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
+  // SILENT-REFRESH FIX (NEW): keeps detailRef (declared with the
+  // request-id refs above) equal to the detail currently rendered.
+  useEffect(() => { detailRef.current = detail; }, [detail]);
+
   // Realtime — replaces manual refresh. Subscribes once to Postgres
   // changes on the tables this screen depends on, so every browser
   // tab picks up assignments, stage completions, comments, and new
@@ -591,12 +636,18 @@ export default function DocumentTracking() {
 
     const scheduleList = () => {
       clearTimeout(listTimer);
-      listTimer = setTimeout(loadList, REALTIME_DEBOUNCE_MS);
+      // SILENT-REFRESH FIX: a realtime event is someone else's write (or
+      // our own echoed back) — refresh in the background, never with a
+      // loading state, so no session sees another user's loading flash.
+      listTimer = setTimeout(() => loadList({ silent: true }), REALTIME_DEBOUNCE_MS);
     };
     const scheduleDetail = () => {
       clearTimeout(detailTimer);
       detailTimer = setTimeout(() => {
-        if (selectedIdRef.current != null) loadDetail(selectedIdRef.current);
+        // SILENT-REFRESH FIX: see loadDetail() — the open panel stays
+        // mounted and updates in place; only a document that isn't on
+        // screen yet gets the loading state.
+        if (selectedIdRef.current != null) loadDetail(selectedIdRef.current, { silent: true });
       }, REALTIME_DEBOUNCE_MS);
     };
     const scheduleHandlers = () => {
@@ -736,7 +787,11 @@ export default function DocumentTracking() {
     setActionError(null);
     try {
       await fn();
-      await Promise.all([loadDetail(selectedId), loadList()]);
+      // SILENT-REFRESH FIX: refresh in place, no "Loading document…"
+      // swap. The only in-progress signal left is `busy` above, which
+      // is this component's own local state — it disables and dims the
+      // buttons for the person who clicked and nobody else.
+      await Promise.all([loadDetail(selectedId, { silent: true }), loadList({ silent: true })]);
       flashSaved();
     } catch (e) {
       console.error("[DocumentTracking] Action failed:", e);
@@ -775,7 +830,8 @@ export default function DocumentTracking() {
         method: "POST",
         body: JSON.stringify({ note }),
       });
-      await Promise.all([loadDetail(selectedId), loadList()]);
+      // SILENT-REFRESH FIX: same as runAction() — refresh in place.
+      await Promise.all([loadDetail(selectedId, { silent: true }), loadList({ silent: true })]);
       flashSaved();
       setFlagStageOrder(null);
       setFlagNote("");
