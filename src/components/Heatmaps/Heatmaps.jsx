@@ -103,12 +103,17 @@ const TREND_MONTHS_BASE = [
   { label: "May", birth: 620, death: 101 },
 ];
 
+// Single-hue sequential ramp (light → dark blue of the dashboard accent).
+// Record volume is a magnitude, not good/bad, so a green→red traffic-light
+// scale was misleading — and it collided with the Birth (green) and Death
+// (red) category colors used everywhere else on the page.
+// `text` is the legible label color to place on top of each step.
 const HEAT_SCALE = [
-  { max: 150, label: "0 - 150 (Very Low)", color: "#22c55e" },
-  { max: 250, label: "151 - 250 (Low)", color: "#eab308" },
-  { max: 350, label: "251 - 350 (Moderate)", color: "#f97316" },
-  { max: 450, label: "351 - 450 (High)", color: "#ef4444" },
-  { max: Infinity, label: "450 and above (Very High)", color: "#b91c1c" },
+  { max: 150, label: "0 - 150 (Very Low)", color: "#bcd0fb", text: "#1c2233" },
+  { max: 250, label: "151 - 250 (Low)", color: "#8fb0f7", text: "#1c2233" },
+  { max: 350, label: "251 - 350 (Moderate)", color: "#5f8bf0", text: "#1c2233" },
+  { max: 450, label: "351 - 450 (High)", color: "#2e5fe8", text: "#ffffff" },
+  { max: Infinity, label: "450 and above (Very High)", color: "#1a3a9c", text: "#ffffff" },
 ];
 
 const CERT_TYPES = ["All Certificates", "Live Birth", "Marriage", "Death"];
@@ -150,6 +155,11 @@ function heatColor(value) {
   return HEAT_SCALE.find((b) => value <= b.max).color;
 }
 
+// Legible label color for text drawn on top of a heatColor() fill.
+function heatTextColor(value) {
+  return HEAT_SCALE.find((b) => value <= b.max).text;
+}
+
 // Returns the number relevant to whichever certificate type is selected.
 function metricValue(b, certType) {
   if (certType === "Live Birth") return b.birth;
@@ -167,6 +177,15 @@ function metricLabel(certType) {
 
 function shortName(name) {
   return name.replace(" (Poblacion)", "").replace(" (Sipaway)", "");
+}
+
+// Rounds a raw step up to a "nice" axis increment (1, 2, 5 × 10ⁿ).
+function niceStep(raw) {
+  const safe = Math.max(raw, 1);
+  const pow = Math.pow(10, Math.floor(Math.log10(safe)));
+  const n = safe / pow;
+  const m = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+  return m * pow;
 }
 
 /* ------------------------------------------------------------------ */
@@ -329,51 +348,120 @@ function DonutChart({ slices, size = 148, stroke = 26 }) {
   );
 }
 
-function TrendChart({ data, width = 420, height = 190 }) {
-  const pad = 28;
-  const maxVal = Math.max(...data.flatMap((d) => [d.birth, d.death])) * 1.15;
-  const stepX = (width - pad * 2) / (data.length - 1);
-
-  const pointsFor = (key) =>
-    data
-      .map((d, i) => {
-        const x = pad + i * stepX;
-        const y = height - pad - (d[key] / maxVal) * (height - pad * 2);
-        return `${x},${y}`;
-      })
-      .join(" ");
+// Flat SVG progress ring (replaces the old conic-gradient) used for the
+// barangay reporting-coverage figure.
+function CoverageRing({ pct, size = 46, stroke = 6 }) {
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const dash = (Math.min(Math.max(pct, 0), 100) / 100) * circumference;
+  const c = size / 2;
 
   return (
-    <svg className="trend-chart" width="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
-      {[0.25, 0.5, 0.75, 1].map((f) => (
-        <line
-          key={f}
-          x1={pad}
-          x2={width - pad}
-          y1={height - pad - f * (height - pad * 2)}
-          y2={height - pad - f * (height - pad * 2)}
-          className="trend-chart__grid"
-        />
-      ))}
+    <svg
+      className="coverage__ring"
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      role="img"
+      aria-label={`${pct}% of barangays reporting`}
+    >
+      <circle className="coverage__ring-track" cx={c} cy={c} r={radius} strokeWidth={stroke} />
+      <circle
+        className="coverage__ring-fill"
+        cx={c}
+        cy={c}
+        r={radius}
+        strokeWidth={stroke}
+        strokeDasharray={`${dash} ${circumference - dash}`}
+        strokeLinecap="butt"
+        transform={`rotate(-90 ${c} ${c})`}
+      />
+      <text x={c} y={c} textAnchor="middle" dominantBaseline="central" className="coverage__ring-text">
+        {pct}%
+      </text>
+    </svg>
+  );
+}
 
-      <polyline points={pointsFor("birth")} className="trend-chart__line trend-chart__line--birth" />
-      <polyline points={pointsFor("death")} className="trend-chart__line trend-chart__line--death" />
+// The chart is drawn at the wrapper's real pixel width (instead of being a
+// fixed viewBox scaled down by CSS), so axis text keeps its size at every
+// breakpoint rather than shrinking to ~5px inside the 4-column layout. It
+// also gets labeled y-axis values, so the gridlines actually mean something.
+function TrendChart({ data, height = 190 }) {
+  const wrapRef = useRef(null);
+  const [width, setWidth] = useState(420);
 
-      {data.map((d, i) => {
-        const x = pad + i * stepX;
-        const yb = height - pad - (d.birth / maxVal) * (height - pad * 2);
-        const yd = height - pad - (d.death / maxVal) * (height - pad * 2);
-        return (
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return undefined;
+    const update = () => {
+      const w = Math.round(el.getBoundingClientRect().width);
+      if (w > 0) setWidth(w);
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const padL = 34;
+  const padR = 12;
+  const padT = 12;
+  const padB = 26;
+  const plotW = Math.max(width - padL - padR, 1);
+  const plotH = height - padT - padB;
+
+  const rawMax = Math.max(...data.flatMap((d) => [d.birth, d.death]));
+  const step = niceStep(rawMax / 4);
+  const maxVal = step * 4;
+  const ticks = [0, 1, 2, 3, 4].map((i) => i * step);
+
+  const stepX = data.length > 1 ? plotW / (data.length - 1) : 0;
+  const xFor = (i) => padL + i * stepX;
+  const yFor = (v) => padT + plotH - (v / maxVal) * plotH;
+
+  const pointsFor = (key) => data.map((d, i) => `${xFor(i)},${yFor(d[key])}`).join(" ");
+
+  return (
+    <div ref={wrapRef} className="trend-chart-wrap">
+      <svg
+        className="trend-chart"
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Monthly live birth and death records"
+      >
+        {ticks.map((t) => (
+          <g key={t}>
+            <line
+              x1={padL}
+              x2={width - padR}
+              y1={yFor(t)}
+              y2={yFor(t)}
+              className={t === 0 ? "trend-chart__baseline" : "trend-chart__grid"}
+            />
+            <text x={padL - 8} y={yFor(t)} textAnchor="end" dominantBaseline="central" className="trend-chart__tick">
+              {t}
+            </text>
+          </g>
+        ))}
+
+        <polyline points={pointsFor("birth")} className="trend-chart__line trend-chart__line--birth" />
+        <polyline points={pointsFor("death")} className="trend-chart__line trend-chart__line--death" />
+
+        {data.map((d, i) => (
           <g key={d.label}>
-            <circle cx={x} cy={yb} r="4" className="trend-chart__dot trend-chart__dot--birth" />
-            <circle cx={x} cy={yd} r="4" className="trend-chart__dot trend-chart__dot--death" />
-            <text x={x} y={height - 6} textAnchor="middle" className="trend-chart__axis">
+            <circle cx={xFor(i)} cy={yFor(d.birth)} r="4" className="trend-chart__dot trend-chart__dot--birth" />
+            <circle cx={xFor(i)} cy={yFor(d.death)} r="4" className="trend-chart__dot trend-chart__dot--death" />
+            <text x={xFor(i)} y={height - 8} textAnchor="middle" className="trend-chart__axis">
               {d.label}
             </text>
           </g>
-        );
-      })}
-    </svg>
+        ))}
+      </svg>
+    </div>
   );
 }
 
@@ -810,10 +898,11 @@ export default function Heatmaps() {
             </select>
           </label>
 
-          <label className="filter">
+          {/* Display-only, so a div rather than a <label> with no control inside. */}
+          <div className="filter">
             <span>Date Range</span>
             <div className="filter__range">Jan 1, {year} – May 30, {year}</div>
-          </label>
+          </div>
 
           <button className="btn-primary" onClick={handleExport}>
             <ExportIcon /> Export Report
@@ -830,12 +919,20 @@ export default function Heatmaps() {
           <div className="card__header">
             <div>
               <h2>{metricLabel(certType)} per Barangay</h2>
-              <p className="card__subtitle">San Carlos City, Negros Occidental · {year}</p>
+              <p className="card__subtitle">San Carlos City, Negros Occidental ({year})</p>
             </div>
             <div className="zoom-controls">
-              <button onClick={() => mapControlRef.current?.zoomIn()}>+</button>
-              <button onClick={() => mapControlRef.current?.zoomOut()}>−</button>
-              <button className="zoom-controls__reset" onClick={() => mapControlRef.current?.reset()}>
+              <button onClick={() => mapControlRef.current?.zoomIn()} aria-label="Zoom in" title="Zoom in">
+                +
+              </button>
+              <button onClick={() => mapControlRef.current?.zoomOut()} aria-label="Zoom out" title="Zoom out">
+                −
+              </button>
+              <button
+                className="zoom-controls__reset"
+                onClick={() => mapControlRef.current?.reset()}
+                aria-label="Reset map view"
+              >
                 Reset view
               </button>
             </div>
@@ -871,7 +968,7 @@ export default function Heatmaps() {
             </div>
             <p className="legend__hint">
               {selectedBarangay
-                ? `${selectedBarangay.name} — Birth ${selectedBarangay.birth} · Marriage ${selectedBarangay.marriage} · Death ${selectedBarangay.death} · Total ${selectedBarangay.total} (${((selectedBarangay.total / totals.all) * 100).toFixed(1)}% of citywide). Click again to clear.`
+                ? `${selectedBarangay.name}: ${selectedBarangay.birth} birth, ${selectedBarangay.marriage} marriage, ${selectedBarangay.death} death, ${selectedBarangay.total} total (${((selectedBarangay.total / totals.all) * 100).toFixed(1)}% of citywide). Click again to clear.`
                 : "Click a barangay marker to highlight it in the table and see its breakdown here."}
             </p>
           </div>
@@ -879,20 +976,21 @@ export default function Heatmaps() {
           {/* ---- Barangays that already have records ---- */}
           <div className="coverage">
             <div className="coverage__summary">
-              <span className="coverage__ring" style={{ "--pct": `${coveragePct}%` }}>
-                <span>{coveragePct}%</span>
-              </span>
+              <CoverageRing pct={Number(coveragePct)} />
               <div>
                 <span className="coverage__title">Barangay Reporting Coverage</span>
                 <span className="coverage__sub">
                   {reportingBarangays.length} of {barangayData.length} barangays have submitted civil registry
-                  records{pendingBarangays.length > 0 ? ` · ${pendingBarangays.length} pending` : ""}
+                  records{pendingBarangays.length > 0 ? `, ${pendingBarangays.length} pending` : ""}
                 </span>
               </div>
             </div>
 
             <div className="coverage__group">
-              <span className="coverage__label">✅ Areas with records ({reportingBarangays.length})</span>
+              <span className="coverage__label">
+                <i className="coverage__dot coverage__dot--reporting" />
+                Areas with records ({reportingBarangays.length})
+              </span>
               <div className="coverage__chips">
                 {reportingBarangays.map((b) => (
                   <button
@@ -909,7 +1007,10 @@ export default function Heatmaps() {
 
             {pendingBarangays.length > 0 && (
               <div className="coverage__group">
-                <span className="coverage__label">⏳ Not yet reporting ({pendingBarangays.length})</span>
+                <span className="coverage__label">
+                  <i className="coverage__dot coverage__dot--pending" />
+                  Not yet reporting ({pendingBarangays.length})
+                </span>
                 <div className="coverage__chips">
                   {pendingBarangays.map((b) => (
                     <button
@@ -977,11 +1078,11 @@ export default function Heatmaps() {
                   <tr>
                     <th>No</th>
                     <th>Barangay</th>
-                    <th className={certType === "Live Birth" ? "th--highlight" : ""}>Birth</th>
-                    <th className={certType === "Marriage" ? "th--highlight" : ""}>Marriage</th>
-                    <th className={certType === "Death" ? "th--highlight" : ""}>Death</th>
-                    <th>Total Records</th>
-                    <th>% of Total</th>
+                    <th className={`num${certType === "Live Birth" ? " th--highlight" : ""}`}>Birth</th>
+                    <th className={`num${certType === "Marriage" ? " th--highlight" : ""}`}>Marriage</th>
+                    <th className={`num${certType === "Death" ? " th--highlight" : ""}`}>Death</th>
+                    <th className="num">Total Records</th>
+                    <th className="num">% of Total</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -994,12 +1095,15 @@ export default function Heatmaps() {
                     >
                       <td>{i + 1}</td>
                       <td>{b.name}</td>
-                      <td className={certType === "Live Birth" ? "cell--highlight" : ""}>{b.birth}</td>
-                      <td className={certType === "Marriage" ? "cell--highlight" : ""}>{b.marriage}</td>
-                      <td className={certType === "Death" ? "cell--highlight" : ""}>{b.death}</td>
-                      <td className="cell--strong">{b.total}</td>
-                      <td>
-                        <span className="pct-pill" style={{ background: heatColor(b.total) }}>
+                      <td className={`num${certType === "Live Birth" ? " cell--highlight" : ""}`}>{b.birth}</td>
+                      <td className={`num${certType === "Marriage" ? " cell--highlight" : ""}`}>{b.marriage}</td>
+                      <td className={`num${certType === "Death" ? " cell--highlight" : ""}`}>{b.death}</td>
+                      <td className="num cell--strong">{b.total}</td>
+                      <td className="num">
+                        <span
+                          className="pct-pill"
+                          style={{ background: heatColor(b.total), color: heatTextColor(b.total) }}
+                        >
                           {((b.total / totals.all) * 100).toFixed(2)}%
                         </span>
                       </td>
@@ -1016,7 +1120,7 @@ export default function Heatmaps() {
               </table>
             </div>
             <p className="table-footnote">
-              Showing {sorted.length} of {sorted.length} barangays · sorted by {metricLabel(certType).toLowerCase()}
+              Showing {sorted.length} of {sorted.length} barangays, sorted by {metricLabel(certType).toLowerCase()}
             </p>
           </div>
         </div>
@@ -1131,7 +1235,7 @@ export default function Heatmaps() {
                   <th>Name</th>
                   <th>Barangay</th>
                   <th>Record Type</th>
-                  <th>Age</th>
+                  <th className="num">Age</th>
                   <th>PhilSys ID</th>
                   <th>Tags</th>
                 </tr>
@@ -1143,7 +1247,7 @@ export default function Heatmaps() {
                     <td className="cell--strong">{r.name}</td>
                     <td>{r.barangay}</td>
                     <td>{r.recordType}</td>
-                    <td>{r.age}</td>
+                    <td className="num">{r.age}</td>
                     <td>
                       {r.philSysId ? (
                         <span className="id-badge id-badge--yes" title={r.philSysNo}>
@@ -1238,10 +1342,7 @@ export default function Heatmaps() {
                   <span className="top5__rank">{i + 1}</span>
                   <span className="top5__name">{b.name}</span>
                   <div className="top5__bar-track">
-                    <div
-                      className="top5__bar-fill"
-                      style={{ width: `${(val / maxTop5) * 100}%`, background: heatColor(val) }}
-                    />
+                    <div className="top5__bar-fill" style={{ width: `${(val / maxTop5) * 100}%` }} />
                   </div>
                   <span className="top5__value">{val}</span>
                 </div>
@@ -1278,7 +1379,7 @@ export default function Heatmaps() {
             Note: Late registration is shown separately from on-time records.
           </div>
           <button className="link-btn" onClick={handleToggleLateReg}>
-            {showLateReg ? "Hide Late Registration ←" : "View Late Registration →"}
+            {showLateReg ? "Hide late registration" : "View late registration"}
           </button>
 
           {showLateReg && (
@@ -1383,16 +1484,12 @@ function InfoIcon() {
     </svg>
   );
 }
+// Clock glyph (was a warning triangle, which mislabeled an informational note).
 function NoteIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M12 9v4m0 4h.01M10.3 3.9 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

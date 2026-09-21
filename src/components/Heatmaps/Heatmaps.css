@@ -12,12 +12,21 @@
   --birth: #16a34a;
   --marriage: #f59e0b;
   --death: #e11d48;
+  /* Neutral status colors, kept separate from the Birth/Marriage/Death
+     data colors so "reporting" or "progress" never reads as a data category. */
+  --ok: #16a34a;
+  --neutral: #9aa2b5;
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-sm: 8px;
+  /* One control height shared by selects, buttons, chips and read-only fields
+     so every filter row lines up on a single baseline. */
+  --control-h: 38px;
   /* Single, consistent elevation — a soft contact shadow, not a blurred "floating" glow */
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 2px rgba(16, 24, 40, 0.04);
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  /* Only for elements that genuinely sit above the page (map popups). */
+  --shadow-pop: 0 2px 8px rgba(16, 24, 40, 0.12), 0 1px 2px rgba(16, 24, 40, 0.06);
   --focus-ring: 0 0 0 3px rgba(46, 95, 232, 0.18);
 
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -30,6 +39,10 @@
   overflow-x: hidden;
 }
 .heatmaps * { box-sizing: border-box; }
+/* Buttons and selects don't inherit the page font by default, which produced a
+   mix of Inter and the OS system font across the controls. */
+.heatmaps button,
+.heatmaps select { font-family: inherit; }
 
 /* ════════════════════════════════════
    HEADER
@@ -46,16 +59,26 @@
 .heatmaps__header p { margin: 0; color: var(--muted); font-size: 13.5px; }
 
 .heatmaps__filters { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
-.filter { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+.filter { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
 .filter select, .filter__range {
+  height: var(--control-h);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--card);
-  padding: 8px 12px;
+  padding: 0 12px;
   font-size: 13.5px;
   color: var(--text);
   font-weight: 500;
   min-width: 140px;
+}
+/* The date range is display-only, so it reads as a static field rather than a
+   control that looks clickable. */
+.filter__range {
+  display: flex;
+  align-items: center;
+  background: #f8f9fc;
+  cursor: default;
+  white-space: nowrap;
 }
 /* Flat, custom dropdown chevron so selects don't fall back to the default
    OS control (a common "unfinished" tell) — matches the muted text color. */
@@ -81,8 +104,9 @@
 
 .btn-primary {
   display: inline-flex; align-items: center; gap: 8px;
+  height: var(--control-h);
   background: var(--primary); color: #fff; border: none;
-  border-radius: var(--radius-sm); padding: 10px 18px;
+  border-radius: var(--radius-sm); padding: 0 18px;
   font-size: 13.5px; font-weight: 600; cursor: pointer;
   align-self: flex-end; transition: background 0.15s ease, box-shadow 0.15s ease;
 }
@@ -94,25 +118,30 @@
 ════════════════════════════════════ */
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow); min-width: 0; width: 100%; }
 .card h2 { margin: 0; font-size: 15px; font-weight: 700; }
+/* Cards whose title sits directly in the card (no .card__header) now get the
+   same title-to-content gap as the ones that use a header row. */
+.card > h2 { margin-bottom: 12px; }
 .card__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; }
 .card__subtitle { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 
 /* ════════════════════════════════════
    TOP LAYOUT
 ════════════════════════════════════ */
-.heatmaps__top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: start; margin-bottom: 20px; }
+/* stretch (was start) so the right column matches the map card's height
+   instead of leaving a large empty block beneath the table. */
+.heatmaps__top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: stretch; margin-bottom: 20px; }
 .heat-card__side { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 
 .zoom-controls { display: flex; align-items: center; gap: 6px; }
 .zoom-controls button {
-  height: 28px; min-width: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border);
+  height: 32px; min-width: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border);
   background: #f8f9fc; cursor: pointer; font-size: 15px; font-weight: 700; color: var(--text);
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .zoom-controls button:hover:not(:disabled) { background: #eef1f8; border-color: #c7cee3; }
 .zoom-controls button:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--primary); }
 .zoom-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
-.zoom-controls__reset { font-size: 11px !important; font-weight: 600 !important; }
+.zoom-controls__reset { font-size: 12px !important; font-weight: 600 !important; }
 
 /* ════════════════════════════════════
    GEOGRAPHIC BARANGAY MAP
@@ -130,7 +159,7 @@
   background: #dce6ea;
 }
 
-.heat-map-note { margin: 10px 2px 0; font-size: 10.5px; color: var(--muted); font-style: italic; }
+.heat-map-note { margin: 10px 2px 0; font-size: 11.5px; color: var(--muted); }
 
 /* Reference-point labels for neighboring towns / water bodies (divIcon) */
 .ref-point-icon { background: none; border: none; }
@@ -179,15 +208,23 @@
 .hm-popup { font-family: inherit; min-width: 168px; }
 .hm-popup__title { font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
 .hm-popup__row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); padding: 2px 0; }
-.hm-popup__row b { color: var(--text); }
+.hm-popup__row b { color: var(--text); font-variant-numeric: tabular-nums; }
 .hm-popup__row--total { border-top: 1px dashed var(--border); margin-top: 4px; padding-top: 6px; }
-.leaflet-popup-content-wrapper { border-radius: 10px !important; }
+/* Leaflet's stock popup ships a heavy 0 3px 14px / 40% black shadow.
+   Replaced with the dashboard's tighter elevation and a hairline border. */
+.leaflet-map-surface .leaflet-popup-content-wrapper {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-pop);
+}
+.leaflet-map-surface .leaflet-popup-tip { box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1); }
 
 .legend { margin-top: 14px; }
-.legend__title { display: block; font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 8px; }
+.legend__title { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
 .legend__items { display: flex; flex-wrap: wrap; gap: 10px 16px; }
 .legend__item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); }
-.legend__item i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+/* Hairline ring so the lightest swatch stays visible on a white card. */
+.legend__item i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; box-shadow: inset 0 0 0 1px rgba(16, 24, 40, 0.1); }
 .legend__hint { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); }
 
 /* ════════════════════════════════════
@@ -198,25 +235,29 @@
 .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .stat-card {
   display: flex; align-items: center; gap: 12px; background: var(--card);
-  border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px;
   box-shadow: var(--shadow-sm); transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.stat-card--dim { opacity: 0.45; }
-.stat-card--active { border-color: var(--primary); box-shadow: var(--focus-ring); }
-.stat-card__icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.stat-card--dim { opacity: 0.55; }
+/* Selection is shown with a crisp 2px outline, not the soft focus glow
+   (which is reserved for keyboard focus). */
+.stat-card--active { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.stat-card__icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .stat-card--total .stat-card__icon { background: #e8edfd; color: var(--primary); }
 .stat-card--birth .stat-card__icon { background: #e6f7ec; color: var(--birth); }
 .stat-card--marriage .stat-card__icon { background: #fef3e0; color: var(--marriage); }
 .stat-card--death .stat-card__icon { background: #fde5ea; color: var(--death); }
 .stat-card__body { display: flex; flex-direction: column; min-width: 0; }
-.stat-card__value { font-size: 21px; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; }
-.stat-card__label { font-size: 11.5px; color: var(--muted); font-weight: 600; }
-.stat-card__sub { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.stat-card__value { font-size: 28px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat-card__label { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+.stat-card__sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
 /* ════════════════════════════════════
    TABLE
 ════════════════════════════════════ */
-.table-card { padding-bottom: 12px; min-width: 0; }
+/* The table card now fills whatever height the map card sets, and the
+   scroll area absorbs the extra space (min 300px, same as before). */
+.table-card { padding-bottom: 12px; min-width: 0; display: flex; flex-direction: column; flex: 1 1 auto; }
 .table-scroll {
   max-height: 300px;
   overflow-y: auto;
@@ -227,11 +268,14 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.table-card .table-scroll { flex: 1 1 0; min-height: 300px; max-height: none; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+/* Header divider is an inset shadow instead of border-bottom: with
+   border-collapse a real border scrolls away under a sticky header. */
 thead th {
-  position: sticky; top: 0; background: #f8f9fc; text-align: left; padding: 8px 10px;
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted);
-  border-bottom: 1px solid var(--border); transition: background 0.15s ease, color 0.15s ease;
+  position: sticky; top: 0; background: #f8f9fc; text-align: left; padding: 9px 10px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  box-shadow: inset 0 -1px 0 var(--border); transition: background 0.15s ease, color 0.15s ease;
   white-space: nowrap;
 }
 th.th--highlight { background: #eef2ff; color: var(--primary-dark); }
@@ -241,6 +285,8 @@ tbody tr { cursor: pointer; }
 tbody tr:hover { background: #f8f9fc; }
 tbody tr.row--active { background: #eef2ff; }
 tbody tr.row--active:hover { background: #e6ebff; }
+/* Numeric columns are right-aligned so digits line up by place value. */
+th.num, td.num { text-align: right; }
 .cell--strong { font-weight: 700; }
 .cell--highlight { background: #eef2ff; font-weight: 700; color: var(--primary-dark); border-radius: 6px; }
 .pct-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 700; font-size: 11px; }
@@ -251,51 +297,62 @@ tbody tr.row--active:hover { background: #e6ebff; }
 ════════════════════════════════════ */
 .heatmaps__bottom { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
 
-.donut-wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-.donut__total { font-size: 17px; font-weight: 800; fill: var(--text); }
-.donut__caption { font-size: 9px; fill: var(--muted); }
+.donut-wrap { display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; }
+.donut__total { font-size: 17px; font-weight: 700; fill: var(--text); }
+.donut__caption { font-size: 10px; fill: var(--muted); }
 .donut-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .donut-legend li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; border-radius: 6px; padding: 2px 4px; transition: background 0.15s ease; }
 .donut-legend__item--active { background: #f4f6ff; font-weight: 700; }
 .donut-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-.donut-legend b { margin-left: auto; }
-.donut-legend span { color: var(--muted); font-size: 11px; min-width: 44px; text-align: right; }
+.donut-legend b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.donut-legend span { color: var(--muted); font-size: 11px; min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
 
-.top5 { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.top5 { display: flex; flex-direction: column; gap: 12px; }
 .top5__row { display: grid; grid-template-columns: 18px 1fr 34px; grid-template-rows: auto auto; align-items: center; gap: 8px; }
-.top5__rank { font-size: 11px; font-weight: 800; color: var(--muted); }
+.top5__rank { font-size: 11px; font-weight: 700; color: var(--muted); }
 .top5__name { grid-column: 2; font-size: 12px; font-weight: 600; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .top5__bar-track { grid-column: 2; grid-row: 2; height: 8px; background: #f0f1f6; border-radius: 999px; overflow: hidden; }
-.top5__bar-fill { height: 100%; border-radius: 999px; transition: width 0.2s ease; }
-.top5__value { grid-column: 3; grid-row: 1 / span 2; font-size: 12.5px; font-weight: 700; text-align: right; }
+/* Bar length already encodes the value, so every bar uses the single accent
+   color instead of repeating the heat-scale color. */
+.top5__bar-fill { height: 100%; border-radius: 999px; background: var(--primary); transition: width 0.2s ease; }
+.top5__value { grid-column: 3; grid-row: 1 / span 2; font-size: 12.5px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 
 .trend-legend { display: flex; gap: 12px; font-size: 11.5px; color: var(--muted); }
+.trend-legend span { display: inline-flex; align-items: center; }
 .trend-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 .dot--birth { background: var(--birth); }
 .dot--death { background: var(--death); }
 
+/* The SVG is drawn at its real pixel width (measured in the component) so
+   axis text stays the same size at every breakpoint. */
+.trend-chart-wrap { width: 100%; min-width: 0; overflow: hidden; }
+.trend-chart { display: block; }
 .trend-chart__grid { stroke: #eef0f6; stroke-width: 1; }
-.trend-chart__line { fill: none; stroke-width: 2.5; }
+.trend-chart__baseline { stroke: var(--border); stroke-width: 1; }
+.trend-chart__line { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .trend-chart__line--birth { stroke: var(--birth); }
 .trend-chart__line--death { stroke: var(--death); }
 .trend-chart__dot--birth { fill: var(--birth); }
 .trend-chart__dot--death { fill: var(--death); }
-.trend-chart__axis { font-size: 9px; fill: var(--muted); }
+.trend-chart__axis { font-size: 10px; fill: var(--muted); }
+.trend-chart__tick { font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums; }
 
 .about-card { display: flex; flex-direction: column; gap: 10px; background: #f7f9ff; }
 .about-card__title { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--primary-dark); }
 .about-card p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+/* Informational note, so it uses neutral styling instead of a warning-amber box. */
 .about-card__note {
-  display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; color: #92650b;
-  background: #fef6e2; border: 1px solid #fbe6ae; border-radius: var(--radius-sm); padding: 8px 10px;
+  display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; color: var(--muted);
+  background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px;
 }
+.about-card__note svg { flex-shrink: 0; margin-top: 1px; }
 .link-btn { align-self: flex-start; background: none; border: none; color: var(--primary); font-weight: 700; font-size: 12.5px; cursor: pointer; padding: 0; }
 .link-btn:hover { text-decoration: underline; }
 .link-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
 
 .late-reg { display: flex; flex-direction: column; gap: 6px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
 .late-reg__row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; font-size: 12px; align-items: center; }
-.late-reg__row b { font-size: 12.5px; }
+.late-reg__row b { font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .late-reg__pct { color: var(--muted); font-size: 11px; min-width: 76px; text-align: right; }
 .late-reg__total { margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 11.5px; color: var(--muted); font-weight: 600; }
 
@@ -311,34 +368,20 @@ tbody tr.row--active:hover { background: #e6ebff; }
   gap: 14px;
 }
 .coverage__summary { display: flex; align-items: center; gap: 12px; }
-.coverage__ring {
-  --pct: 0%;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: conic-gradient(var(--birth) var(--pct), #e6e9f2 0);
-}
-.coverage__ring span {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10.5px;
-  font-weight: 800;
-  color: var(--text);
-}
+/* Flat SVG progress ring (was a conic-gradient) in the single accent color. */
+.coverage__ring { width: 46px; height: 46px; flex-shrink: 0; display: block; }
+.coverage__ring-track { fill: none; stroke: #e6e9f2; }
+.coverage__ring-fill { fill: none; stroke: var(--primary); }
+.coverage__ring-text { font-size: 10.5px; font-weight: 700; fill: var(--text); }
 .coverage__title { display: block; font-size: 12.5px; font-weight: 700; color: var(--text); }
 .coverage__sub { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
 
 .coverage__group { display: flex; flex-direction: column; gap: 6px; }
-.coverage__label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
+.coverage__label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
+/* Small status dots replace the emoji that used to prefix these labels. */
+.coverage__dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.coverage__dot--reporting { background: var(--ok); }
+.coverage__dot--pending { background: var(--neutral); }
 .coverage__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .chip {
@@ -375,8 +418,9 @@ tbody tr.row--active:hover { background: #e6ebff; }
 
 .btn-secondary {
   display: inline-flex; align-items: center; gap: 8px;
+  height: var(--control-h);
   background: #fff; color: var(--primary); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 9px 16px;
+  border-radius: var(--radius-sm); padding: 0 16px;
   font-size: 13px; font-weight: 600; cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
@@ -399,8 +443,8 @@ tbody tr.row--active:hover { background: #e6ebff; }
   gap: 2px;
 }
 .cbms-stat--accent { background: #eef2ff; border-color: rgba(46,95,232,0.25); }
-.cbms-stat__value { font-size: 18px; font-weight: 800; color: var(--text); }
-.cbms-stat__label { font-size: 10.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+.cbms-stat__value { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; color: var(--text); font-variant-numeric: tabular-nums; }
+.cbms-stat__label { font-size: 11.5px; color: var(--muted); font-weight: 600; }
 
 .cbms-filters {
   display: flex;
@@ -410,14 +454,18 @@ tbody tr.row--active:hover { background: #e6ebff; }
   padding-bottom: 4px;
 }
 .cbms-filters .filter select { min-width: 170px; }
-.cbms-clear { margin-bottom: 9px; }
+/* Vertically centers the text link against the 38px controls beside it. */
+.cbms-clear { margin-bottom: 11px; }
 
 .toggle-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-h);
   border: 1px solid var(--border);
   background: #fff;
   border-radius: 999px;
-  padding: 8px 13px;
+  padding: 0 14px;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text);
@@ -461,12 +509,12 @@ tbody tr.row--active:hover { background: #e6ebff; }
 .id-badge--yes { background: #e6f7ec; color: #146c34; }
 .id-badge--no { background: #fde5ea; color: #9f1239; }
 
+/* Senior / PWD / 4Ps are descriptive attributes, not statuses, so they share
+   one neutral tag style instead of three unrelated hues (amber, blue, red)
+   that collided with the marriage / primary / death colors. */
 .tag-row { display: flex; gap: 5px; flex-wrap: wrap; }
-.tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
-.tag--senior { background: #fef3e0; color: #92650b; }
-.tag--pwd { background: #eef2ff; color: var(--primary-dark); }
-.tag--fourps { background: #fde5ea; color: #9f1239; }
-.tag--none { color: var(--muted); font-weight: 500; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; white-space: nowrap; background: #eef1f8; color: #3b4a63; }
+.tag--none { background: transparent; color: var(--muted); font-weight: 500; padding-left: 0; }
 
 .cbms-empty { text-align: center; padding: 24px 10px; color: var(--muted); font-size: 12.5px; }
 
@@ -636,7 +684,7 @@ tbody tr.row--active:hover { background: #e6ebff; }
 /* ── Small phones ── */
 @media (max-width: 420px) {
   .stat-card { padding: 12px; }
-  .stat-card__value { font-size: 18px; }
+  .stat-card__value { font-size: 22px; }
   .cbms-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
   .cbms-stat { padding: 10px; }
   .legend__items { gap: 8px 12px; }
