@@ -3,6 +3,7 @@
 :root {
   --rm-bg:        #f3f4f6;
   --rm-surface:   #ffffff;
+  --rm-surface-2: #f9fafb;
   --rm-border:    #e5e7eb;
   --rm-text-1:    #111827;
   --rm-text-2:    #374151;
@@ -16,6 +17,15 @@
   --rm-radius:    8px;
   --rm-shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
   --rm-shadow-lg: 0 10px 25px rgba(0,0,0,.12), 0 4px 10px rgba(0,0,0,.06);
+
+  /* Segmented-control tokens for the credential-category switcher. Kept
+     separate from the generic surface/border tokens above so the control
+     reads as one cohesive group rather than a row of individually
+     colored buttons. */
+  --rm-tab-track:  #ebedf1;
+  --rm-tab-text:   #6b7280;
+  --rm-tab-active-bg:   var(--rm-surface);
+  --rm-tab-active-text: var(--rm-text-1);
 }
 
 /* ── Wrapper ── */
@@ -37,43 +47,50 @@
   box-sizing: border-box;
 }
 
-/* ── Credential category buttons ── */
+/* ── Credential category selector ──
+   A segmented control (one neutral track, one elevated active segment)
+   rather than a row of separately-bordered, solid-blue-filled buttons.
+   This keeps the two categories reading as a single grouped choice and
+   removes the heavy, same-weight-as-a-primary-action look the filled
+   tab previously had. */
 .rm-category-tabs {
-  display: flex;
-  flex-wrap: wrap;      /* safety net: never overflow the row on in-between widths */
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
+  padding: 3px;
   margin-bottom: 20px;
+  background: var(--rm-tab-track);
+  border-radius: 10px;
+  max-width: 100%;
 }
 
 .rm-category-tab {
-  padding: 9px 14px;
-  border: 1px solid var(--rm-border);
-  border-radius: 6px;
-  background: var(--rm-surface);
-  color: var(--rm-text-2);
+  padding: 8px 16px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--rm-tab-text);
   font: inherit;
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background .15s, border-color .15s, color .15s;
+  transition: background .15s, color .15s;
 }
 
 .rm-category-tab:hover {
-  color: var(--rm-primary-h);
-  border-color: var(--rm-primary);
+  color: var(--rm-text-1);
 }
 
 .rm-category-tab.rm-category-tab--active,
 .rm-category-tab.rm-category-tab--active:hover {
-  border-color: var(--rm-primary);
-  background: var(--rm-primary);
-  color: #ffffff;
+  background: var(--rm-tab-active-bg);
+  color: var(--rm-tab-active-text);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08);
 }
 
 .rm-category-tab:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, .22);
-  outline-offset: 1px;
+  outline: 2px solid var(--rm-primary);
+  outline-offset: 2px;
 }
 
 /* ── Toolbar (Add User left · Search right) ── */
@@ -159,6 +176,7 @@
 /* ── Table ── */
 .rm-table-wrap {
   background: var(--rm-surface);
+  border: 1px solid var(--rm-border);
   border-radius: var(--rm-radius);
   box-shadow: var(--rm-shadow);
   /* Scrolls horizontally as a last-resort fallback on any viewport too narrow
@@ -179,7 +197,7 @@
 }
 
 .rm-table thead tr {
-  background: #f9fafb;
+  background: var(--rm-surface-2);
   border-bottom: 1.5px solid var(--rm-border);
 }
 
@@ -202,7 +220,7 @@
 
 .rm-table tbody tr:last-child td { border-bottom: none; }
 
-.rm-table tbody tr:hover { background: #f9fafb; }
+.rm-table tbody tr:hover { background: var(--rm-surface-2); }
 
 .rm-row--locked { background: #fef2f2 !important; }
 
@@ -289,34 +307,49 @@
   padding: 5px 14px;
   border-radius: 999px;
   font-size: 0.75rem;
-  font-weight: 500;
-  border: none;
+  font-weight: 600;
   cursor: pointer;
-  transition: opacity .15s, filter .15s;
+  transition: background .15s, border-color .15s, color .15s;
   white-space: nowrap;
 }
 
-.rm-pill-btn:hover { filter: brightness(.92); }
-
-/* ── Action buttons (solid colors) ── */
+/* ── Action buttons: tiered by consequence, not decorated by arbitrary
+   color. Every row can carry up to four actions, so they're ranked from
+   lowest to highest stakes — View and Reset are outlined/low-emphasis
+   (reversible, routine), Unlock is outlined in the warn color because it's
+   the direct fix for the red "Locked" state, and Delete is the only solid
+   fill in the group, reserved for the one destructive, irreversible
+   action. This keeps the row scannable instead of every button competing
+   at the same visual weight. ── */
 .rm-pill-btn--view {
-  background: var(--rm-primary);
-  color: #fff;
-  border: 1px solid var(--rm-primary);
+  background: var(--rm-surface);
+  color: var(--rm-text-2);
+  border: 1px solid var(--rm-border);
 }
 .rm-pill-btn--view:hover {
-  background: var(--rm-primary-h);
-  border-color: var(--rm-primary-h);
+  background: var(--rm-surface-2);
+  border-color: #d1d5db;
+  color: var(--rm-text-1);
 }
 
 .rm-pill-btn--reset {
-  background: #ec4899;
-  color: #fff;
-  border: 1px solid #ec4899;
+  background: transparent;
+  color: var(--rm-primary);
+  border: 1px solid #bfdbfe;
 }
 .rm-pill-btn--reset:hover {
-  background: #db2777;
-  border-color: #db2777;
+  background: #eff6ff;
+  border-color: var(--rm-primary);
+}
+
+.rm-pill-btn--warning {
+  background: transparent;
+  color: var(--rm-warn);
+  border: 1px solid #fde68a;
+}
+.rm-pill-btn--warning:hover {
+  background: #fffbeb;
+  border-color: var(--rm-warn);
 }
 
 .rm-pill-btn--delete {
@@ -547,7 +580,7 @@
 
 /* ── Role preview ── */
 .rm-preview {
-  background: #f9fafb;
+  background: var(--rm-surface-2);
   border: 1px solid var(--rm-border);
   border-radius: var(--rm-radius);
   padding: 14px;
@@ -584,7 +617,7 @@
   align-items: center;
   gap: 14px;
   padding: 14px;
-  background: #f9fafb;
+  background: var(--rm-surface-2);
   border: 1px solid var(--rm-border);
   border-radius: var(--rm-radius);
 }
@@ -696,7 +729,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #f9fafb;
+  background: var(--rm-surface-2);
   border: 1px solid var(--rm-border);
   border-radius: 6px;
   padding: 5px 10px;
@@ -734,10 +767,15 @@
   font-weight: 600;
 }
 
-.rm-cred-status--active { background: #f0fdf4; color: var(--rm-success); border: 1px solid #bbf7d0; }
-.rm-cred-status--locked { background: #fef2f2; color: var(--rm-danger);  border: 1px solid #fecaca; }
-.rm-cred-status--admin  { background: #fffbeb; color: #92400e;           border: 1px solid #fde68a; }
-.rm-cred-status--no     { background: #f3f4f6; color: var(--rm-text-3);  border: 1px solid var(--rm-border); }
+.rm-cred-status--active   { background: #f0fdf4; color: var(--rm-success); border: 1px solid #bbf7d0; }
+/* "Locked" (account genuinely locked out) stays red/danger. */
+.rm-cred-status--locked   { background: #fef2f2; color: var(--rm-danger);  border: 1px solid #fecaca; }
+/* "Inactive" (simply not currently online) is a neutral state, not an
+   error — it no longer borrows the danger-red styling that "locked" uses,
+   so the two states can't be confused for one another at a glance. */
+.rm-cred-status--inactive { background: #f3f4f6; color: var(--rm-text-3); border: 1px solid var(--rm-border); }
+.rm-cred-status--admin    { background: #fffbeb; color: #92400e;           border: 1px solid #fde68a; }
+.rm-cred-status--no       { background: #f3f4f6; color: var(--rm-text-3);  border: 1px solid var(--rm-border); }
 
 /* Copy button */
 .rm-copy-btn {
@@ -760,7 +798,7 @@
 
 /* ── Read-only permissions section (View Credentials modal) ── */
 .rm-creds-perms {
-  background: #f9fafb;
+  background: var(--rm-surface-2);
   border: 1px solid var(--rm-border);
   border-radius: var(--rm-radius);
   padding: 14px;
@@ -903,6 +941,18 @@
   border: 1px solid #bbf7d0;
 }
 
+/* "Not Active" simply means the user isn't currently online right now —
+   it is not an error state, so it gets a neutral gray badge instead of
+   the red used for a genuinely locked account (see .rm-locked-badge /
+   .rm-row--locked, which are unaffected and still red). Keeping the old
+   red "--locked" modifier available too, for anywhere that badge is
+   actually reporting a lock rather than online/offline status. */
+.rm-status-badge--inactive {
+  background: #f3f4f6;
+  color: var(--rm-text-3);
+  border: 1px solid var(--rm-border);
+}
+
 .rm-status-badge--locked {
   background: #fef2f2;
   color: var(--rm-danger);
@@ -943,6 +993,7 @@
   .rm-table-wrap {
     overflow: visible;
     background: transparent;
+    border: none;
     box-shadow: none;
     border-radius: 0;
   }
@@ -1077,12 +1128,14 @@
 @media (max-width: 640px) {
   .rm-wrap { padding: 12px; }
 
-  /* Category buttons: share the row equally and match heights, even when one
-     label wraps onto more lines than the other. */
+  /* Category selector spans the full width and its segments share the row
+     equally, even when one label wraps onto more lines than the other. */
   .rm-category-tabs {
+    display: flex;
+    width: 100%;
     flex-wrap: nowrap;
     align-items: stretch;
-    gap: 6px;
+    gap: 2px;
   }
 
   .rm-category-tab {
