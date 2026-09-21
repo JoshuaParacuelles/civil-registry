@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import ChangePassword from "./Account Settings/ChangePassword";
 import AuditLogs from "./Account Settings/AuditLogs";
 import RoleManagement from "./Account Settings/RoleManagement";
@@ -45,11 +45,31 @@ const SETTINGS_CHILDREN = [MENU_KEYS.ACCOUNT, MENU_KEYS.AUDIT, MENU_KEYS.ROLE_MA
 const BP_TABLET_MAX = 1024;
 const BP_MOBILE_MAX = 767;
 
-// FIX: A session flag used to tell "this is a fresh login" apart from
-// "this is a refresh within the same still-logged-in session". We only
-// want submenu-open state to survive a same-session refresh, never to
-// leak in from a previous login.
+// A session flag used to tell "this is a fresh login" apart from
+// "this is a refresh within the same still-logged-in session".
 const SESSION_FLAG_KEY = "homeSessionActive";
+
+/* ── Notifications: backend + behaviour ───────────────────────
+   NOTIF_API_BASE points at the Flask request backend (request.py,
+   port 5001), which serves:
+     GET   /api/notifications
+     GET   /api/notifications/unread-count
+     PATCH /api/notifications/<id>/read
+     PATCH /api/notifications/mark-all-read
+   Override it with VITE_REQUEST_API_URL in your .env if the backend
+   lives somewhere else (or set it to "" if you proxy /api instead). ── */
+const NOTIF_API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_REQUEST_API_URL) ||
+  "http://localhost:5001";
+
+const NOTIF_POLL_MS = 15000; // how often the bell checks for new requests
+
+// Which verifier module each notification type opens when clicked.
+const NOTIF_TARGETS = {
+  birth:    { menu: MENU_KEYS.BIRTH,    permission: "birth_verification" },
+  marriage: { menu: MENU_KEYS.MARRIAGE, permission: "marriage_verification" },
+  death:    { menu: MENU_KEYS.DEATH,    permission: "death_verification" },
+};
 
 const getViewport = () => {
   const w = window.innerWidth;
@@ -65,10 +85,8 @@ const getStoredUsername = () => {
   catch { return ""; }
 };
 
-// FIX: Reads a submenu's persisted open/closed state, but only if we're
-// still inside the same session that set it. If this is a fresh login
-// (no active session flag yet), it always returns false, so the sidebar
-// never opens up a submenu the user never touched this session.
+// Reads a submenu's persisted open/closed state, but only inside the same
+// session that set it, so a fresh login always starts with submenus closed.
 const getPersistedSubmenuState = (key) => {
   try {
     const sameSession = sessionStorage.getItem(SESSION_FLAG_KEY) === "true";
@@ -78,11 +96,22 @@ const getPersistedSubmenuState = (key) => {
   }
 };
 
-/* ── Topbar date/time formatting ──────────────────────────────
-   Kept as plain helpers (not component-scoped) so they don't get
-   recreated on every render; they just take the current Date. ── */
+/* ── Topbar date formatting ── */
 const formatTopbarDate = (d) =>
   d.toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+
+/* "5m ago", "2h ago", "3d ago", then a short date. */
+const timeAgo = (iso) => {
+  if (!iso) return "";
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return "";
+  const secs = Math.max(0, Math.floor((Date.now() - then.getTime()) / 1000));
+  if (secs < 60)     return "Just now";
+  if (secs < 3600)   return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400)  return `${Math.floor(secs / 3600)}h ago`;
+  if (secs < 604800) return `${Math.floor(secs / 86400)}d ago`;
+  return then.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+};
 
 /* ── Small inline icons (no extra asset files needed) ── */
 const CalendarIcon = () => (
@@ -94,8 +123,6 @@ const CalendarIcon = () => (
   </svg>
 );
 
-/* Notification bell — same inline-SVG approach and stroke weight as
-   CalendarIcon above so the two icons read as a matching pair. */
 const BellIcon = () => (
   <svg className="notif-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -103,26 +130,50 @@ const BellIcon = () => (
   </svg>
 );
 
+const BirthIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M4 21c0-4 3.5-6 8-6s8 2 8 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const MarriageIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+  </svg>
+);
+
+const DeathIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 3v18M7 8h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const SystemIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+    <path d="M12 8v5M12 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
+const CloseIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const NotifTypeIcon = ({ type }) => {
+  if (type === "birth")    return <BirthIcon />;
+  if (type === "marriage") return <MarriageIcon />;
+  if (type === "death")    return <DeathIcon />;
+  return <SystemIcon />;
+};
+
 const Home = () => {
-  // FIX: `loading` is now consumed here too. We use it to avoid making
-  // any permission-based rendering decision (sidebar items, AccessDenied)
-  // before PermissionContext has actually finished asking the server
-  // what this user is allowed to see.
   const { hasAccess, is_admin, loading, logout } = usePermissions();
   const username = getStoredUsername();
 
-  // FIX: isAdminUser now comes EXCLUSIVELY from the PermissionContext's
-  // `is_admin`, which itself is derived only from the server/Role
-  // Management (see PermissionContext.jsx). This used to also treat a
-  // sessionStorage username of "admin" (or a role string that merely
-  // *contained* the word "admin") as automatic admin access. Those were
-  // stale, locally-cached signals that don't necessarily reflect the
-  // account's *current* role — that mismatch is exactly what let a
-  // refreshed session end up with unauthorized "access to everything",
-  // and, conversely, could leave a real Administrator's own isAdminUser
-  // flag out of sync with what PermissionContext already knew to be
-  // true. `is_admin` is the single source of truth; there is no need to
-  // (and no safe way to) re-derive it from local strings.
+  // is_admin from PermissionContext is the single source of truth.
   const isAdminUser = is_admin;
 
   const canAccess = useCallback(
@@ -136,8 +187,6 @@ const Home = () => {
 
   const [activeSubMenu, setActiveSubMenu] = useState(MENU_KEYS.DASHBOARD);
 
-  // FIX: Submenus now always start collapsed on a fresh login. They only
-  // stay open across a same-session page refresh (see getPersistedSubmenuState).
   const [settingsOpen, setSettingsOpen] = useState(() =>
     getPersistedSubmenuState("settingsOpen")
   );
@@ -158,9 +207,16 @@ const Home = () => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // Live clock/calendar shown in the topbar. Ticks every second; cleaned
-  // up on unmount so it doesn't keep a timer running after Home unmounts.
+  // Live date shown in the topbar.
   const [now, setNow] = useState(() => new Date());
+
+  /* ── Notification state ── */
+  const [notifOpen, setNotifOpen]           = useState(false);
+  const [notifications, setNotifications]   = useState([]);
+  const [unreadCount, setUnreadCount]       = useState(0);
+  const [notifLoading, setNotifLoading]     = useState(true);   // first load only
+  const [notifStatus, setNotifStatus]       = useState("connecting"); // connecting | live | error
+  const notifWrapperRef = useRef(null);
 
   const vitalIsActive    = VITAL_CHILDREN.includes(activeSubMenu);
   const settingsIsActive = SETTINGS_CHILDREN.includes(activeSubMenu);
@@ -174,12 +230,7 @@ const Home = () => {
         ...(canAccess("scims_lookup")          ? [MENU_KEYS.SCIMS]    : []),
       ];
 
-  // FIX: Mark this browser tab's session as "active" the moment Home
-  // mounts (i.e. right after a successful login). This flag lives in
-  // sessionStorage, so it naturally disappears when the tab is closed,
-  // and we also clear it explicitly on logout below — either way, the
-  // next login starts clean and the submenu-open localStorage values
-  // are ignored until this flag is set again.
+  // Mark this tab's session as "active" the moment Home mounts.
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_FLAG_KEY, "true"); } catch {}
   }, []);
@@ -200,8 +251,7 @@ const Home = () => {
     return () => clearInterval(tick);
   }, []);
 
-  // Lock body scroll while the mobile drawer is open so the page behind
-  // it doesn't scroll along with it.
+  // Lock body scroll while the mobile drawer is open.
   useEffect(() => {
     if (viewport === "mobile" && mobileMenuOpen) {
       document.body.style.overflow = "hidden";
@@ -211,6 +261,123 @@ const Home = () => {
     return () => { document.body.style.overflow = ""; };
   }, [viewport, mobileMenuOpen]);
 
+  /* ═══════════════════════════════════════════════════════════
+     NOTIFICATIONS
+     ═══════════════════════════════════════════════════════════ */
+
+  // Pulls the latest notifications + unread count in one go.
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const [listRes, countRes] = await Promise.all([
+        fetch(`${NOTIF_API_BASE}/api/notifications`),
+        fetch(`${NOTIF_API_BASE}/api/notifications/unread-count`),
+      ]);
+      if (!listRes.ok || !countRes.ok) throw new Error("Notification request failed");
+
+      const list  = await listRes.json();
+      const count = await countRes.json();
+
+      setNotifications(Array.isArray(list) ? list : []);
+      setUnreadCount(typeof count.count === "number" ? count.count : 0);
+      setNotifStatus("live");
+    } catch (err) {
+      console.error("[Home] Could not load notifications:", err);
+      setNotifStatus("error");
+    } finally {
+      setNotifLoading(false);
+    }
+  }, []);
+
+  // Load once on mount, then poll so new requests show up on the bell
+  // without a page refresh. Polling pauses while the tab is hidden.
+  useEffect(() => {
+    fetchNotifications();
+    const poll = setInterval(() => {
+      if (!document.hidden) fetchNotifications();
+    }, NOTIF_POLL_MS);
+
+    const onVisible = () => { if (!document.hidden) fetchNotifications(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [fetchNotifications]);
+
+  // Close the dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!notifOpen) return undefined;
+
+    const onPointerDown = (e) => {
+      if (notifWrapperRef.current && !notifWrapperRef.current.contains(e.target)) {
+        setNotifOpen(false);
+      }
+    };
+    const onKeyDown = (e) => { if (e.key === "Escape") setNotifOpen(false); };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [notifOpen]);
+
+  const toggleNotifDropdown = () => {
+    setNotifOpen((prev) => {
+      if (!prev) fetchNotifications(); // refresh right as it opens
+      return !prev;
+    });
+  };
+
+  // Marks one notification as read (optimistic; re-syncs if the call fails).
+  const markNotificationRead = useCallback(
+    async (notif) => {
+      if (!notif || notif.is_read) return;
+
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
+
+      try {
+        const res = await fetch(`${NOTIF_API_BASE}/api/notifications/${notif.id}/read`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ read_by: username || null }),
+        });
+        if (!res.ok) throw new Error("Mark read failed");
+      } catch (err) {
+        console.error("[Home] Could not mark notification as read:", err);
+        fetchNotifications();
+      }
+    },
+    [username, fetchNotifications]
+  );
+
+  const markAllNotificationsRead = useCallback(async () => {
+    if (unreadCount === 0) return;
+
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+
+    try {
+      const res = await fetch(`${NOTIF_API_BASE}/api/notifications/mark-all-read`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ read_by: username || null }),
+      });
+      if (!res.ok) throw new Error("Mark all read failed");
+    } catch (err) {
+      console.error("[Home] Could not mark all notifications as read:", err);
+      fetchNotifications();
+    }
+  }, [unreadCount, username, fetchNotifications]);
+
+  /* ── Sidebar / menu handlers ── */
   const toggleSidebar = useCallback(() => {
     if (viewport === "mobile") {
       setMobileMenuOpen((p) => !p);
@@ -228,6 +395,20 @@ const Home = () => {
   const closeMobileMenu = useCallback(() => {
     if (viewport === "mobile") setMobileMenuOpen(false);
   }, [viewport]);
+
+  // Clicking a notification marks it read and opens the matching verifier.
+  const handleNotifClick = (notif) => {
+    markNotificationRead(notif);
+
+    const target = NOTIF_TARGETS[notif.record_type];
+    if (target && canAccess(target.permission)) {
+      setActiveSubMenu(target.menu);
+      setVitalRecordsOpen(true);
+      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
+      closeMobileMenu();
+    }
+    setNotifOpen(false);
+  };
 
   const handleMenuClick = (menu) => {
     if (menu === MENU_KEYS.VITAL) {
@@ -263,27 +444,9 @@ const Home = () => {
     closeMobileMenu();
   };
 
-  // ─────────────────────────────────────────────
-  // BUG FIX: "Joshua still shows Active after logout"
-  // ─────────────────────────────────────────────
-  // Previously this just did `await logout(); ...; window.location.replace("/")`.
-  // `logout()` (from PermissionContext) is what actually calls the
-  // credentialed POST /api/logout that flips the account's `is_online`
-  // flag to false server-side. But if that call ever threw — a dropped
-  // connection, a momentary backend hiccup, or the request simply not
-  // resolving in time — the missing try/catch meant execution still fell
-  // straight through to `window.location.replace("/")`. Navigating away
-  // immediately cancels any still-in-flight request in the browser, so
-  // the server never got the chance to persist `is_online = false`,
-  // leaving the account stuck showing "Active" in Role Management
-  // indefinitely (until some unrelated action happened to reset it).
-  //
-  // Now: if the context's logout() throws, we retry once with a direct,
-  // credentialed call to /api/logout ourselves and wait for it to settle
-  // before doing any local cleanup or navigating away. This guarantees
-  // the server-side "Not Active" update is given a real chance to commit
-  // before the tab leaves the page, without changing any other logout
-  // behavior (confirmation modal, storage cleanup, redirect target).
+  // Logout: if the context's logout() throws, retry once with a direct
+  // credentialed call so the server-side "is_online = false" update gets a
+  // real chance to commit before the tab navigates away.
   const handleConfirmLogout = async () => {
     setLoggingOut(true);
     try {
@@ -325,15 +488,7 @@ const Home = () => {
   const displayName = username ? toTitleCase(username) : "Admin";
 
   const renderContent = () => {
-    // FIX: Don't evaluate canAccess()/render AccessDenied while
-    // PermissionContext is still fetching the current permission set
-    // (e.g. right after a login/refresh, before /api/session resolves).
-    // At that moment is_admin/permissions are still at their initial
-    // (empty/false) defaults, which previously could make a real
-    // Administrator briefly see "Access Denied" on modules like Role
-    // Management until the next render arrived with the real data. This
-    // keeps the module in view sync with the actual, server-confirmed
-    // permission state instead of a transient default one.
+    // Wait for PermissionContext before making any permission decision.
     if (loading) {
       return (
         <div className="module-loading-state" style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>
@@ -377,6 +532,13 @@ const Home = () => {
         return <PaymentInventory />;
     }
   };
+
+  const badgeText = unreadCount > 99 ? "99+" : String(unreadCount);
+
+  const statusTitle =
+    notifStatus === "live"       ? "Live — checking for new requests"
+    : notifStatus === "error"    ? "Can't reach the server — retrying"
+    :                              "Connecting…";
 
   return (
     <div className={containerClasses}>
@@ -597,7 +759,6 @@ const Home = () => {
             <span className="topbar-breadcrumb-current">{activeSubMenu}</span>
           </div>
 
-          {/* Moved to the right side of the topbar */}
           <div className="topbar-right">
             <div className="topbar-datetime" aria-label="Current date">
               <span className="topbar-datetime-item">
@@ -606,16 +767,111 @@ const Home = () => {
               </span>
             </div>
 
-            {/* Notification bell — sits right beside the date */}
-            <div className="notif-wrapper">
+            {/* ── Notification bell + dropdown ── */}
+            <div className="notif-wrapper" ref={notifWrapperRef}>
               <button
                 type="button"
                 className="notif-btn"
-                aria-label="Notifications"
+                aria-label={
+                  unreadCount > 0
+                    ? `Notifications, ${unreadCount} unread`
+                    : "Notifications"
+                }
+                aria-haspopup="true"
+                aria-expanded={notifOpen}
                 title="Notifications"
+                onClick={toggleNotifDropdown}
               >
                 <BellIcon />
+                {unreadCount > 0 && (
+                  <span className="notif-count-badge">{badgeText}</span>
+                )}
               </button>
+
+              {notifOpen && (
+                <div className="notif-dropdown" role="dialog" aria-label="Notifications">
+                  <div className="notif-panel-header">
+                    <div className="notif-panel-title-row">
+                      <span className="notif-panel-title">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="notif-panel-count">{unreadCount} new</span>
+                      )}
+                      <span
+                        className={`notif-sse-dot ${notifStatus}`}
+                        title={statusTitle}
+                        aria-label={statusTitle}
+                      />
+                    </div>
+
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        className="notif-mark-all"
+                        onClick={markAllNotificationsRead}
+                      >
+                        Mark all as read
+                      </button>
+                    )}
+                  </div>
+
+                  <ul className="notif-list">
+                    {notifLoading ? (
+                      [0, 1, 2].map((i) => (
+                        <li key={i} className="notif-skeleton-item">
+                          <div className="notif-skeleton-icon" />
+                          <div className="notif-skeleton-lines">
+                            <div className="notif-skeleton-line long" />
+                            <div className="notif-skeleton-line short" />
+                          </div>
+                        </li>
+                      ))
+                    ) : notifications.length === 0 ? (
+                      <li className="notif-empty">
+                        <BellIcon />
+                        <span>
+                          {notifStatus === "error" ? "Can't load notifications" : "No notifications yet"}
+                        </span>
+                        <span className="notif-empty-sub">
+                          {notifStatus === "error"
+                            ? "Check that the request server is running."
+                            : "New certificate requests will show up here."}
+                        </span>
+                      </li>
+                    ) : (
+                      notifications.map((n) => (
+                        <li
+                          key={n.id}
+                          className={`notif-item${n.is_read ? "" : " unread"}`}
+                          onClick={() => handleNotifClick(n)}
+                        >
+                          <span className="notif-dot" />
+                          <div className={`notif-icon-wrap ${NOTIF_TARGETS[n.record_type] ? n.record_type : "system"}`}>
+                            <NotifTypeIcon type={n.record_type} />
+                          </div>
+                          <div className="notif-body">
+                            <p className="notif-msg">{n.message || n.title}</p>
+                            <span className="notif-time">{timeAgo(n.created_at)}</span>
+                          </div>
+                          {!n.is_read && (
+                            <button
+                              type="button"
+                              className="notif-dismiss"
+                              title="Mark as read"
+                              aria-label="Mark as read"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markNotificationRead(n);
+                              }}
+                            >
+                              <CloseIcon />
+                            </button>
+                          )}
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         </header>
