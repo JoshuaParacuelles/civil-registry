@@ -94,6 +94,15 @@ const CalendarIcon = () => (
   </svg>
 );
 
+/* Notification bell — same inline-SVG approach and stroke weight as
+   CalendarIcon above so the two icons read as a matching pair. */
+const BellIcon = () => (
+  <svg className="notif-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const Home = () => {
   // FIX: `loading` is now consumed here too. We use it to avoid making
   // any permission-based rendering decision (sidebar items, AccessDenied)
@@ -595,6 +604,18 @@ const Home = () => {
                 <CalendarIcon />
                 <span>{formatTopbarDate(now)}</span>
               </span>
+            </div>
+
+            {/* Notification bell — sits right beside the date */}
+            <div className="notif-wrapper">
+              <button
+                type="button"
+                className="notif-btn"
+                aria-label="Notifications"
+                title="Notifications"
+              >
+                <BellIcon />
+              </button>
             </div>
           </div>
         </header>

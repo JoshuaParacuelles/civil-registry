@@ -692,6 +692,35 @@
 
   .notif-btn:active { transform: scale(0.97); }
 
+  /* ── Bell placed beside the date pill (inside .topbar-right) ──
+     NEW: scoped under .topbar-right so the base .notif-btn styles above
+     and the badge / dropdown styles below are left completely untouched.
+     The bell stretches to the same height as the date pill so both sit
+     on one clean, evenly-sized row. ── */
+  .topbar-right .notif-wrapper {
+    display: flex;
+    align-self: stretch;
+  }
+
+  .topbar-right .notif-btn {
+    width: 32px;
+    height: auto;
+    align-self: stretch;
+  }
+
+  .notif-btn-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+    flex-shrink: 0;
+  }
+
+  /* Slightly more compact bell on tablet/mobile, matching the smaller
+     date pill at those breakpoints. */
+  @media (max-width: 1024px) {
+    .topbar-right .notif-btn { width: 30px; }
+  }
+
   .notif-count-badge {
     position: absolute;
     top: -6px;
