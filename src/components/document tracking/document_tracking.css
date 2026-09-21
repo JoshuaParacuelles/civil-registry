@@ -2,7 +2,10 @@
   --backdrop: rgba(15, 23, 42, 0.55); /* dimmed modal overlay, matches dark backdrop in reference screenshot */
   --card: #ffffff;                 /* == --bg-surface */
   --ink: #0f172a;                  /* == --text-primary */
-  --ink-soft: #94a3b8;             /* == --text-muted */
+  /* UI REFINEMENT: was #94a3b8 (~2.6:1 on white), too faint for the
+     timestamps / owner names / doc numbers this screen is built around.
+     #64748b is ~4.8:1 and still clearly reads as secondary text. */
+  --ink-soft: #64748b;
   --ink-mid: #475569;              /* == --text-soft, for readable secondary text */
   --line: rgba(0, 0, 0, 0.08);     /* == --border */
   --line-strong: rgba(0, 0, 0, 0.14); /* == --border-strong */
@@ -16,6 +19,19 @@
   --amber: #d97706;                /* == home's notif-icon-wrap.system color */
   --amber-soft: rgba(245, 158, 11, 0.09);
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 0 rgba(15, 23, 42, 0.03); /* == --shadow-sm */
+
+  /* UI REFINEMENT — flat status / control tokens. Status chips and
+     buttons all draw from this one set (a darker "ink" shade for text,
+     the existing *-soft tint for the fill) instead of one-off hex
+     values, so every accent on the screen comes from the same system. */
+  --blue-hover: #1d4ed8;
+  --blue-ink: #1d4ed8;
+  --green-ink: #047857;
+  --amber-ink: #b45309;
+  --red-ink: #b91c1c;
+  --surface-soft: #f8fafc;         /* == --bg-surface-soft */
+  --control-h: 34px;               /* shared height: toolbar button + search box */
+
   font-family: "DM Sans", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color: var(--ink);
   background: transparent;
@@ -69,42 +85,56 @@
 .dt-c-green { color: var(--green); }
 .dt-c-purple { color: var(--purple); }
 
-/* Pill tabs — styled after home.css's .topbar-toggle / .topbar-date chip */
+/* ── Status filter tabs ──────────────────────────────────────────
+   UI REFINEMENT: was a boxed, shadowed pill group whose active tab was
+   a solid blue block — the heaviest element on the screen for what is
+   only a filter. Now a flat underline tab bar: one hairline under the
+   whole row, active tab marked by dark text + a 2px blue underline.
+   The hairline is an inset box-shadow (not a border) so the active
+   underline can sit on top of it without negative margins, and the row
+   scrolls sideways on narrow screens instead of wrapping onto a second
+   line. ── */
 .dt-tabs {
   display: flex;
-  gap: 6px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-  padding: 6px;
+  gap: 4px;
   margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.dt-tab {
-  border: none;
+  padding: 0;
   background: transparent;
-  color: var(--ink-soft);
+  border: none;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 var(--line-strong);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dt-tabs::-webkit-scrollbar { display: none; }
+.dt-tab {
+  flex-shrink: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-mid);
   font-size: 13px;
   font-weight: 600;
-  padding: 9px 15px;
-  border-radius: 6px;
+  padding: 10px 14px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
 }
-.dt-tab:hover { background: #f1f5f9; color: var(--ink); } /* == --bg-raised */
+.dt-tab:hover { color: var(--ink); border-bottom-color: var(--line-strong); }
 .dt-tab[data-active="true"] {
-  background: var(--blue);
-  color: #ffffff;
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom-color: var(--blue);
 }
-.dt-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.dt-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 4px; }
 
 /* Grid */
 .dt-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 16px;
+  gap: 20px;
   align-items: start;
 }
 @media (max-width: 860px) {
@@ -120,31 +150,88 @@
   min-width: 0;
   width: 100%;
 }
+/* UI REFINEMENT: each pane's header now sits above a hairline divider,
+   so the title/controls and the content beneath read as two distinct
+   zones (previously they ran together with only a margin between). */
 .dt-card-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
 }
-.dt-card-head h2 { font-size: 15.5px; font-weight: 800; margin: 0 0 3px; line-height: 1.35; color: var(--ink); }
-.dt-card-head p { font-size: 12px; color: var(--ink-soft); margin: 0; }
+.dt-card-head > div:first-child { min-width: 0; }
+.dt-card-head h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 2px;
+  line-height: 1.35;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.dt-card-head p { font-size: 12.5px; color: var(--ink-soft); margin: 0; }
+
+/* Detail pane: the title is the anchor of the whole right column, so it
+   gets a step up in size, and the head aligns to the top so a long,
+   wrapping title doesn't drag the Delete button to its vertical middle. */
+.dt-detail-card .dt-card-head { align-items: flex-start; }
+.dt-detail-card .dt-card-head h2 { font-size: 18px; line-height: 1.3; }
+.dt-detail-docno {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Saved note + Delete, on one line at the right of the detail head */
+.dt-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.dt-head-actions .dt-save-note { min-width: 40px; justify-content: flex-end; }
+
+/* Right side of the Documents header: "+ New Document" and search share
+   one row, one height, one baseline. */
+.dt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
 .dt-search {
+  height: var(--control-h);
   font-size: 13px;
   font-family: inherit;
-  padding: 8px 12px;
+  padding: 0 12px 0 34px;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
-  background: #f1f5f9; /* == --bg-raised */
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 11px center;
+  background-size: 15px;
   color: var(--ink);
   min-width: 190px;
   flex: 1 1 190px;
   max-width: 100%;
-  transition: background 0.15s, border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.dt-search:focus { outline: 2px solid var(--blue); outline-offset: 1px; background: #ffffff; }
+.dt-search::placeholder { color: var(--ink-soft); }
+.dt-search:hover { border-color: rgba(0, 0, 0, 0.24); }
+.dt-search:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
 
 /* Document list */
 .dt-list { display: flex; flex-direction: column; gap: 8px; }
@@ -166,10 +253,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #f8fafc; /* == --bg-surface-soft, matches .dt-row */
-  border: 1px solid transparent;
+  background: #ffffff; /* UI REFINEMENT: matches the new white .dt-row */
+  border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 11px 13px;
+  padding: 12px 14px 12px 16px;
 }
 .dt-skeleton-main {
   display: flex;
@@ -191,7 +278,7 @@
 .dt-skeleton-badge {
   width: 62px;
   height: 21px;
-  border-radius: 6px;
+  border-radius: 999px;
   flex-shrink: 0;
 }
 /* Stagger each placeholder row slightly so the shimmer reads as a
@@ -213,41 +300,90 @@
   .dt-row, .dt-skeleton-line { animation: none; }
 }
 
+/* ── Document row ────────────────────────────────────────────────
+   UI REFINEMENT: rows were flat grey blocks with no edge, so the list
+   read as one grey smear. Now each row is a white, hairline-bordered
+   item; the selected row is marked by a blue border, a faint blue
+   fill and a 3px accent bar on its left edge (inset, so nothing shifts
+   when selection changes). ── */
 .dt-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   text-align: left;
-  background: #f8fafc; /* == --bg-surface-soft */
-  border: 1px solid transparent;
+  background: #ffffff;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 11px 13px;
+  padding: 12px 14px 12px 16px;
   cursor: pointer;
   width: 100%;
   font: inherit;
   color: inherit;
   flex-wrap: wrap;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
-.dt-row:hover { background: #e8eef6; } /* == --bg-hover */
-.dt-row[data-selected="true"] {
+.dt-row:hover { background: var(--surface-soft); border-color: var(--line-strong); }
+.dt-row[data-selected="true"],
+.dt-row[data-selected="true"]:hover {
   background: var(--blue-soft);
-  border-color: rgba(37, 99, 235, 0.28);
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: inset 3px 0 0 var(--blue);
 }
 .dt-row:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
-.dt-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 160px; }
-.dt-row-id { font-size: 11px; font-weight: 700; color: var(--ink-soft); letter-spacing: 0.2px; }
-.dt-row-title {
-  font-size: 13.5px;
+.dt-row-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 160px; }
+
+/* Line 1: document number (the identifier people scan for) + type.
+   The type is separated from the number by a thin rule rather than a
+   typed-in "·", so the two read as distinct fields. */
+.dt-row-id {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.dt-row-num {
   font-weight: 700;
+  color: var(--ink-mid);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.dt-row-type { font-weight: 500; color: var(--ink-soft); }
+.dt-row-type::before {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 10px;
+  margin: 0 8px;
+  background: var(--line-strong);
+  vertical-align: -1px;
+}
+
+/* Line 2: the title */
+.dt-row-title {
+  font-size: 14px;
+  font-weight: 600;
   color: var(--ink);
+  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.dt-row-meta { font-size: 11.5px; color: var(--ink-soft); }
+
+/* Line 3: who's handling it / when it last changed — labels quiet,
+   the person's name a step heavier. */
+.dt-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 14px;
+  row-gap: 2px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.dt-row-meta strong { font-weight: 600; color: var(--ink-mid); }
 
 .dt-row-side {
   display: flex;
@@ -268,12 +404,29 @@
   white-space: nowrap;
 }
 
+/* ── Status chip ─────────────────────────────────────────────────
+   UI REFINEMENT: flat tint + darker text of the same hue, plus a small
+   dot (drawn in the text color) so status is legible by shape as well
+   as color. Colors come from STATUS_STYLES in the JSX, which now
+   points at the shared --*-ink / --*-soft tokens above. ── */
 .dt-badge {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 5px 10px;
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 10px 5px 8px;
+  border-radius: 999px;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+.dt-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
   flex-shrink: 0;
 }
 
@@ -296,16 +449,24 @@
 .dt-handler-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 16px;
 }
+/* UI REFINEMENT: inside a timeline step the row is a one-line caption,
+   and the step's own padding already supplies the gap to the next
+   step — the extra 16px margin used to double that gap. */
+.dt-step-body .dt-handler-row { margin-bottom: 0; }
 .dt-handler-label {
   font-size: 12px;
-  font-weight: 700;
-  color: var(--ink-mid);
+  font-weight: 500;
+  color: var(--ink-soft);
   white-space: nowrap;
 }
+/* The person's name is the value; "Unsigned" drops back to the muted
+   label weight so an empty stage reads as empty, not as a name. */
+.dt-handler-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.dt-handler-name[data-unsigned="true"] { font-weight: 500; color: var(--ink-soft); }
 .dt-handler-select {
   appearance: none;
   -webkit-appearance: none;
@@ -537,13 +698,18 @@
 .dt-addperson-cancel:hover:not(:disabled) { background: #f1f5f9; }
 .dt-addperson-cancel:disabled { cursor: default; }
 
-/* Timeline */
+/* ── Timeline ────────────────────────────────────────────────────
+   UI REFINEMENT: more room between steps (20px, up from 16px) and
+   between the marker and the text (14px, up from 12px). The connector
+   under a completed step is tinted blue so the eye can follow how far
+   the document has progressed; connectors under pending steps stay
+   neutral. ── */
 .dt-timeline { list-style: none; margin: 0; padding: 0; }
 .dt-step {
   position: relative;
   display: flex;
-  gap: 12px;
-  padding-bottom: 16px;
+  gap: 14px;
+  padding-bottom: 20px;
 }
 .dt-step:last-child { padding-bottom: 0; }
 .dt-step::before {
@@ -555,6 +721,7 @@
   width: 2px;
   background: var(--line);
 }
+.dt-step[data-done="true"]::before { background: rgba(37, 99, 235, 0.35); }
 .dt-step:last-child::before { display: none; }
 .dt-step-dot {
   flex-shrink: 0;
@@ -572,6 +739,15 @@
   border-color: var(--blue);
   background: var(--card);
   box-shadow: 0 0 0 3px var(--blue-soft);
+}
+/* A stage that is flagged ("Request changes") is also the active stage,
+   so the active-stage rule above used to win and paint it blue —
+   the red flag marker never showed. This restores it: still the
+   hollow "you are here" ring, but red. */
+.dt-step[data-active="true"][data-flag="true"] .dt-step-dot {
+  border-color: var(--red);
+  background: var(--card);
+  box-shadow: 0 0 0 3px var(--red-soft);
 }
 
 .dt-step-body { flex: 1; min-width: 0; }
@@ -601,11 +777,22 @@
 
 .dt-step-heading-text { min-width: 0; flex: 1 1 140px; }
 
-.dt-step-label { font-size: 13px; font-weight: 700; margin: 0 0 2px; transition: color 0.12s; color: var(--ink); }
+/* Stage text hierarchy: document no. (quiet reference) → label (the
+   name of the step) → detail → date. */
+.dt-step-docno {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.dt-step-label { font-size: 13.5px; font-weight: 700; margin: 0 0 2px; transition: color 0.12s; color: var(--ink); }
 .dt-step[data-done="false"] .dt-step-label { color: var(--ink-mid); font-weight: 600; }
-.dt-step[data-active="true"] .dt-step-label { color: var(--ink); }
-.dt-step-detail { font-size: 12px; color: var(--ink-soft); margin: 0 0 2px; }
-.dt-step-date { font-size: 11px; color: var(--ink-soft); margin: 0; }
+.dt-step[data-active="true"] .dt-step-label { color: var(--ink); font-weight: 700; }
+.dt-step-detail { font-size: 12.5px; line-height: 1.45; color: var(--ink-mid); margin: 0 0 2px; }
+.dt-step-detail strong { font-weight: 600; color: var(--ink); }
+.dt-step-date { font-size: 11.5px; color: var(--ink-soft); margin: 0; font-variant-numeric: tabular-nums; }
 
 /* Comment count chip on a stage — click target that expands the thread */
 .dt-step-comment-btn {
@@ -674,10 +861,17 @@
   margin: 0;
 }
 
-/* ── Active-stage action panel (advance / flag / comment) ───────── */
+/* ── Active-stage panels ─────────────────────────────────────────
+   UI REFINEMENT: the panel that holds real actions (advance / flag /
+   comment) keeps the blue tint, since it is the one place on this
+   screen the person is being asked to do something. Everything that is
+   only informational — blocked/unassigned, admin view-only, "different
+   role" — is now the same neutral grey, instead of the admin variant
+   being amber (which read as a warning when it only says "in
+   progress"). ── */
 .dt-active-panel {
-  margin-top: 10px;
-  padding: 12px;
+  margin-top: 12px;
+  padding: 14px;
   background: var(--blue-soft);
   border: 1px solid rgba(37, 99, 235, 0.28);
   border-radius: 8px;
@@ -686,9 +880,9 @@
   gap: 10px;
 }
 .dt-active-panel-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--blue);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue-ink);
 }
 /* Admin gets status/location only — no action buttons, quieter styling
    so it visually reads as "informational", not "actionable". Kept for
@@ -702,50 +896,67 @@
 .dt-active-panel-readonly .dt-active-panel-label {
   color: var(--ink-soft);
 }
-/* Admin sign/authorize panel — same layout as .dt-active-panel, but an
-   amber tint so it visually reads as an administrative override rather
-   than the normal assigned-handler flow. */
+/* Admin view-only panel — informational, so neutral (see note above). */
 .dt-active-panel-admin {
-  background: var(--amber-soft);
-  border-color: rgba(217, 119, 6, 0.28);
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
 }
 .dt-active-panel-admin .dt-active-panel-label {
-  color: var(--amber);
+  color: var(--ink-mid);
 }
 /* Unassigned block — active stage exists but no handler is assigned,
    so nobody (admin included) can work it yet. Neutral gray so it
-   reads as "waiting on setup", distinct from both the blue
-   assigned-handler panel and the amber admin-override panel. */
+   reads as "waiting on setup", distinct from the blue action panel. */
 .dt-active-panel-blocked {
-  background: #f1f5f9; /* == --bg-raised */
+  background: var(--surface-soft);
   border-color: var(--line-strong);
   gap: 4px;
 }
 .dt-active-panel-blocked .dt-active-panel-label {
-  color: var(--ink-soft);
+  color: var(--ink-mid);
 }
 .dt-action-row {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* ── Buttons ─────────────────────────────────────────────────────
+   UI REFINEMENT: one clear three-tier hierarchy, all flat:
+     primary  (.dt-btn-primary) solid blue   — the one forward action
+                                                (+ New Document, Mark complete)
+     ghost    (.dt-btn-ghost)   white/outline — secondary (Request changes, Retry)
+     danger   (.dt-btn-danger)  white/red text — destructive (Reject, Delete),
+                                                 never a filled red block
+   Buttons now have a fixed height so a row of them lines up, and a
+   real disabled state (previously a disabled button looked identical
+   to an enabled one). .dt-btn-lg is the toolbar size, matching the
+   search box. ── */
 .dt-btn {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 7px 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 0 14px;
   border-radius: 6px;
   border: 1px solid transparent;
   cursor: pointer;
   font-family: inherit;
+  white-space: nowrap;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .dt-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.dt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.dt-btn-lg { height: var(--control-h); font-size: 13px; }
 .dt-btn-primary { background: var(--blue); color: #fff; }
-.dt-btn-primary:hover { background: #1d4ed8; }
+.dt-btn-primary:hover:not(:disabled) { background: var(--blue-hover); }
 .dt-btn-ghost { background: #fff; color: var(--ink); border-color: var(--line-strong); }
-.dt-btn-ghost:hover { background: #f1f5f9; } /* == --bg-raised */
-.dt-btn-danger { background: #fff; color: var(--red); border-color: rgba(220, 38, 38, 0.25); }
-.dt-btn-danger:hover { background: var(--red-soft); }
+.dt-btn-ghost:hover:not(:disabled) { background: #f1f5f9; } /* == --bg-raised */
+.dt-btn-danger { background: #fff; color: var(--red-ink); border-color: rgba(220, 38, 38, 0.3); }
+.dt-btn-danger:hover:not(:disabled) { background: var(--red-soft); }
 
 .dt-comment-form {
   display: flex;
@@ -767,7 +978,7 @@
 .dt-pipeline-done {
   font-size: 12px;
   font-weight: 700;
-  color: var(--green);
+  color: var(--green-ink);
   background: var(--green-soft);
   padding: 9px 12px;
   border-radius: 7px;
@@ -775,7 +986,7 @@
 .dt-pipeline-blocked {
   font-size: 12px;
   font-weight: 700;
-  color: var(--red);
+  color: var(--red-ink);
   background: var(--red-soft);
   padding: 9px 12px;
   border-radius: 7px;
@@ -885,9 +1096,11 @@
 @media (max-width: 640px) {
   .dt-card { padding: 14px; }
   .dt-card-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .dt-toolbar { flex-wrap: nowrap; justify-content: stretch; }
+  .dt-head-actions { justify-content: space-between; }
   .dt-search { width: 100%; min-width: 0; flex: 1 1 auto; }
   .dt-stat-value { font-size: 22px; }
-  .dt-row { padding: 10px 11px; }
+  .dt-row { padding: 10px 11px 10px 14px; }
 }
 
 @media (max-width: 380px) {

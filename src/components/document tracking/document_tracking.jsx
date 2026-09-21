@@ -21,11 +21,17 @@ const REALTIME_DEBOUNCE_MS = 300;
 // back to another stage's name or to the first person in the pool.
 const UNSIGNED_LABEL = "Unsigned";
 
+// UI REFINEMENT: status chip colors now come from the shared flat
+// tokens defined on .dt-root in document_tracking.css (a darker "ink"
+// shade for the text, the matching *-soft tint for the fill) instead
+// of four one-off hex pairs, so chips, buttons and panels all draw
+// from the same accent system. The keys and the { fg, bg } shape are
+// unchanged, so nothing that reads STATUS_STYLES needs to change.
 const STATUS_STYLES = {
-  "In review": { fg: "#1e4a86", bg: "#e7edf5" },
-  "Approved": { fg: "#2c7a4b", bg: "#e7f3ec" },
-  "Changes requested": { fg: "#a06615", bg: "#f6ecda" },
-  "Rejected": { fg: "#ad3a34", bg: "#f5e7e5" },
+  "In review": { fg: "var(--blue-ink)", bg: "var(--blue-soft)" },
+  "Approved": { fg: "var(--green-ink)", bg: "var(--green-soft)" },
+  "Changes requested": { fg: "var(--amber-ink)", bg: "var(--amber-soft)" },
+  "Rejected": { fg: "var(--red-ink)", bg: "var(--red-soft)" },
 };
 
 const FILTERS = ["All", "In review", "Approved", "Changes requested", "Rejected"];
@@ -1145,9 +1151,22 @@ export default function DocumentTracking() {
   return (
     <div className="dt-root">
       <div className="dt-page">
-        <div className="dt-tabs">
+        {/* UI REFINEMENT: role="tablist" / role="tab" / aria-selected
+            added so the filter row is announced as a set of tabs. The
+            filter logic (setFilter / data-active) is unchanged; the
+            visual restyle lives in document_tracking.css (.dt-tabs,
+            .dt-tab). */}
+        <div className="dt-tabs" role="tablist" aria-label="Filter documents by status">
           {FILTERS.map((f) => (
-            <button key={f} className="dt-tab" data-active={filter === f} onClick={() => setFilter(f)}>
+            <button
+              key={f}
+              type="button"
+              role="tab"
+              aria-selected={filter === f}
+              className="dt-tab"
+              data-active={filter === f}
+              onClick={() => setFilter(f)}
+            >
               {f}
             </button>
           ))}
@@ -1178,7 +1197,11 @@ export default function DocumentTracking() {
                 <h2>Documents</h2>
                 <p>{listLoading ? "Loading…" : `${filtered.length} of ${documents.length} shown`}</p>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* UI REFINEMENT: the inline-styled flex wrapper is now
+                  .dt-toolbar, so "+ New Document" and the search box
+                  share one row, one height (--control-h) and wrap
+                  together on small screens. */}
+              <div className="dt-toolbar">
                 {/* "New Document" button — ADMIN-ONLY. Regular users
                     only handle/process/move documents already
                     assigned to them; they don't create new document/
@@ -1186,16 +1209,19 @@ export default function DocumentTracking() {
                     created document remains a separate, admin-only
                     step via the dropdown in the detail panel below.
                     Enforced server-side too — see require_admin() on
-                    create_document() in routes/document.py. */}
+                    create_document() in routes/document.py.
+
+                    UI REFINEMENT: was a one-off inline-styled button.
+                    Now uses the shared button classes — dt-btn-primary
+                    (solid blue, the one forward action on this screen)
+                    at the toolbar size (dt-btn-lg) — so it is visibly
+                    the primary control next to the ghost/danger
+                    buttons elsewhere. onClick is unchanged. */}
                 {is_admin && (
                   <button
                     type="button"
+                    className="dt-btn dt-btn-primary dt-btn-lg"
                     onClick={() => { setNewDocError(null); setNewDocOpen(true); }}
-                    style={{
-                      padding: "7px 12px", fontSize: 13, fontWeight: 700,
-                      border: "none", borderRadius: 6, background: "var(--blue)",
-                      color: "#fff", cursor: "pointer", whiteSpace: "nowrap",
-                    }}
                   >
                     + New Document
                   </button>
@@ -1215,6 +1241,7 @@ export default function DocumentTracking() {
                   className="dt-search"
                   type="text"
                   placeholder="Search title, ID, owner"
+                  aria-label="Search documents by title, ID or owner"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
@@ -1253,10 +1280,23 @@ export default function DocumentTracking() {
                     data-selected={selectedId === doc.id}
                     onClick={() => setSelectedId(doc.id)}
                   >
+                    {/* UI REFINEMENT: the row's three lines are now
+                        separate, individually styled fields instead of
+                        dot-joined strings — document number (bold) and
+                        type on line 1, title on line 2, and on line 3
+                        the handler's name (emphasised) and the last
+                        update time. Same data as before, just
+                        structured so it scans. */}
                     <div className="dt-row-main">
-                      <span className="dt-row-id">{doc.docNumber} · {doc.type}</span>
+                      <span className="dt-row-id">
+                        <span className="dt-row-num">{doc.docNumber}</span>
+                        <span className="dt-row-type">{doc.type}</span>
+                      </span>
                       <span className="dt-row-title">{doc.title}</span>
-                      <span className="dt-row-meta">Handling: {doc.owner} · updated {doc.updated}</span>
+                      <span className="dt-row-meta">
+                        <span>Handling <strong>{doc.owner}</strong></span>
+                        <span>Updated {doc.updated}</span>
+                      </span>
                     </div>
                     <div className="dt-row-side">
                       <span className="dt-badge" style={{ color: style.fg, background: style.bg }}>
@@ -1318,7 +1358,11 @@ export default function DocumentTracking() {
               <div className="dt-card-head">
                 <div>
                   <h2>{selected.title}</h2>
-                  <p>{selected.docNumber}</p>
+                  {/* UI REFINEMENT: dt-detail-docno gives the document
+                      number tabular figures + a slightly heavier weight
+                      so it reads as the record's identifier, distinct
+                      from the title above it. */}
+                  <p className="dt-detail-docno">{selected.docNumber}</p>
                   {/* WORKFLOW FIX: surfaces the Registry Number / release
                       destination in the document's header info once
                       they've been saved, for everyone viewing this
@@ -1340,7 +1384,11 @@ export default function DocumentTracking() {
                       assign_handler() and its reassign-after-delete
                       exception — are untouched in routes/document.py. */}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                {/* UI REFINEMENT: the inline column wrapper is now
+                    .dt-head-actions — "Saved" note and Delete sit on
+                    one line, right-aligned, with Delete as a quiet
+                    outlined-red button (never a filled red block). */}
+                <div className="dt-head-actions">
                   <span className="dt-save-note">
                     {justSaved ? "Saved" : "\u00A0"}
                   </span>
@@ -1529,11 +1577,13 @@ export default function DocumentTracking() {
                                 needed, and this is purely an added display
                                 line — it doesn't affect stage.label,
                                 stage.detail, gating, or any other existing
-                                behavior. */}
-                            <p
-                              className="dt-step-detail"
-                              style={{ margin: "0 0 2px", fontSize: 11, fontWeight: 700, color: "var(--ink-mid)", letterSpacing: 0.2 }}
-                            >
+                                behavior.
+
+                                UI REFINEMENT: the inline style on this line
+                                moved into .dt-step-docno in the stylesheet
+                                (same text, same content) so it stays a
+                                quiet reference line above the stage name. */}
+                            <p className="dt-step-docno">
                               Document No: {selected.docNumber}
                             </p>
                             <p className="dt-step-label">{stage.label}</p>
@@ -1595,10 +1645,17 @@ export default function DocumentTracking() {
                             for whoever could manage personnel, letting an
                             admin pick the person for this step; that
                             control has been removed, so the name is
-                            simply displayed. */}
+                            simply displayed.
+
+                            UI REFINEMENT: the inline style on the name
+                            moved into .dt-handler-name, and
+                            data-unsigned lets the stylesheet mute the
+                            "Unsigned" placeholder so an empty stage
+                            reads as empty rather than as a person's
+                            name. The displayed text is unchanged. */}
                         <div className="dt-handler-row" style={{ marginTop: 6 }}>
                           <span className="dt-handler-label">Currently handling:</span>
-                          <span style={{ fontSize: 13, fontWeight: 700 }}>{stageHandlerName}</span>
+                          <span className="dt-handler-name" data-unsigned={stageIsUnassigned}>{stageHandlerName}</span>
                         </div>
 
                         {hasComments && isOpen && (
