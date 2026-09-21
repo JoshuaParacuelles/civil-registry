@@ -1385,6 +1385,197 @@
   .notif-skeleton-line.long  { width: 80%; }
   .notif-skeleton-line.short { width: 40%; }
 
+  /* Notification → request details modal.
+   Uses the design tokens already defined in home.css. */
+
+.notif-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2900;
+  padding: 20px;
+  backdrop-filter: blur(6px);
+}
+
+.notif-detail-modal {
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  animation: modalPop 0.22s ease;
+}
+
+.notif-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.notif-detail-heading { flex: 1; min-width: 0; }
+
+.notif-detail-heading h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.notif-detail-heading p {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.notif-detail-heading p strong {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.notif-detail-status {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  white-space: nowrap;
+}
+
+.notif-detail-status.approved,
+.notif-detail-status.released,
+.notif-detail-status.completed {
+  background: rgba(16, 185, 129, 0.10);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.notif-detail-status.rejected,
+.notif-detail-status.declined {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+.notif-detail-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.notif-detail-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.notif-detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 18px 18px;
+}
+
+.notif-detail-section { padding-top: 14px; }
+
+.notif-detail-section h3 {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notif-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.notif-detail-field { min-width: 0; }
+
+.notif-detail-field dt {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.notif-detail-field dd {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.notif-detail-signature {
+  display: block;
+  max-width: 100%;
+  max-height: 140px;
+  object-fit: contain;
+  background: var(--bg-surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+}
+
+.notif-detail-fallback {
+  padding-top: 14px;
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.notif-detail-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface-soft);
+  flex-shrink: 0;
+}
+
+.notif-detail-open-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 11px 18px;
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: var(--font);
+  cursor: pointer;
+  background: var(--accent-blue);
+  color: #ffffff;
+  transition: background 0.15s;
+}
+
+.notif-detail-open-btn:hover { background: #1d4ed8; }
+
+@media (max-width: 520px) {
+  .notif-detail-grid { grid-template-columns: 1fr; }
+  .notif-detail-footer { flex-wrap: wrap; }
+  .notif-detail-footer button { flex: 1; min-width: 120px; }
+}
   @keyframes shimmer {
     0%   { background-position:  200% 0; }
     100% { background-position: -200% 0; }

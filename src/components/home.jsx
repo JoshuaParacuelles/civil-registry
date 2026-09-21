@@ -23,6 +23,7 @@ import accountIcon   from "../assets/sidebar-icon/account.png";
 import logoutIcon    from "../assets/sidebar-icon/logout.png";
 
 import "./home.css";
+import "./notification-details.css";
 
 const MENU_KEYS = {
   DASHBOARD:         "Dashboard",
@@ -70,6 +71,78 @@ const NOTIF_TARGETS = {
   marriage: { menu: MENU_KEYS.MARRIAGE, permission: "marriage_verification" },
   death:    { menu: MENU_KEYS.DEATH,    permission: "death_verification" },
 };
+
+/* ── Details shown when a notification is clicked ─────────────
+   The backend stores everything the requester filled in as
+   `request_snapshot` on the notification, so no extra API call is
+   needed. Each entry is [column_name, label]. ── */
+const TYPE_SECTIONS = {
+  birth: {
+    title: "Child's information",
+    fields: [
+      ["child_firstname",  "First name"],
+      ["child_middlename", "Middle name"],
+      ["child_surname",    "Surname"],
+      ["birth_month",      "Birth month"],
+      ["birth_date",       "Birth day"],
+      ["birth_year",       "Birth year"],
+      ["place_of_birth",   "Place of birth"],
+    ],
+  },
+  death: {
+    title: "Deceased's information",
+    fields: [
+      ["deceased_firstname",  "First name"],
+      ["deceased_middlename", "Middle name"],
+      ["deceased_surname",    "Surname"],
+      ["death_month",         "Death month"],
+      ["death_date",          "Death day"],
+      ["death_year",          "Death year"],
+      ["place_of_death",      "Place of death"],
+    ],
+  },
+  marriage: {
+    title: "Marriage information",
+    fields: [
+      ["husband_fullname",  "Husband's full name"],
+      ["wife_maiden_name",  "Wife's maiden name"],
+      ["marriage_date",     "Date of marriage"],
+      ["place_of_marriage", "Place of marriage"],
+    ],
+  },
+};
+
+const COMMON_SECTIONS = [
+  {
+    title: "Request details",
+    fields: [
+      ["form_type",  "Form type"],
+      ["num_copies", "Number of copies"],
+      ["purposes",   "Purpose"],
+      ["search_by",  "Search by"],
+    ],
+  },
+  {
+    title: "Requester",
+    fields: [
+      ["requester_name",         "Name"],
+      ["requester_relationship", "Relationship to owner"],
+      ["requester_address",      "Address"],
+      ["requester_telephone",    "Telephone"],
+    ],
+  },
+  {
+    title: "Registry reference",
+    fields: [
+      ["registry_no",           "Registry no."],
+      ["date_of_registration",  "Date of registration"],
+      ["book",                  "Book"],
+      ["page",                  "Page"],
+    ],
+  },
+];
+
+const detailValue = (v) => (v === null || v === undefined || v === "" ? "—" : String(v));
 
 const getViewport = () => {
   const w = window.innerWidth;
@@ -217,6 +290,8 @@ const Home = () => {
   const [notifLoading, setNotifLoading]     = useState(true);   // first load only
   const [notifStatus, setNotifStatus]       = useState("connecting"); // connecting | live | error
   const notifWrapperRef = useRef(null);
+  const [selectedNotif, setSelectedNotif]   = useState(null);   // notification whose details are open
+  const [sigFailed, setSigFailed]           = useState(false);
 
   const vitalIsActive    = VITAL_CHILDREN.includes(activeSubMenu);
   const settingsIsActive = SETTINGS_CHILDREN.includes(activeSubMenu);
@@ -396,10 +471,18 @@ const Home = () => {
     if (viewport === "mobile") setMobileMenuOpen(false);
   }, [viewport]);
 
-  // Clicking a notification marks it read and opens the matching verifier.
+  // Clicking a notification marks it read and shows what the requester filled in.
   const handleNotifClick = (notif) => {
     markNotificationRead(notif);
+    setSigFailed(false);
+    setSelectedNotif(notif);
+    setNotifOpen(false);
+  };
 
+  const closeNotifDetails = useCallback(() => setSelectedNotif(null), []);
+
+  // "Open in verifier" button inside the details modal.
+  const openInVerifier = (notif) => {
     const target = NOTIF_TARGETS[notif.record_type];
     if (target && canAccess(target.permission)) {
       setActiveSubMenu(target.menu);
@@ -407,8 +490,16 @@ const Home = () => {
       try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
       closeMobileMenu();
     }
-    setNotifOpen(false);
+    setSelectedNotif(null);
   };
+
+  // Escape closes the details modal.
+  useEffect(() => {
+    if (!selectedNotif) return undefined;
+    const onKeyDown = (e) => { if (e.key === "Escape") closeNotifDetails(); };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selectedNotif, closeNotifDetails]);
 
   const handleMenuClick = (menu) => {
     if (menu === MENU_KEYS.VITAL) {
@@ -880,6 +971,102 @@ const Home = () => {
           {renderContent()}
         </main>
       </div>
+
+      {/* ── Request details (opens when a notification is clicked) ── */}
+      {selectedNotif && (() => {
+        const snap = selectedNotif.request_snapshot || {};
+        const type = selectedNotif.record_type;
+        const sections = [TYPE_SECTIONS[type], ...COMMON_SECTIONS].filter(Boolean);
+        const target = NOTIF_TARGETS[type];
+        const canOpen = target && canAccess(target.permission);
+        const showSignature = snap.has_signature && !sigFailed;
+
+        return (
+          <div className="notif-detail-overlay" onClick={closeNotifDetails}>
+            <div
+              className="notif-detail-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Request details"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="notif-detail-header">
+                <div className={`notif-icon-wrap ${target ? type : "system"}`}>
+                  <NotifTypeIcon type={type} />
+                </div>
+                <div className="notif-detail-heading">
+                  <h2>{selectedNotif.title || "Request details"}</h2>
+                  <p>
+                    Control No: <strong>{selectedNotif.control_no || "—"}</strong>
+                    {" · "}
+                    {timeAgo(selectedNotif.created_at)}
+                  </p>
+                </div>
+                {snap.status && (
+                  <span className={`notif-detail-status ${String(snap.status).toLowerCase()}`}>
+                    {snap.status}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="notif-detail-close"
+                  aria-label="Close"
+                  onClick={closeNotifDetails}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+
+              <div className="notif-detail-body">
+                {!selectedNotif.request_snapshot ? (
+                  <p className="notif-detail-fallback">{selectedNotif.message}</p>
+                ) : (
+                  sections.map((section) => (
+                    <section key={section.title} className="notif-detail-section">
+                      <h3>{section.title}</h3>
+                      <dl className="notif-detail-grid">
+                        {section.fields.map(([key, label]) => (
+                          <div key={key} className="notif-detail-field">
+                            <dt>{label}</dt>
+                            <dd>{detailValue(snap[key])}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </section>
+                  ))
+                )}
+
+                {showSignature && (
+                  <section className="notif-detail-section">
+                    <h3>Signature</h3>
+                    <img
+                      className="notif-detail-signature"
+                      src={`${NOTIF_API_BASE}/api/${type}/${selectedNotif.record_id}/signature`}
+                      alt="Requester signature"
+                      onError={() => setSigFailed(true)}
+                    />
+                  </section>
+                )}
+              </div>
+
+              <div className="notif-detail-footer">
+                <button type="button" className="logout-cancel-btn" onClick={closeNotifDetails}>
+                  Close
+                </button>
+                {canOpen && (
+                  <button
+                    type="button"
+                    className="notif-detail-open-btn"
+                    onClick={() => openInVerifier(selectedNotif)}
+                  >
+                    Open in {target.menu}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showLogoutModal && (
         <div
