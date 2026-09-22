@@ -147,6 +147,11 @@ const TYPE_SECTIONS = {
   },
 };
 
+// CHANGED: added `requester_email` (right after Telephone) so the
+// requester's email and phone number are both visible in the details
+// modal — previously only the phone number showed even though
+// `requester_email` is already stored on the request row and used by
+// email_service.send_status_update_email() to notify the citizen.
 const COMMON_SECTIONS = [
   {
     title: "Request details",
@@ -164,6 +169,7 @@ const COMMON_SECTIONS = [
       ["requester_relationship", "Relationship to owner"],
       ["requester_address",      "Address"],
       ["requester_telephone",    "Telephone"],
+      ["requester_email",        "Email"],
       ["signature_printed_name", "Signature over printed name"],
     ],
   },
