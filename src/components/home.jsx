@@ -46,8 +46,6 @@ const SETTINGS_CHILDREN = [MENU_KEYS.ACCOUNT, MENU_KEYS.AUDIT, MENU_KEYS.ROLE_MA
 const BP_TABLET_MAX = 1024;
 const BP_MOBILE_MAX = 767;
 
-const [sigFailed, setSigFailed]           = useState(false);
-const [sigZoomed, setSigZoomed]           = useState(false); // NEW
 // A session flag used to tell "this is a fresh login" apart from
 // "this is a refresh within the same still-logged-in session".
 const SESSION_FLAG_KEY = "homeSessionActive";
@@ -317,6 +315,7 @@ const Home = () => {
   const notifWrapperRef = useRef(null);
   const [selectedNotif, setSelectedNotif]   = useState(null);   // notification whose details are open
   const [sigFailed, setSigFailed]           = useState(false);
+  const [sigZoomed, setSigZoomed]           = useState(false);  // NEW: click-to-enlarge signature
 
   // Mirrors `notifications` for use inside the realtime callback below,
   // so that handler doesn't need to be re-subscribed on every state
@@ -567,14 +566,17 @@ const Home = () => {
   const handleNotifClick = (notif) => {
     markNotificationRead(notif);
     setSigFailed(false);
+    setSigZoomed(false);
     setSelectedNotif(notif);
     setNotifOpen(false);
   };
 
- const closeNotifDetails = useCallback(() => {
-  setSelectedNotif(null);
-  setSigZoomed(false);
-}, []);
+  // Closing the details modal also resets the signature zoom state so a
+  // stale enlarged image never lingers on the next notification opened.
+  const closeNotifDetails = useCallback(() => {
+    setSelectedNotif(null);
+    setSigZoomed(false);
+  }, []);
 
   // "Open in verifier" button inside the details modal.
   const openInVerifier = (notif) => {
@@ -588,13 +590,18 @@ const Home = () => {
     setSelectedNotif(null);
   };
 
-  // Escape closes the details modal.
+  // Escape closes the details modal (or just the zoomed image first, if open).
   useEffect(() => {
     if (!selectedNotif) return undefined;
-    const onKeyDown = (e) => { if (e.key === "Escape") closeNotifDetails(); };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        if (sigZoomed) setSigZoomed(false);
+        else closeNotifDetails();
+      }
+    };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [selectedNotif, closeNotifDetails]);
+  }, [selectedNotif, sigZoomed, closeNotifDetails]);
 
   const handleMenuClick = (menu) => {
     if (menu === MENU_KEYS.VITAL) {
@@ -1075,26 +1082,10 @@ const Home = () => {
         const target = NOTIF_TARGETS[type];
         const canOpen = target && canAccess(target.permission);
         const showSignature = snap.has_signature && !sigFailed;
+        const signatureUrl = `${NOTIF_API_BASE}/api/${type}/${selectedNotif.record_id}/signature`;
 
         return (
           <div className="notif-detail-overlay" onClick={closeNotifDetails}>
-            {sigZoomed && (
-  <div className="sig-zoom-overlay" onClick={() => setSigZoomed(false)}>
-    <img
-      className="sig-zoom-img"
-      src={`${NOTIF_API_BASE}/api/${type}/${selectedNotif.record_id}/signature`}
-      alt="Requester signature (enlarged)"
-    />
-    <button
-      type="button"
-      className="sig-zoom-close"
-      onClick={() => setSigZoomed(false)}
-      aria-label="Close"
-    >
-      <CloseIcon />
-    </button>
-  </div>
-)}
             <div
               className="notif-detail-modal"
               role="dialog"
@@ -1148,19 +1139,28 @@ const Home = () => {
                   ))
                 )}
 
-               {showSignature && (
-  <section className="notif-detail-section">
-    <h3>Signature</h3>
-    <img
-      className="notif-detail-signature"
-      src={`${NOTIF_API_BASE}/api/${type}/${selectedNotif.record_id}/signature`}
-      alt="Requester signature"
-      onError={() => setSigFailed(true)}
-      onClick={() => setSigZoomed(true)}
-      style={{ cursor: "zoom-in" }}
-    />
-  </section>
-)}
+                {showSignature && (
+                  <section className="notif-detail-section">
+                    <h3>Signature</h3>
+                    {/* NEW: click the thumbnail to view it full-size */}
+                    <img
+                      className="notif-detail-signature"
+                      src={signatureUrl}
+                      alt="Requester signature — click to enlarge"
+                      title="Click to enlarge"
+                      onError={() => setSigFailed(true)}
+                      onClick={() => setSigZoomed(true)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSigZoomed(true);
+                        }
+                      }}
+                    />
+                  </section>
+                )}
               </div>
 
               <div className="notif-detail-footer">
@@ -1178,6 +1178,35 @@ const Home = () => {
                 )}
               </div>
             </div>
+
+            {/* NEW: full-size signature lightbox */}
+            {sigZoomed && (
+              <div
+                className="sig-zoom-overlay"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSigZoomed(false);
+                }}
+              >
+                <img
+                  className="sig-zoom-img"
+                  src={signatureUrl}
+                  alt="Requester signature (enlarged)"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <button
+                  type="button"
+                  className="sig-zoom-close"
+                  aria-label="Close enlarged signature"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSigZoomed(false);
+                  }}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+            )}
           </div>
         );
       })()}
