@@ -94,6 +94,19 @@ const NOTIF_TARGETS = {
   death:    { menu: MENU_KEYS.DEATH,    permission: "death_verification" },
 };
 
+/* ── Citizen-request status controls (inline in the notification modal) ─
+   These call the MAIN app's own API (relative, same origin, session-based
+   — NOT NOTIF_API_BASE, which points at the separate public request
+   backend on port 5001 and has no session/auth of its own). ── */
+const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "READY_FOR_PICKUP", "COMPLETED", "REJECTED"];
+const REQUEST_STATUS_LABELS = {
+  PENDING: "Pending Review",
+  PROCESSING: "Being Processed",
+  READY_FOR_PICKUP: "Ready for Pickup",
+  COMPLETED: "Completed",
+  REJECTED: "Rejected",
+};
+
 /* ── Details shown when a notification is clicked ─────────────
    The backend stores everything the requester filled in as
    `request_snapshot` on the notification, so no extra API call is
@@ -313,9 +326,13 @@ const Home = () => {
   const [notifLoading, setNotifLoading]     = useState(true);   // first load only
   const [notifStatus, setNotifStatus]       = useState("connecting"); // connecting | live | error
   const notifWrapperRef = useRef(null);
-  const [selectedNotif, setSelectedNotif]   = useState(null);   // notification whose details are open
-  const [sigFailed, setSigFailed]           = useState(false);
-  const [sigZoomed, setSigZoomed]           = useState(false);  // NEW: click-to-enlarge signature
+  const [selectedNotif, setSelectedNotif] = useState(null);   // notification whose details are open
+  const [sigFailed, setSigFailed]         = useState(false);
+  const [sigZoomed, setSigZoomed]         = useState(false);  // NEW: click-to-enlarge signature
+  const [statusDraft, setStatusDraft]    = useState("");
+  const [statusNote, setStatusNote]      = useState("");
+  const [statusSaving, setStatusSaving]  = useState(false);
+  const [statusMsg, setStatusMsg]        = useState(null); // { type: "ok"|"err", text }
 
   // Mirrors `notifications` for use inside the realtime callback below,
   // so that handler doesn't need to be re-subscribed on every state
@@ -569,6 +586,11 @@ const Home = () => {
     setSigZoomed(false);
     setSelectedNotif(notif);
     setNotifOpen(false);
+    // NEW: seed the status editor from whatever the latest snapshot says,
+    // falling back to PENDING for a brand-new submission notification.
+    setStatusDraft((notif.request_snapshot?.status || "PENDING").toUpperCase());
+    setStatusNote("");
+    setStatusMsg(null);
   };
 
   // Closing the details modal also resets the signature zoom state so a
@@ -576,7 +598,48 @@ const Home = () => {
   const closeNotifDetails = useCallback(() => {
     setSelectedNotif(null);
     setSigZoomed(false);
+    setStatusDraft("");
+    setStatusNote("");
+    setStatusMsg(null);
   }, []);
+
+  // Updates the citizen request's status via the main app's own
+  // session-gated endpoint. On success, refreshes this notification's
+  // snapshot locally so the modal reflects the new status immediately,
+  // and the citizen sees it live via the same Supabase Realtime channel
+  // this bell already subscribes to (a fresh "…Request Update"
+  // notification lands for the new status change).
+  const updateRequestStatus = async () => {
+    if (!selectedNotif?.record_id) return;
+    setStatusSaving(true);
+    setStatusMsg(null);
+    try {
+      const res = await fetch(`/api/requests/${selectedNotif.record_id}/status`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: statusDraft, note: statusNote.trim() || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      setStatusMsg({ type: "ok", text: `Updated to ${data.status_label}. Citizen notified.` });
+      setSelectedNotif((prev) =>
+        prev
+          ? {
+              ...prev,
+              request_snapshot: { ...(prev.request_snapshot || {}), status: data.status },
+            }
+          : prev
+      );
+      setStatusNote("");
+    } catch (err) {
+      setStatusMsg({ type: "err", text: err.message || "Could not update status." });
+    } finally {
+      setStatusSaving(false);
+    }
+  };
 
   // "Open in verifier" button inside the details modal.
   const openInVerifier = (notif) => {
@@ -1159,6 +1222,44 @@ const Home = () => {
                         }
                       }}
                     />
+                  </section>
+                )}
+
+                {canAccess("citizen_requests") && (
+                  <section className="notif-detail-section">
+                    <h3>Request Status</h3>
+                    <div className="notif-status-editor">
+                      <select
+                        className="notif-status-select"
+                        value={statusDraft}
+                        onChange={(e) => setStatusDraft(e.target.value)}
+                        disabled={statusSaving}
+                      >
+                        {REQUEST_STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{REQUEST_STATUS_LABELS[s]}</option>
+                        ))}
+                      </select>
+                      <textarea
+                        className="notif-status-note"
+                        placeholder="Optional note to include in the citizen's notification…"
+                        value={statusNote}
+                        onChange={(e) => setStatusNote(e.target.value)}
+                        disabled={statusSaving}
+                      />
+                      <button
+                        type="button"
+                        className="notif-status-update-btn"
+                        onClick={updateRequestStatus}
+                        disabled={statusSaving}
+                      >
+                        {statusSaving ? "Updating…" : "Update Status"}
+                      </button>
+                      {statusMsg && (
+                        <p className={`notif-status-msg notif-status-msg--${statusMsg.type}`}>
+                          {statusMsg.text}
+                        </p>
+                      )}
+                    </div>
                   </section>
                 )}
               </div>
