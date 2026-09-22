@@ -386,6 +386,7 @@
   transition: all 0.15s;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
 }
 
 .btn-primary {
@@ -980,7 +981,18 @@
 }
 .modal-box h3 { margin: 0 0 7px; font-size: 15px; font-weight: 700; color: var(--txt); font-family: var(--fh); }
 .modal-box p  { margin: 0 0 16px; font-size: 12.5px; color: var(--txt2); line-height: 1.6; }
-.modal-acts   { display: flex; gap: 7px; justify-content: flex-end; flex-wrap: wrap; }
+/* FIX (button-shape bug): this row previously had no align-items, so it
+   defaulted to the browser's initial "stretch" behavior. Whenever the
+   modal message text wrapped or a sibling button/element in this row
+   was taller than usual, every .btn / .modal-cancel / .modal-confirm
+   button in the row was silently stretched to match that height —
+   turning a normal ~34px pill button into a tall, misshapen rectangle,
+   with no code change required to trigger it (just different content).
+   This reproduces at any screen width, including normal desktop sizes,
+   because the modal's max-width is fixed regardless of viewport.
+   Adding align-items: center locks every button in this row back to
+   its natural, consistent height/shape. */
+.modal-acts   { display: flex; gap: 7px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
 
 .modal-cancel {
   padding: 7px 14px;
@@ -994,6 +1006,7 @@
   font-family: var(--f);
   transition: all 0.15s;
   touch-action: manipulation;
+  flex-shrink: 0;
 }
 .modal-cancel:hover { background: #1d4ed8 !important; color: #ffffff !important; }
 
@@ -1008,6 +1021,7 @@
   font-family: var(--f);
   transition: filter 0.15s, transform 0.15s;
   touch-action: manipulation;
+  flex-shrink: 0;
 }
 .modal-confirm:hover { filter: brightness(0.92); transform: translateY(-1px); }
 
@@ -1217,7 +1231,7 @@
   flex-shrink: 0;
   color: var(--txt3);
 }
-.pdf-hdr-btns   { display: flex; gap: 5px; flex-shrink: 0; }
+.pdf-hdr-btns   { display: flex; gap: 5px; flex-shrink: 0; align-items: center; }
 .pdf-body       { flex: 1; overflow: hidden; background: var(--bg); }
 
 .pdf-body__iframe {
@@ -1239,6 +1253,7 @@
   transition: filter 0.12s, transform 0.12s;
   white-space: nowrap;
   touch-action: manipulation;
+  flex-shrink: 0;
 }
 .hdr-btn:hover        { filter: brightness(0.92); transform: translateY(-1px); }
 .hdr-btn--print       { background: #2563eb !important; }
@@ -1407,7 +1422,7 @@
 .tbl-file__icon  { font-size: 14px; flex-shrink: 0; display: flex; align-items: center; color: var(--txt3); }
 .tbl-file__icon svg { width: 14px; height: 14px; }
 .tbl-file-name   { font-weight: 600; color: var(--txt); font-size: 12.5px; }
-.tbl-acts        { display: flex; gap: 3px; flex-wrap: wrap; }
+.tbl-acts        { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
 
 .tbl-loading {
   padding: 32px;
@@ -1531,7 +1546,15 @@
   -webkit-overflow-scrolling: touch;
   background: #ffffff;
 }
-.upl-foot { display: flex; justify-content: flex-end; gap: 7px; padding-top: 6px; flex-wrap: wrap; }
+/* FIX (button-shape bug): same missing-align-items issue as .modal-acts
+   above — this row holds the "Cancel" / "Upload N Files" (or "Done")
+   buttons in the upload modal. Without align-items: center it defaulted
+   to "stretch", so any wrap in the queue/status text above it, or any
+   height difference between the two buttons (e.g. one showing a spinner
+   + longer label like "Uploading…"), stretched both buttons out of
+   their normal pill shape. Locking align-items: center keeps their
+   height fixed and consistent, matching how they're supposed to look. */
+.upl-foot { display: flex; justify-content: flex-end; align-items: center; gap: 7px; padding-top: 6px; flex-wrap: wrap; }
 
 .upl-limit-row         { display: flex; align-items: center; justify-content: space-between; gap: 7px; flex-wrap: wrap; }
 .upl-limit-reached-msg { font-size: 11px; color: var(--red); font-weight: 600; }
@@ -1706,6 +1729,7 @@
   align-items: center;
   justify-content: center;
   color: var(--blue);
+  flex-shrink: 0;
 }
 .pw-gate__icon svg { width: 22px; height: 22px; }
 .pw-gate__desc    { font-size: 12.5px; color: var(--txt2); text-align: center; max-width: 340px; line-height: 1.65; }
