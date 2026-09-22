@@ -128,6 +128,7 @@ const COMMON_SECTIONS = [
       ["requester_relationship", "Relationship to owner"],
       ["requester_address",      "Address"],
       ["requester_telephone",    "Telephone"],
+      ["signature_printed_name", "Signature over printed name"],
     ],
   },
   {
