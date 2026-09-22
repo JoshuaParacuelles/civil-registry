@@ -379,13 +379,7 @@
   height: 34px;
   padding: 0 14px;
   border: none;
-  /* FIX (button-shape): restored the full pill/capsule corner radius
-     this button originally had. It had been reduced to var(--r-sm)
-     (a small 7px radius), which rendered as a rounded rectangle instead
-     of the fully-rounded pill shape shown in the reference screenshots.
-     999px always clamps to a full pill regardless of the button's
-     actual height. */
-  border-radius: 999px;
+  border-radius: 999px;   /* ← pill shape: correct, matches Back/Proceed/Release/Unlock */
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -397,11 +391,6 @@
   transition: all 0.15s;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  /* FIX (button-shape): base .btn is reused inside several flex rows
-     (upload/cancel footers, modal footers, etc.) that don't set their
-     own align-items. Without a shrink/grow lock, the fixed height:34px
-     above gets overridden by flex "stretch" and the button appears
-     squashed or elongated instead of its normal pill shape. */
   flex-shrink: 0;
   flex-grow: 0;
 }
@@ -575,10 +564,7 @@
   height: 36px;
   padding: 0 18px;
   border: none;
-  /* FIX (button-shape): restored the full pill/capsule corner radius
-     this button originally had (previously var(--r-sm), a small 7px
-     radius that rendered as a rounded rectangle). */
-  border-radius: 999px;
+  border-radius: var(--r-sm);   /* ← reverted: rounded rectangle, matches reference */
   background: #2563eb !important;
   color: #fff !important;
   font-size: 12.5px;
@@ -775,9 +761,7 @@
 .select-btn {
   min-width: 90px;
   padding: 5px 12px;
-  /* FIX (button-shape): restored the full pill/capsule corner radius
-     this button originally had (previously a hardcoded 5px). */
-  border-radius: 999px;
+  border-radius: 5px;   /* ← reverted: rounded rectangle, matches reference */
   border: 1.5px solid #2563eb;
   background: #2563eb !important;
   color: #fff !important;
@@ -788,8 +772,6 @@
   white-space: nowrap;
   transition: all 0.15s;
   touch-action: manipulation;
-  /* FIX (button-shape): same shrink/grow lock as .view-pdf-btn so the
-     two action buttons stay the same consistent height/shape. */
   flex-shrink: 0;
   flex-grow: 0;
 }
