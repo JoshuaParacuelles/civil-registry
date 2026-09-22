@@ -46,6 +46,8 @@ const SETTINGS_CHILDREN = [MENU_KEYS.ACCOUNT, MENU_KEYS.AUDIT, MENU_KEYS.ROLE_MA
 const BP_TABLET_MAX = 1024;
 const BP_MOBILE_MAX = 767;
 
+const [sigFailed, setSigFailed]           = useState(false);
+const [sigZoomed, setSigZoomed]           = useState(false); // NEW
 // A session flag used to tell "this is a fresh login" apart from
 // "this is a refresh within the same still-logged-in session".
 const SESSION_FLAG_KEY = "homeSessionActive";
@@ -569,7 +571,10 @@ const Home = () => {
     setNotifOpen(false);
   };
 
-  const closeNotifDetails = useCallback(() => setSelectedNotif(null), []);
+ const closeNotifDetails = useCallback(() => {
+  setSelectedNotif(null);
+  setSigZoomed(false);
+}, []);
 
   // "Open in verifier" button inside the details modal.
   const openInVerifier = (notif) => {
@@ -1073,6 +1078,23 @@ const Home = () => {
 
         return (
           <div className="notif-detail-overlay" onClick={closeNotifDetails}>
+            {sigZoomed && (
+  <div className="sig-zoom-overlay" onClick={() => setSigZoomed(false)}>
+    <img
+      className="sig-zoom-img"
+      src={`${NOTIF_API_BASE}/api/${type}/${selectedNotif.record_id}/signature`}
+      alt="Requester signature (enlarged)"
+    />
+    <button
+      type="button"
+      className="sig-zoom-close"
+      onClick={() => setSigZoomed(false)}
+      aria-label="Close"
+    >
+      <CloseIcon />
+    </button>
+  </div>
+)}
             <div
               className="notif-detail-modal"
               role="dialog"
@@ -1126,17 +1148,19 @@ const Home = () => {
                   ))
                 )}
 
-                {showSignature && (
-                  <section className="notif-detail-section">
-                    <h3>Signature</h3>
-                    <img
-                      className="notif-detail-signature"
-                      src={`${NOTIF_API_BASE}/api/${type}/${selectedNotif.record_id}/signature`}
-                      alt="Requester signature"
-                      onError={() => setSigFailed(true)}
-                    />
-                  </section>
-                )}
+               {showSignature && (
+  <section className="notif-detail-section">
+    <h3>Signature</h3>
+    <img
+      className="notif-detail-signature"
+      src={`${NOTIF_API_BASE}/api/${type}/${selectedNotif.record_id}/signature`}
+      alt="Requester signature"
+      onError={() => setSigFailed(true)}
+      onClick={() => setSigZoomed(true)}
+      style={{ cursor: "zoom-in" }}
+    />
+  </section>
+)}
               </div>
 
               <div className="notif-detail-footer">
