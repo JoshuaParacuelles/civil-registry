@@ -1551,6 +1551,59 @@
   outline-offset: 2px;
 }
 
+.notif-status-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notif-status-select,
+.notif-status-note {
+  border: 1px solid #dde6f2;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  outline: none;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.notif-status-note {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.notif-status-update-btn {
+  align-self: flex-start;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #185fa5;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.notif-status-update-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.notif-status-msg {
+  font-size: 0.76rem;
+  margin: 0;
+}
+
+.notif-status-msg--ok {
+  color: #2f6b1f;
+}
+
+.notif-status-msg--err {
+  color: #a32d2d;
+}
+
 /* ── Signature lightbox (click-to-enlarge) ── */
 .sig-zoom-overlay {
   position: fixed;
