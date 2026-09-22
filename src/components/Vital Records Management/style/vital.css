@@ -380,6 +380,18 @@
   padding: 0 14px;
   border: none;
   border-radius: 999px;   /* ← pill shape: correct, matches Back/Proceed/Release/Unlock */
+  /* FIX (button-shape/desktop-distortion): explicitly reset native button
+     appearance. Without this, a plain <button> can be painted using the
+     browser's platform-native control shape on a normal (non-DevTools)
+     desktop window, which fights with our border-radius: 999px pill and
+     renders it stretched/oval (seen on "Proceed →", "← Back", etc.),
+     even though the same CSS renders correctly in DevTools' responsive/
+     device-emulation mode (which always uses the CSS-painted path, not
+     the native one). appearance: none forces our own pill shape to be
+     used consistently in every environment/screen size. */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
