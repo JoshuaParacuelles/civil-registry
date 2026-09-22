@@ -186,6 +186,12 @@
   background: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  /* FIX: the tab-bar row is flex-wrap: nowrap (.ubr-header__tabs above), so
+     without flex-shrink: 0 these buttons could be squeezed narrower than
+     their own padding/label at tight header widths instead of keeping a
+     consistent pill shape — locking flex-shrink: 0 keeps their size stable
+     across all screen sizes. */
+  flex-shrink: 0;
 }
 
 .ubr-tab-btn__icon  { font-size: 13px; }
@@ -548,6 +554,13 @@
   margin-top: 2px;
 }
 
+/* FIX: .search-btn previously had no `display: inline-flex`, so the
+   `justify-content: center` rule set for it in the 480px media query
+   below had no effect (justify-content only works on a flex/grid
+   container) and its text centering wasn't guaranteed to match every
+   other button in the app. Adding display/align-items/justify-content
+   here makes it behave exactly like the rest of the button set — same
+   centering, same shape — on every screen size. */
 .search-btn {
   height: 36px;
   padding: 0 18px;
@@ -561,6 +574,9 @@
   font-family: var(--f);
   white-space: nowrap;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.15s;
   touch-action: manipulation;
   align-self: flex-end;
@@ -728,6 +744,10 @@
   transition: all 0.15s;
   line-height: 1;
   touch-action: manipulation;
+  /* FIX: without flex-shrink: 0 this button could shrink differently than
+     its sibling .select-btn inside .result-row__actions at tight widths,
+     breaking the matched "View" / "Select →" button pair shape. */
+  flex-shrink: 0;
 }
 .view-pdf-btn:hover:not(:disabled) {
   background: #1d4ed8 !important;
@@ -738,6 +758,15 @@
 }
 .view-pdf-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
+/* FIX: .select-btn sits directly beside .view-pdf-btn in every result
+   row but was missing display: inline-flex / align-items / justify-content
+   / flex-shrink that .view-pdf-btn has. Both buttons share near-identical
+   padding/border/font-size, so this was a subtle inconsistency rather than
+   a dramatic visual break, but it meant the pair's height/centering could
+   drift apart depending on font rendering, and .select-btn had no
+   protection from being squeezed at tight widths. Matching the two
+   buttons' box model exactly keeps their shape and size perfectly
+   consistent on every screen size. */
 .select-btn {
   min-width: 90px;
   padding: 5px 12px;
@@ -750,6 +779,10 @@
   cursor: pointer;
   font-family: var(--f);
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   transition: all 0.15s;
   touch-action: manipulation;
 }
@@ -769,6 +802,11 @@
 }
 .no-results__title { font-size: 14px; font-weight: 700; color: var(--txt); margin: 0; }
 
+/* FIX: .neg-btn ("Issue Negative Certificate") had no flex centering or
+   flex-shrink: 0, so it could get squeezed out of shape when it wraps
+   next to the "Not the right person?" text inside .no-match-alt at
+   narrow widths. Matching it to the other pill buttons keeps its shape
+   consistent everywhere it appears. */
 .neg-btn {
   padding: 7px 14px;
   border-radius: 5px;
@@ -779,6 +817,10 @@
   font-weight: 700;
   cursor: pointer;
   font-family: var(--f);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   transition: all 0.15s;
   touch-action: manipulation;
 }
@@ -1323,6 +1365,12 @@
 .tab-hdr__info p   { font-size: 11px; color: var(--txt2); margin-top: 1px; margin-bottom: 0; }
 .tab-hdr__space    { flex: 1; min-width: 0; }
 
+/* FIX: .upload-btn had no flex-shrink: 0. .tab-hdr wraps onto a new line
+   at very tight widths rather than compress its children, but right up
+   to that wrap point the button was still a shrinkable flex item and
+   could momentarily lose its consistent shape before wrapping. Locking
+   flex-shrink: 0 keeps it a stable, predictable size on every screen
+   size. */
 .upload-btn {
   display: inline-flex;
   align-items: center;
