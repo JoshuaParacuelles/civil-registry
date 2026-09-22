@@ -36,16 +36,19 @@
 
   /* Green */
   --green:    #059669;
+  --green-d:  #047857;
   --green-lt: rgba(5, 150, 105, 0.08);
   --green-bd: rgba(5, 150, 105, 0.30);
 
   /* Red */
   --red:    #dc2626;
+  --red-d:  #b91c1c;
   --red-lt: rgba(220, 38, 38, 0.07);
   --red-bd: rgba(220, 38, 38, 0.25);
 
   /* Amber */
   --amber:    #d97706;
+  --amber-d:  #b45309;
   --amber-lt: rgba(217, 119, 6, 0.08);
 
   /* Purple */
@@ -169,6 +172,9 @@
 }
 
 /* ── TAB BUTTONS ──────────────────────────────────────────────────────── */
+/* Navigation tabs keep the primary blue treatment — they are wayfinding
+   controls, not functional action buttons, so they stay visually distinct
+   from the semantic action-button colors used elsewhere in this file. */
 .ubr-tab-btn {
   padding: 6px 13px;
   border-radius: 8px;
@@ -395,6 +401,8 @@
   flex-shrink: 0;
 }
 
+/* .btn-primary — the main forward/confirm action in a flow (e.g.
+   "Proceed →", "Upload N Files"). Stays primary blue. */
 .btn-primary {
   background: #2563eb !important;
   color: #ffffff !important;
@@ -412,32 +420,43 @@
   cursor: not-allowed;
   box-shadow: none;
 }
+
+/* .btn-secondary — low-emphasis / neutral action (e.g. "← Back",
+   "Cancel"). Changed from a solid blue button (which made it compete
+   visually with the primary action) to a quiet outlined/neutral style,
+   so the primary action in any button pair is always the obvious one. */
 .btn-secondary {
-  background: #2563eb !important;
-  color: #ffffff !important;
-  border: 1px solid transparent;
-  box-shadow: 0 2px 8px rgba(37,99,235,0.20);
+  background: #ffffff !important;
+  color: var(--txt2) !important;
+  border: 1.5px solid var(--border-strong);
+  box-shadow: none;
 }
 .btn-secondary:hover:not(:disabled) {
-  background: #1d4ed8 !important;
-  color: #ffffff !important;
+  background: var(--surf-2) !important;
+  color: var(--txt) !important;
+  border-color: var(--txt3);
   transform: translateY(-1px);
 }
 .btn-secondary:disabled {
-  background: rgba(37,99,235,0.35) !important;
+  background: #ffffff !important;
+  color: var(--txt3) !important;
+  border-color: var(--border-lt);
   cursor: not-allowed;
   box-shadow: none;
 }
 
+/* .btn-success — positive/confirming action. Changed from blue to green
+   so it visually matches its semantic meaning (kept for any current or
+   future "success"-style call to action, e.g. a completed/confirm step). */
 .btn-success {
-  background: #2563eb !important;
+  background: #059669 !important;
   color: #fff !important;
-  box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+  box-shadow: 0 2px 8px rgba(5,150,105,0.25);
   min-width: 130px;
   justify-content: center;
 }
-.btn-success:hover:not(:disabled) { background: #1d4ed8 !important; transform: translateY(-1px); }
-.btn-success:disabled { background: rgba(37,99,235,0.30) !important; cursor: not-allowed; }
+.btn-success:hover:not(:disabled) { background: #047857 !important; transform: translateY(-1px); }
+.btn-success:disabled { background: rgba(5,150,105,0.30) !important; cursor: not-allowed; }
 
 .btn .spinner { flex-shrink: 0; }
 
@@ -458,11 +477,14 @@
   touch-action: manipulation;
 }
 .tbl-btn:hover      { filter: brightness(0.92); transform: translateY(-1px); }
+/* Table-row action buttons — color now maps to what each button does:
+   blue = view/info, purple = reserved secondary accent, amber = caution,
+   green = restore (positive), red = delete (destructive). */
 .tbl-btn--blue      { background: #2563eb !important; }
-.tbl-btn--purple    { background: #2563eb !important; }
-.tbl-btn--amber     { background: #2563eb !important; color: #fff !important; }
-.tbl-btn--green     { background: #2563eb !important; }
-.tbl-btn--red       { background: #2563eb !important; }
+.tbl-btn--purple    { background: #7c3aed !important; }
+.tbl-btn--amber     { background: #d97706 !important; color: #fff !important; }
+.tbl-btn--green     { background: #059669 !important; }
+.tbl-btn--red       { background: #dc2626 !important; }
 
 /* ── SPINNER ──────────────────────────────────────────────────────────── */
 .spinner {
@@ -561,6 +583,7 @@
    other button in the app. Adding display/align-items/justify-content
    here makes it behave exactly like the rest of the button set — same
    centering, same shape — on every screen size. */
+/* .search-btn — primary action for this form (kept primary blue). */
 .search-btn {
   height: 36px;
   padding: 0 18px;
@@ -724,14 +747,16 @@
 .parent-chip--father { color: var(--blue) !important; }
 .parent-chip--mother { color: var(--pink) !important; }
 
+/* .view-pdf-btn — informational action (opens a PDF preview). Stays blue
+   to match the other "view/info" actions (e.g. .tbl-btn--blue). */
 .view-pdf-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   vertical-align: middle;
   gap: 4px;
-  min-width: 72px;
-  padding: 5px 11px;
+  min-width: 80px;
+  padding: 5px 12px;
   border-radius: 5px;
   border: 1.5px solid #2563eb;
   background: #2563eb !important;
@@ -766,13 +791,17 @@
    drift apart depending on font rendering, and .select-btn had no
    protection from being squeezed at tight widths. Matching the two
    buttons' box model exactly keeps their shape and size perfectly
-   consistent on every screen size. */
+   consistent on every screen size. min-width/padding are now identical to
+   .view-pdf-btn so the pair reads as one consistent button group. */
+/* .select-btn — a positive/confirming action (choosing a record to work
+   with). Changed from blue to green so "Select" reads distinctly from
+   "View" while still following the same shape/sizing rules. */
 .select-btn {
-  min-width: 90px;
+  min-width: 80px;
   padding: 5px 12px;
   border-radius: 5px;
-  border: 1.5px solid #2563eb;
-  background: #2563eb !important;
+  border: 1.5px solid #059669;
+  background: #059669 !important;
   color: #fff !important;
   font-size: 11.5px;
   font-weight: 700;
@@ -786,9 +815,9 @@
   transition: all 0.15s;
   touch-action: manipulation;
 }
-.select-btn:hover           { background: #1d4ed8 !important; border-color: #1d4ed8; color: #fff !important; }
-.select-btn--selected       { background: #1d4ed8 !important; color: #fff !important; border-color: #1d4ed8; cursor: default; }
-.select-btn--selected:hover { background: #1d4ed8 !important; }
+.select-btn:hover           { background: #047857 !important; border-color: #047857; color: #fff !important; }
+.select-btn--selected       { background: #047857 !important; color: #fff !important; border-color: #047857; cursor: default; }
+.select-btn--selected:hover { background: #047857 !important; }
 
 .select-btn .spinner { flex-shrink: 0; }
 
@@ -807,11 +836,14 @@
    next to the "Not the right person?" text inside .no-match-alt at
    narrow widths. Matching it to the other pill buttons keeps its shape
    consistent everywhere it appears. */
+/* .neg-btn — a caution/exception-path action (issuing a certificate that
+   confirms NO record was found). Changed from blue to amber so it reads
+   as a distinct, deliberate branch rather than a routine primary action. */
 .neg-btn {
   padding: 7px 14px;
   border-radius: 5px;
-  border: 1.5px solid rgba(37,99,235,0.30);
-  background: #2563eb !important;
+  border: 1.5px solid rgba(217,119,6,0.35);
+  background: #d97706 !important;
   color: #fff !important;
   font-size: 12px;
   font-weight: 700;
@@ -824,7 +856,7 @@
   transition: all 0.15s;
   touch-action: manipulation;
 }
-.neg-btn:hover { background: #1d4ed8 !important; border-color: #1d4ed8; color: #fff !important; }
+.neg-btn:hover { background: #b45309 !important; border-color: #b45309; color: #fff !important; }
 
 .no-match-alt {
   display: flex;
@@ -1036,12 +1068,15 @@
    its natural, consistent height/shape. */
 .modal-acts   { display: flex; gap: 7px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
 
+/* .modal-cancel — neutral/low-emphasis action (dismiss without acting).
+   Changed from solid blue to a quiet outlined/neutral style so it never
+   competes visually with the modal's actual confirm action. */
 .modal-cancel {
   padding: 7px 14px;
   border-radius: var(--r-sm);
-  border: 1px solid transparent;
-  background: #2563eb !important;
-  color: #ffffff !important;
+  border: 1px solid var(--border-strong);
+  background: #ffffff !important;
+  color: var(--txt2) !important;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -1050,7 +1085,7 @@
   touch-action: manipulation;
   flex-shrink: 0;
 }
-.modal-cancel:hover { background: #1d4ed8 !important; color: #ffffff !important; }
+.modal-cancel:hover { background: var(--surf-2) !important; color: var(--txt) !important; border-color: var(--txt3); }
 
 .modal-confirm {
   padding: 7px 14px;
@@ -1067,9 +1102,13 @@
 }
 .modal-confirm:hover { filter: brightness(0.92); transform: translateY(-1px); }
 
-.modal-confirm--red    { background: #2563eb !important; }
+/* Confirm-button variants now map to what the confirmed action actually
+   does: red = destructive (Delete), green = positive (Restore), blue =
+   neutral confirm. Components pass the matching class/inline color based
+   on the action being confirmed. */
+.modal-confirm--red    { background: #dc2626 !important; }
 .modal-confirm--blue   { background: #2563eb !important; }
-.modal-confirm--green  { background: #2563eb !important; }
+.modal-confirm--green  { background: #059669 !important; }
 
 /* ── NEGATIVE CERTIFICATE INFO MODAL ─────────────────────────────────── */
 .negcert-info-modal {
@@ -1212,13 +1251,16 @@
   margin-top: 12px;
 }
 
+/* .negcert-info-modal__submit — submits the "no record found" negative
+   certificate flow. Uses the same amber as .neg-btn so the whole negative-
+   certificate path reads as one consistent, deliberate action color. */
 .negcert-info-modal__submit {
   white-space: nowrap;
-  background: #2563eb !important;
+  background: #d97706 !important;
   color: #ffffff !important;
 }
 .negcert-info-modal__submit:hover {
-  background: #1d4ed8 !important;
+  background: #b45309 !important;
 }
 
 /* ── PDF OVERLAY ──────────────────────────────────────────────────────── */
@@ -1298,9 +1340,12 @@
   flex-shrink: 0;
 }
 .hdr-btn:hover        { filter: brightness(0.92); transform: translateY(-1px); }
+/* Print/Download stay primary blue (forward actions); Close becomes a
+   neutral slate so it doesn't visually compete with Print as if it were
+   an equally important action. */
 .hdr-btn--print       { background: #2563eb !important; }
 .hdr-btn--dl          { background: #2563eb !important; }
-.hdr-btn--close       { background: #2563eb !important; }
+.hdr-btn--close       { background: #64748b !important; }
 
 .print-iframe {
   position: fixed;
@@ -1371,6 +1416,7 @@
    could momentarily lose its consistent shape before wrapping. Locking
    flex-shrink: 0 keeps it a stable, predictable size on every screen
    size. */
+/* .upload-btn — primary action (adding new records). Stays primary blue. */
 .upload-btn {
   display: inline-flex;
   align-items: center;
@@ -1565,24 +1611,28 @@
 .upl-hdr__icon svg { width: 14px; height: 14px; }
 .upl-hdr__title  { font-size: 13px; font-weight: 700; color: var(--txt); }
 .upl-hdr__sub    { font-size: 10px; color: var(--txt3); margin-top: 1px; }
+/* .upl-close — dismiss action for the upload dialog. Changed from solid
+   blue to a neutral outline that turns red on hover, the common "close /
+   discard" pattern, so it's clearly distinct from the primary Upload CTA
+   inside the same modal. */
 .upl-close {
   width: 26px;
   height: 26px;
-  border: 1px solid #2563eb;
-  background: #2563eb !important;
+  border: 1px solid var(--border-strong);
+  background: #ffffff !important;
   border-radius: 5px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #ffffff !important;
+  color: var(--txt2) !important;
   flex-shrink: 0;
   margin-left: auto;
   touch-action: manipulation;
   transition: all 0.15s;
 }
-.upl-close:hover { background: #1d4ed8 !important; border-color: #1d4ed8; color: #ffffff !important; }
+.upl-close:hover { background: var(--red-lt) !important; border-color: var(--red-bd); color: var(--red) !important; }
 
 .upl-body {
   flex: 1;
@@ -1671,7 +1721,10 @@
   color: var(--blue);
   gap: 7px;
 }
-.upl-queue__clear-btn { background: none; border: none; font-size: 11px; color: var(--blue); font-weight: 700; cursor: pointer; }
+/* .upl-queue__clear-btn — removes every queued file at once (bulk,
+   destructive within the modal). Colored red to match .upl-queue__remove
+   below rather than the neutral blue text link it used before. */
+.upl-queue__clear-btn { background: none; border: none; font-size: 11px; color: var(--red); font-weight: 700; cursor: pointer; }
 
 .upl-queue__item {
   display: flex;
@@ -1713,19 +1766,22 @@
 .upl-queue__status--done      { background: var(--green-lt); color: var(--green); border: 1px solid var(--green-bd); }
 .upl-queue__status--error     { background: var(--red-lt); color: var(--red); border: 1px solid var(--red-bd); }
 
+/* .upl-queue__remove — removes a single queued file (a small delete
+   action), so it now uses red instead of blue to match .tbl-btn--red /
+   .modal-confirm--red elsewhere in the app. */
 .upl-queue__remove {
   background: none;
   border: none;
   cursor: pointer;
   font-size: 12px;
-  color: var(--blue);
+  color: var(--red);
   padding: 2px 3px;
   border-radius: 3px;
   transition: color 0.12s, background 0.12s;
   flex-shrink: 0;
   touch-action: manipulation;
 }
-.upl-queue__remove:hover { color: var(--blue-d); background: var(--blue-lt); }
+.upl-queue__remove:hover { color: #b91c1c; background: var(--red-lt); }
 
 .upl-matches-hdr {
   display: flex;
@@ -1782,6 +1838,8 @@
 .pw-gate__icon svg { width: 22px; height: 22px; }
 .pw-gate__desc    { font-size: 12.5px; color: var(--txt2); text-align: center; max-width: 340px; line-height: 1.65; }
 .pw-gate__form    { width: 100%; max-width: 300px; display: flex; flex-direction: column; gap: 7px; }
+/* .pw-gate__submit-btn — the primary submit action for this form; stays
+   primary blue (uses .btn.btn-primary as its base). */
 .pw-gate__submit-btn {
   background: #2563eb !important;
   color: #ffffff !important;
@@ -1895,6 +1953,7 @@
   letter-spacing: 0.3px;
   flex-shrink: 0;
 }
+/* .pdf-inline-print-btn — primary forward action (Print). Stays blue. */
 .pdf-inline-print-btn {
   display: inline-flex;
   align-items: center;
