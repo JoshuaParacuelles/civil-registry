@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { supabase } from "./supabaseClient";
 import ChangePassword from "./Account Settings/ChangePassword";
 import AuditLogs from "./Account Settings/AuditLogs";
 import RoleManagement from "./Account Settings/RoleManagement";
@@ -50,19 +51,41 @@ const BP_MOBILE_MAX = 767;
 const SESSION_FLAG_KEY = "homeSessionActive";
 
 /* ── Notifications: backend + behaviour ───────────────────────
-   NOTIF_API_BASE points at the Flask request backend (request.py,
-   port 5001), which serves:
-     GET   /api/notifications
-     GET   /api/notifications/unread-count
-     PATCH /api/notifications/<id>/read
-     PATCH /api/notifications/mark-all-read
-   Override it with VITE_REQUEST_API_URL in your .env if the backend
-   lives somewhere else (or set it to "" if you proxy /api instead). ── */
+   CHANGED: notifications no longer poll backend/request.py over
+   plain HTTP for reads/writes. That backend (the public Request
+   website's Flask server) can spin down when idle (Render free-tier
+   cold start), which is exactly why the bell used to go "offline"
+   whenever nobody had the Request page open recently — Admin's poll
+   was hitting a sleeping server.
+
+   Notifications now read and write the shared Supabase `notification`
+   table directly (see supabaseClient.js), and get pushed live via a
+   Supabase Realtime `postgres_changes` subscription. Supabase itself
+   is always-on and independent of either Flask backend's uptime, so
+   this works as long as this Admin app is open and logged in — it no
+   longer matters whether the Request website / its backend happens to
+   be awake.
+
+   NOTIF_API_BASE is kept ONLY for one thing below: fetching a
+   requester's uploaded signature image, which is still served by
+   backend/request.py's file/storage proxy endpoint. That is a
+   secondary, on-demand detail-view fetch, not part of the live
+   notification pipeline, so it's left as-is. Override it with
+   VITE_REQUEST_API_URL in your .env if that backend lives elsewhere. ── */
 const NOTIF_API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_REQUEST_API_URL) ||
   "http://localhost:5001";
 
-const NOTIF_POLL_MS = 15000; // how often the bell checks for new requests
+const NOTIFICATION_TABLE = "notification";
+const NOTIF_SELECT_COLUMNS =
+  "id, record_type, record_id, control_no, title, message, request_snapshot, is_read, created_at, read_at, read_by";
+
+// Safety-net reconciliation poll. Realtime delivers new/changed rows
+// instantly; this just re-syncs in case a realtime event was ever
+// missed (e.g. during a brief reconnect window). Since it now queries
+// Supabase directly instead of the request.py backend, it no longer
+// depends on that backend being awake.
+const NOTIF_POLL_MS = 15000;
 
 // Which verifier module each notification type opens when clicked.
 const NOTIF_TARGETS = {
@@ -293,6 +316,13 @@ const Home = () => {
   const [selectedNotif, setSelectedNotif]   = useState(null);   // notification whose details are open
   const [sigFailed, setSigFailed]           = useState(false);
 
+  // Mirrors `notifications` for use inside the realtime callback below,
+  // so that handler doesn't need to be re-subscribed on every state
+  // change (and doesn't need to nest a setState call inside another
+  // setState updater to know a row's previous is_read value).
+  const notificationsRef = useRef(notifications);
+  useEffect(() => { notificationsRef.current = notifications; }, [notifications]);
+
   const vitalIsActive    = VITAL_CHILDREN.includes(activeSubMenu);
   const settingsIsActive = SETTINGS_CHILDREN.includes(activeSubMenu);
 
@@ -338,23 +368,36 @@ const Home = () => {
 
   /* ═══════════════════════════════════════════════════════════
      NOTIFICATIONS
+     Reads/writes go straight to Supabase (always-on), not through
+     either Flask backend, so the bell keeps working regardless of
+     whether the Request website's server happens to be awake.
      ═══════════════════════════════════════════════════════════ */
 
-  // Pulls the latest notifications + unread count in one go.
+  // Pulls the latest notifications + unread count in one go, directly
+  // from Supabase.
   const fetchNotifications = useCallback(async () => {
     try {
-      const [listRes, countRes] = await Promise.all([
-        fetch(`${NOTIF_API_BASE}/api/notifications`),
-        fetch(`${NOTIF_API_BASE}/api/notifications/unread-count`),
+      const [listResult, countResult] = await Promise.all([
+        supabase
+          .from(NOTIFICATION_TABLE)
+          .select(NOTIF_SELECT_COLUMNS)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase
+          .from(NOTIFICATION_TABLE)
+          .select("id", { count: "exact", head: true })
+          .eq("is_read", false),
       ]);
-      if (!listRes.ok || !countRes.ok) throw new Error("Notification request failed");
 
-      const list  = await listRes.json();
-      const count = await countRes.json();
+      if (listResult.error) throw listResult.error;
+      if (countResult.error) throw countResult.error;
 
-      setNotifications(Array.isArray(list) ? list : []);
-      setUnreadCount(typeof count.count === "number" ? count.count : 0);
-      setNotifStatus("live");
+      setNotifications(Array.isArray(listResult.data) ? listResult.data : []);
+      setUnreadCount(typeof countResult.count === "number" ? countResult.count : 0);
+      // Don't downgrade an already-live realtime connection just because
+      // this particular reconciliation fetch succeeded before the
+      // channel finished subscribing.
+      setNotifStatus((prev) => (prev === "live" ? "live" : "connecting"));
     } catch (err) {
       console.error("[Home] Could not load notifications:", err);
       setNotifStatus("error");
@@ -363,10 +406,50 @@ const Home = () => {
     }
   }, []);
 
-  // Load once on mount, then poll so new requests show up on the bell
-  // without a page refresh. Polling pauses while the tab is hidden.
+  // Load once on mount, subscribe to live changes via Supabase Realtime,
+  // and keep a periodic reconciliation poll as a safety net. All three
+  // talk to Supabase directly, independent of either Flask backend.
   useEffect(() => {
     fetchNotifications();
+
+    const channel = supabase
+      .channel("home-notification-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: NOTIFICATION_TABLE },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const row = payload.new;
+            setNotifications((prev) =>
+              prev.some((n) => n.id === row.id) ? prev : [row, ...prev].slice(0, 50)
+            );
+            if (!row.is_read) setUnreadCount((c) => c + 1);
+          } else if (payload.eventType === "UPDATE") {
+            const row = payload.new;
+            const previous = notificationsRef.current.find((n) => n.id === row.id);
+            const wasUnread = previous ? !previous.is_read : !payload.old?.is_read;
+            const nowUnread = !row.is_read;
+            if (wasUnread && !nowUnread) setUnreadCount((c) => Math.max(0, c - 1));
+            else if (!wasUnread && nowUnread) setUnreadCount((c) => c + 1);
+            setNotifications((prev) => prev.map((n) => (n.id === row.id ? { ...n, ...row } : n)));
+          } else if (payload.eventType === "DELETE") {
+            const row = payload.old;
+            const removed = notificationsRef.current.find((n) => n.id === row.id);
+            if (removed && !removed.is_read) setUnreadCount((c) => Math.max(0, c - 1));
+            setNotifications((prev) => prev.filter((n) => n.id !== row.id));
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setNotifStatus("live");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          setNotifStatus("error");
+        } else {
+          setNotifStatus("connecting");
+        }
+      });
+
     const poll = setInterval(() => {
       if (!document.hidden) fetchNotifications();
     }, NOTIF_POLL_MS);
@@ -377,6 +460,7 @@ const Home = () => {
     return () => {
       clearInterval(poll);
       document.removeEventListener("visibilitychange", onVisible);
+      supabase.removeChannel(channel);
     };
   }, [fetchNotifications]);
 
@@ -419,12 +503,15 @@ const Home = () => {
       setUnreadCount((c) => Math.max(0, c - 1));
 
       try {
-        const res = await fetch(`${NOTIF_API_BASE}/api/notifications/${notif.id}/read`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ read_by: username || null }),
-        });
-        if (!res.ok) throw new Error("Mark read failed");
+        const { error } = await supabase
+          .from(NOTIFICATION_TABLE)
+          .update({
+            is_read: true,
+            read_at: new Date().toISOString(),
+            read_by: username || null,
+          })
+          .eq("id", notif.id);
+        if (error) throw error;
       } catch (err) {
         console.error("[Home] Could not mark notification as read:", err);
         fetchNotifications();
@@ -440,12 +527,15 @@ const Home = () => {
     setUnreadCount(0);
 
     try {
-      const res = await fetch(`${NOTIF_API_BASE}/api/notifications/mark-all-read`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ read_by: username || null }),
-      });
-      if (!res.ok) throw new Error("Mark all read failed");
+      const { error } = await supabase
+        .from(NOTIFICATION_TABLE)
+        .update({
+          is_read: true,
+          read_at: new Date().toISOString(),
+          read_by: username || null,
+        })
+        .eq("is_read", false);
+      if (error) throw error;
     } catch (err) {
       console.error("[Home] Could not mark all notifications as read:", err);
       fetchNotifications();
@@ -627,7 +717,7 @@ const Home = () => {
   const badgeText = unreadCount > 99 ? "99+" : String(unreadCount);
 
   const statusTitle =
-    notifStatus === "live"       ? "Live — checking for new requests"
+    notifStatus === "live"       ? "Live — connected to real-time notifications"
     : notifStatus === "error"    ? "Can't reach the server — retrying"
     :                              "Connecting…";
 
@@ -924,7 +1014,7 @@ const Home = () => {
                         </span>
                         <span className="notif-empty-sub">
                           {notifStatus === "error"
-                            ? "Check that the request server is running."
+                            ? "Check your Supabase connection (see console for details)."
                             : "New certificate requests will show up here."}
                         </span>
                       </li>
