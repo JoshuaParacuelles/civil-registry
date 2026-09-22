@@ -69,6 +69,18 @@
   --r-sm: 7px;
   --r-lg: 14px;
 
+  /* FIX (button-style-unify): shared corner radius for every clickable
+     label/text button in the app (Proceed, Back, Search, Select, View,
+     Delete, Print, Cancel, Confirm, Upload, etc.), so they all share one
+     consistent "moderately rounded rectangle" shape — matching the
+     reference button image — instead of a mix of full pills (999px) and
+     sharp rectangles (5px). --r-btn is used on normal-sized buttons;
+     --r-btn-sm is used on compact buttons (table-row actions, PDF modal
+     header buttons) so their radius never exceeds their own height and
+     accidentally becomes a pill again. */
+  --r-btn:    12px;
+  --r-btn-sm: 7px;
+
   /* Layout */
   --ubr-topbar-h:  52px;
   --ubr-tabhdr-h:  56px;
@@ -171,7 +183,9 @@
 /* ── TAB BUTTONS ──────────────────────────────────────────────────────── */
 .ubr-tab-btn {
   padding: 6px 13px;
-  border-radius: 8px;
+  /* FIX (button-style-unify): was 8px; now shares the app-wide button
+     radius so tab buttons match Search/Select/Proceed/etc. */
+  border-radius: var(--r-btn);
   border: 1px solid transparent;
   cursor: pointer;
   font-size: 12px;
@@ -379,16 +393,19 @@
   height: 34px;
   padding: 0 14px;
   border: none;
-  border-radius: 999px;   /* ← pill shape: correct, matches Back/Proceed/Release/Unlock */
+  /* FIX (button-style-unify): was border-radius: 999px (full pill).
+     Changed to the shared app-wide button radius (var(--r-btn)) so
+     this button matches the reference shape — a rounded rectangle,
+     not a full pill — while keeping every other property (colors,
+     size, spinner, hover states) unchanged. */
+  border-radius: var(--r-btn);
   /* FIX (button-shape/desktop-distortion): explicitly reset native button
      appearance. Without this, a plain <button> can be painted using the
      browser's platform-native control shape on a normal (non-DevTools)
-     desktop window, which fights with our border-radius: 999px pill and
-     renders it stretched/oval (seen on "Proceed →", "← Back", etc.),
-     even though the same CSS renders correctly in DevTools' responsive/
-     device-emulation mode (which always uses the CSS-painted path, not
-     the native one). appearance: none forces our own pill shape to be
-     used consistently in every environment/screen size. */
+     desktop window, which fights with our border-radius and renders it
+     stretched/oval, even though the same CSS renders correctly in
+     DevTools' responsive/device-emulation mode. appearance: none forces
+     our own shape to be used consistently in every environment. */
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
@@ -458,7 +475,11 @@
   align-items: center;
   gap: 3px;
   padding: 4px 9px;
-  border-radius: 5px;
+  /* FIX (button-style-unify): was 5px; now uses the shared compact
+     button radius (var(--r-btn-sm)) so small table/card action buttons
+     (View/Restore/Delete) match the same rounded-rectangle style as the
+     larger buttons, proportioned to their smaller height. */
+  border-radius: var(--r-btn-sm);
   border: none;
   color: #fff !important;
   font-size: 11px;
@@ -576,7 +597,10 @@
   height: 36px;
   padding: 0 18px;
   border: none;
-  border-radius: var(--r-sm);   /* ← reverted: rounded rectangle, matches reference */
+  /* FIX (button-style-unify): was var(--r-sm) (rounded rectangle at a
+     smaller radius); now uses the shared app-wide button radius so this
+     button matches the reference shape/style used everywhere else. */
+  border-radius: var(--r-btn);
   background: #2563eb !important;
   color: #fff !important;
   font-size: 12.5px;
@@ -740,10 +764,10 @@
   gap: 4px;
   min-width: 72px;
   padding: 5px 11px;
-  /* FIX (button-shape): restored the full pill/capsule corner radius
-     this button originally had (previously a hardcoded 5px, which
-     rendered as a rounded rectangle instead of a pill). */
-  border-radius: 999px;
+  /* FIX (button-style-unify): was border-radius: 999px (full pill).
+     Changed to the shared app-wide button radius so this button matches
+     the reference shape and the rest of the app's buttons. */
+  border-radius: var(--r-btn);
   border: 1.5px solid #2563eb;
   background: #2563eb !important;
   color: #fff !important;
@@ -773,7 +797,10 @@
 .select-btn {
   min-width: 90px;
   padding: 5px 12px;
-  border-radius: 5px;   /* ← reverted: rounded rectangle, matches reference */
+  /* FIX (button-style-unify): was 5px; now uses the shared app-wide
+     button radius so this button matches .view-pdf-btn beside it and
+     the reference shape. */
+  border-radius: var(--r-btn);
   border: 1.5px solid #2563eb;
   background: #2563eb !important;
   color: #fff !important;
@@ -805,7 +832,9 @@
 
 .neg-btn {
   padding: 7px 14px;
-  border-radius: 5px;
+  /* FIX (button-style-unify): was 5px; now uses the shared app-wide
+     button radius to match the reference shape/style. */
+  border-radius: var(--r-btn);
   border: 1.5px solid rgba(37,99,235,0.30);
   background: #2563eb !important;
   color: #fff !important;
@@ -1033,7 +1062,10 @@
 
 .modal-cancel {
   padding: 7px 14px;
-  border-radius: var(--r-sm);
+  /* FIX (button-style-unify): was var(--r-sm); now uses the shared
+     app-wide button radius so Cancel matches Confirm and the rest of
+     the app's buttons/reference shape. */
+  border-radius: var(--r-btn);
   border: 1px solid transparent;
   background: #2563eb !important;
   color: #ffffff !important;
@@ -1052,7 +1084,10 @@
 
 .modal-confirm {
   padding: 7px 14px;
-  border-radius: var(--r-sm);
+  /* FIX (button-style-unify): was var(--r-sm); now uses the shared
+     app-wide button radius (also inherited by
+     .negcert-info-modal__submit) to match the reference shape/style. */
+  border-radius: var(--r-btn);
   border: none;
   color: #fff !important;
   font-size: 12.5px;
@@ -1299,7 +1334,10 @@
 
 .hdr-btn {
   padding: 4px 10px;
-  border-radius: 5px;
+  /* FIX (button-style-unify): was 5px; now uses the shared compact
+     button radius so Print/Close match the rest of the app's small
+     buttons and the reference shape. */
+  border-radius: var(--r-btn-sm);
   border: none;
   color: #fff !important;
   font-size: 11.5px;
@@ -1389,7 +1427,9 @@
   background: #2563eb !important;
   color: #fff !important;
   padding: 5px 11px;
-  border-radius: var(--r-sm);
+  /* FIX (button-style-unify): was var(--r-sm); now uses the shared
+     app-wide button radius to match the reference shape/style. */
+  border-radius: var(--r-btn);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
@@ -1546,7 +1586,14 @@
 .mobile-record-card__parents   { display: flex; gap: 6px; row-gap: 6px; flex-wrap: wrap; }
 .mobile-record-card__date      { font-size: 11px; color: var(--txt3); font-weight: 500; line-height: 1.4; }
 .mobile-record-card__actions   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 2px; }
-.mobile-record-card__actions .tbl-btn { padding: 6px 14px; font-size: 12px; border-radius: 6px; }
+.mobile-record-card__actions .tbl-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  /* FIX (button-style-unify): was 6px; now uses the shared compact
+     button radius to match the desktop-table version of these buttons
+     and the reference shape. */
+  border-radius: var(--r-btn-sm);
+}
 
 /* ── UPLOAD MODAL ─────────────────────────────────────────────────────── */
 .upl-modal {
@@ -1926,7 +1973,10 @@
   align-items: center;
   gap: 5px;
   padding: 6px 12px;
-  border-radius: var(--r-sm);
+  /* FIX (button-style-unify): was var(--r-sm); now uses the shared
+     app-wide button radius so Print matches the rest of the app's
+     buttons and the reference shape. */
+  border-radius: var(--r-btn);
   border: none;
   background: #2563eb !important;
   color: #fff !important;
