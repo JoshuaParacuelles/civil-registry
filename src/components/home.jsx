@@ -732,7 +732,10 @@ const Home = () => {
         status: savedStatus,
       };
 
-      setStatusMsg({ type: "ok", text: `Updated to ${data.status_label}. Citizen notified.` });
+      setStatusMsg({
+  type: data.email_sent || data.sms_sent ? "ok" : "err",
+  text: data.message || `Updated to ${data.status_label}.`,
+});
       setStatusDraft(savedStatus);
       setSelectedNotif((prev) =>
         prev ? { ...prev, request_snapshot: updatedSnapshot } : prev
