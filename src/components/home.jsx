@@ -75,13 +75,15 @@ const NOTIF_TARGETS = {
 /* ── Citizen-request status controls (inline in the notification modal) ─
    These call the MAIN app's own API (relative, same origin, session-based
    — NOT NOTIF_API_BASE, which points at the separate public request
-   backend on port 5001 and has no session/auth of its own). ── */
-const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "READY_FOR_PICKUP", "COMPLETED", "REJECTED"];
+   backend on port 5001 and has no session/auth of its own).
+   CHANGED: "Ready for Pickup" removed from the selectable/display
+   statuses per request — only Pending Review, Being Processed, and
+   Complete remain. ── */
+const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "COMPLETED"];
 const REQUEST_STATUS_LABELS = {
   PENDING: "Pending Review",
   PROCESSING: "Being Processed",
-  READY_FOR_PICKUP: "Ready for Pickup",
-  COMPLETED: "Completed",
+  COMPLETED: "Complete",
   REJECTED: "Rejected",
 };
 
@@ -631,6 +633,13 @@ const Home = () => {
   // and the citizen sees it live via the same Supabase Realtime channel
   // this bell already subscribes to (a fresh "…Request Update"
   // notification lands for the new status change).
+  // CHANGED: the top-of-modal status badge now renders from `statusDraft`
+  // (see the "Request details" JSX below) rather than from
+  // `request_snapshot.status`, so it always mirrors whichever status is
+  // selected in the dropdown — both while choosing a new value and after
+  // a successful save. We still keep `request_snapshot.status` in sync
+  // here too, so the badge stays correct even if the modal is reopened
+  // later from a freshly-fetched notification.
   const updateRequestStatus = async () => {
     if (!selectedNotif?.record_id) return;
     setStatusSaving(true);
@@ -647,6 +656,7 @@ const Home = () => {
         throw new Error(data?.error || `HTTP ${res.status}`);
       }
       setStatusMsg({ type: "ok", text: `Updated to ${data.status_label}. Citizen notified.` });
+      setStatusDraft((data.status || statusDraft).toUpperCase());
       setSelectedNotif((prev) =>
         prev
           ? {
@@ -1182,6 +1192,14 @@ const Home = () => {
         const signatureSrc = getSignatureSrc(snap, type, selectedNotif.record_id);
         const showSignatureImage = Boolean(snap.has_signature) && !sigFailed;
 
+        // CHANGED: the badge at the top of the modal is now driven by
+        // `statusDraft` — the same state the "Request Status" dropdown
+        // controls — instead of the (possibly stale) `snap.status`. This
+        // makes it update the instant a different option is picked, and
+        // keeps showing the correct value after "Update Status" succeeds.
+        const topStatusValue = statusDraft || (snap.status || "").toUpperCase();
+        const topStatusLabel = REQUEST_STATUS_LABELS[topStatusValue] || topStatusValue;
+
         return (
           <div className="notif-detail-overlay" onClick={closeNotifDetails}>
             <div
@@ -1203,9 +1221,9 @@ const Home = () => {
                     {timeAgo(selectedNotif.created_at)}
                   </p>
                 </div>
-                {snap.status && (
-                  <span className={`notif-detail-status ${String(snap.status).toLowerCase()}`}>
-                    {snap.status}
+                {topStatusValue && (
+                  <span className={`notif-detail-status ${String(topStatusValue).toLowerCase()}`}>
+                    {topStatusLabel}
                   </span>
                 )}
                 <button
