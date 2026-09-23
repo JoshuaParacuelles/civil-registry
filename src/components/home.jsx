@@ -633,6 +633,21 @@ const Home = () => {
   // a successful save. We still keep `request_snapshot.status` in sync
   // here too, so the badge stays correct even if the modal is reopened
   // later from a freshly-fetched notification.
+  //
+  // FIX: previously only `selectedNotif` (local, modal-only state) was
+  // updated on success. The `notifications` list — which is what
+  // `handleNotifClick` reads from the next time this same notification
+  // is opened — and the `notification` row in Supabase itself were never
+  // touched, so the saved snapshot's `status` stayed stale. That's why
+  // reopening the modal (or reopening it after a refresh) kept showing
+  // "Pending Review" again even though the update had "succeeded".
+  // Now the new status is written into: (1) `selectedNotif` for the
+  // modal that's currently open, (2) the `notifications` array so
+  // reopening the same notification later in this session shows the
+  // right value immediately, and (3) the notification's own
+  // `request_snapshot` column in Supabase, so the correct status is
+  // fetched back from the database on any future load/reopen — on this
+  // device or any other.
   const updateRequestStatus = async () => {
     if (!selectedNotif?.record_id) return;
     setStatusSaving(true);
@@ -648,17 +663,47 @@ const Home = () => {
       if (!res.ok || data?.error) {
         throw new Error(data?.error || `HTTP ${res.status}`);
       }
+
+      const savedStatus = (data.status || statusDraft).toUpperCase();
+      const updatedSnapshot = {
+        ...(selectedNotif.request_snapshot || {}),
+        status: savedStatus,
+      };
+
       setStatusMsg({ type: "ok", text: `Updated to ${data.status_label}. Citizen notified.` });
-      setStatusDraft((data.status || statusDraft).toUpperCase());
+      setStatusDraft(savedStatus);
       setSelectedNotif((prev) =>
-        prev
-          ? {
-              ...prev,
-              request_snapshot: { ...(prev.request_snapshot || {}), status: data.status },
-            }
-          : prev
+        prev ? { ...prev, request_snapshot: updatedSnapshot } : prev
       );
       setStatusNote("");
+
+      // Keep the notifications list in sync so reopening this same
+      // notification later (without a full refetch) still shows the
+      // status that was just saved, instead of the old cached snapshot.
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === selectedNotif.id
+            ? { ...n, request_snapshot: updatedSnapshot }
+            : n
+        )
+      );
+
+      // Persist the new status into this notification's own snapshot in
+      // Supabase, so it's the value actually read back the next time the
+      // notification list (or this modal) is loaded from the database —
+      // not just something held in memory for the current session.
+      try {
+        const { error: snapshotError } = await supabase
+          .from(NOTIFICATION_TABLE)
+          .update({ request_snapshot: updatedSnapshot })
+          .eq("id", selectedNotif.id);
+        if (snapshotError) throw snapshotError;
+      } catch (snapshotErr) {
+        console.error(
+          "[Home] Status saved, but could not persist it to the notification snapshot:",
+          snapshotErr
+        );
+      }
     } catch (err) {
       setStatusMsg({ type: "err", text: err.message || "Could not update status." });
     } finally {
