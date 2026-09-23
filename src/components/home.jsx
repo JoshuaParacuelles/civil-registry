@@ -66,12 +66,16 @@ const SESSION_FLAG_KEY = "homeSessionActive";
    longer matters whether the Request website / its backend happens to
    be awake.
 
-   NOTIF_API_BASE is kept ONLY for one thing below: fetching a
-   requester's uploaded signature image, which is still served by
-   backend/request.py's file/storage proxy endpoint. That is a
-   secondary, on-demand detail-view fetch, not part of the live
-   notification pipeline, so it's left as-is. Override it with
-   VITE_REQUEST_API_URL in your .env if that backend lives elsewhere. ── */
+   NOTIF_API_BASE is kept ONLY as a fallback for one thing below:
+   fetching a requester's uploaded signature image on OLDER
+   notifications whose `request_snapshot` was saved before the
+   signature image itself started being embedded directly in the
+   snapshot (see getSignatureSrc()/SIGNATURE_BASE64_KEYS below). For
+   any snapshot that already carries the image data, this base URL is
+   never used, so the signature keeps showing up even if that backend
+   (or the public Request website) is asleep or not open at all.
+   Override it with VITE_REQUEST_API_URL in your .env if that backend
+   lives elsewhere. ── */
 const NOTIF_API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_REQUEST_API_URL) ||
   "http://localhost:5001";
@@ -183,6 +187,44 @@ const COMMON_SECTIONS = [
     ],
   },
 ];
+
+// CHANGED: the key inside `signature_printed_name`'s field renderer that
+// receives special treatment (image instead of plain text) — kept as a
+// constant so the special-case check below is self-documenting and only
+// ever touches this one field.
+const SIGNATURE_FIELD_KEY = "signature_printed_name";
+
+// CHANGED: possible keys the requester's signature image may be stored
+// under directly inside `request_snapshot` (as a data URL / base64
+// string), checked in order. Keeping this as a list — rather than a
+// single hardcoded key — means whichever key the snapshot actually uses
+// is picked up automatically, without needing another code change here.
+const SIGNATURE_BASE64_KEYS = [
+  "signature_base64",
+  "signature_image",
+  "signature_image_base64",
+  "signature_data_url",
+  "signature",
+];
+
+// CHANGED: looks for an already-embedded signature image inside the
+// notification's own `request_snapshot` first (this is what lets the
+// image "remain visible even when the Request-Slip system is no longer
+// being used or is not open" — it's stored alongside everything else in
+// Supabase, not fetched live from that separate backend). Only if no
+// embedded image is found does it fall back to the old signature-proxy
+// URL served by backend/request.py, for older notifications saved before
+// the image was embedded in the snapshot.
+const getSignatureSrc = (snap, type, recordId) => {
+  for (const key of SIGNATURE_BASE64_KEYS) {
+    const val = snap?.[key];
+    if (typeof val === "string" && val.trim()) {
+      // Accept either a full data URL already, or a bare base64 string.
+      return val.startsWith("data:") ? val : `data:image/png;base64,${val}`;
+    }
+  }
+  return `${NOTIF_API_BASE}/api/${type}/${recordId}/signature`;
+};
 
 const detailValue = (v) => (v === null || v === undefined || v === "" ? "—" : String(v));
 
@@ -1150,8 +1192,18 @@ const Home = () => {
         const sections = [TYPE_SECTIONS[type], ...COMMON_SECTIONS].filter(Boolean);
         const target = NOTIF_TARGETS[type];
         const canOpen = target && canAccess(target.permission);
-        const showSignature = snap.has_signature && !sigFailed;
-        const signatureUrl = `${NOTIF_API_BASE}/api/${type}/${selectedNotif.record_id}/signature`;
+
+        // CHANGED: signature image resolution now prefers a base64/data-URL
+        // image already embedded in this notification's own
+        // `request_snapshot` (see getSignatureSrc/SIGNATURE_BASE64_KEYS
+        // above). That data is already sitting in memory the instant the
+        // modal opens — no network round trip — so the image appears
+        // immediately with no loading delay, and it keeps showing up even
+        // if the separate Request-Slip backend (NOTIF_API_BASE) is asleep
+        // or not open at all. Only notifications saved before the image
+        // was embedded fall back to fetching it from that backend.
+        const signatureSrc = getSignatureSrc(snap, type, selectedNotif.record_id);
+        const showSignatureImage = Boolean(snap.has_signature) && !sigFailed;
 
         return (
           <div className="notif-detail-overlay" onClick={closeNotifDetails}>
@@ -1200,35 +1252,41 @@ const Home = () => {
                         {section.fields.map(([key, label]) => (
                           <div key={key} className="notif-detail-field">
                             <dt>{label}</dt>
-                            <dd>{detailValue(snap[key])}</dd>
+                            {/* CHANGED: the "Signature over printed name" field now
+                                renders the requester's actual signature image
+                                directly in its own designated area, instead of
+                                (or in addition to) the typed name — click to
+                                enlarge, same as before. Every other field keeps
+                                rendering exactly as it did previously. */}
+                            {key === SIGNATURE_FIELD_KEY && showSignatureImage ? (
+                              <dd className="notif-detail-field-signature">
+                                <img
+                                  className="notif-detail-signature"
+                                  src={signatureSrc}
+                                  alt="Requester signature — click to enlarge"
+                                  title="Click to enlarge"
+                                  loading="eager"
+                                  decoding="sync"
+                                  onError={() => setSigFailed(true)}
+                                  onClick={() => setSigZoomed(true)}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      setSigZoomed(true);
+                                    }
+                                  }}
+                                />
+                              </dd>
+                            ) : (
+                              <dd>{detailValue(snap[key])}</dd>
+                            )}
                           </div>
                         ))}
                       </dl>
                     </section>
                   ))
-                )}
-
-                {showSignature && (
-                  <section className="notif-detail-section">
-                    <h3>Signature</h3>
-                    {/* NEW: click the thumbnail to view it full-size */}
-                    <img
-                      className="notif-detail-signature"
-                      src={signatureUrl}
-                      alt="Requester signature — click to enlarge"
-                      title="Click to enlarge"
-                      onError={() => setSigFailed(true)}
-                      onClick={() => setSigZoomed(true)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setSigZoomed(true);
-                        }
-                      }}
-                    />
-                  </section>
                 )}
 
                 {canAccess("citizen_requests") && (
@@ -1297,7 +1355,7 @@ const Home = () => {
               >
                 <img
                   className="sig-zoom-img"
-                  src={signatureUrl}
+                  src={signatureSrc}
                   alt="Requester signature (enlarged)"
                   onClick={(e) => e.stopPropagation()}
                 />
