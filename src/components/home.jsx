@@ -72,13 +72,6 @@ const NOTIF_TARGETS = {
   death:    { menu: MENU_KEYS.DEATH,    permission: "death_verification" },
 };
 
-/* ── Citizen-request status controls (inline in the notification modal) ─
-   These call the MAIN app's own API (relative, same origin, session-based
-   — NOT NOTIF_API_BASE, which points at the separate public request
-   backend on port 5001 and has no session/auth of its own).
-   CHANGED: "Ready for Pickup" removed from the selectable/display
-   statuses per request — only Pending Review, Being Processed, and
-   Complete remain. ── */
 const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "COMPLETED"];
 const REQUEST_STATUS_LABELS = {
   PENDING: "Pending Review",
