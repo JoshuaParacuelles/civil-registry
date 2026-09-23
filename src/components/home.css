@@ -1737,3 +1737,28 @@
 .sidebar.collapsed .sidebar-user {
   display: none;
 }
+.notif-msg-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notif-msg-row .notif-msg {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-new-badge {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+  background: #e53e3e;
+  padding: 2px 6px;
+  border-radius: 999px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(229, 62, 62, 0.4);
+}
