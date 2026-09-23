@@ -50,32 +50,6 @@ const BP_MOBILE_MAX = 767;
 // "this is a refresh within the same still-logged-in session".
 const SESSION_FLAG_KEY = "homeSessionActive";
 
-/* ── Notifications: backend + behaviour ───────────────────────
-   CHANGED: notifications no longer poll backend/request.py over
-   plain HTTP for reads/writes. That backend (the public Request
-   website's Flask server) can spin down when idle (Render free-tier
-   cold start), which is exactly why the bell used to go "offline"
-   whenever nobody had the Request page open recently — Admin's poll
-   was hitting a sleeping server.
-
-   Notifications now read and write the shared Supabase `notification`
-   table directly (see supabaseClient.js), and get pushed live via a
-   Supabase Realtime `postgres_changes` subscription. Supabase itself
-   is always-on and independent of either Flask backend's uptime, so
-   this works as long as this Admin app is open and logged in — it no
-   longer matters whether the Request website / its backend happens to
-   be awake.
-
-   NOTIF_API_BASE is kept ONLY as a fallback for one thing below:
-   fetching a requester's uploaded signature image on OLDER
-   notifications whose `request_snapshot` was saved before the
-   signature image itself started being embedded directly in the
-   snapshot (see getSignatureSrc()/SIGNATURE_BASE64_KEYS below). For
-   any snapshot that already carries the image data, this base URL is
-   never used, so the signature keeps showing up even if that backend
-   (or the public Request website) is asleep or not open at all.
-   Override it with VITE_REQUEST_API_URL in your .env if that backend
-   lives elsewhere. ── */
 const NOTIF_API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_REQUEST_API_URL) ||
   "http://localhost:5001";
@@ -1142,36 +1116,39 @@ const Home = () => {
                         </span>
                       </li>
                     ) : (
-                      notifications.map((n) => (
-                        <li
-                          key={n.id}
-                          className={`notif-item${n.is_read ? "" : " unread"}`}
-                          onClick={() => handleNotifClick(n)}
-                        >
-                          <span className="notif-dot" />
-                          <div className={`notif-icon-wrap ${NOTIF_TARGETS[n.record_type] ? n.record_type : "system"}`}>
-                            <NotifTypeIcon type={n.record_type} />
-                          </div>
-                          <div className="notif-body">
-                            <p className="notif-msg">{n.message || n.title}</p>
-                            <span className="notif-time">{timeAgo(n.created_at)}</span>
-                          </div>
-                          {!n.is_read && (
-                            <button
-                              type="button"
-                              className="notif-dismiss"
-                              title="Mark as read"
-                              aria-label="Mark as read"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                markNotificationRead(n);
-                              }}
-                            >
-                              <CloseIcon />
-                            </button>
-                          )}
-                        </li>
-                      ))
+                notifications.map((n) => (
+  <li
+    key={n.id}
+    className={`notif-item${n.is_read ? "" : " unread"}`}
+    onClick={() => handleNotifClick(n)}
+  >
+    <span className="notif-dot" />
+    <div className={`notif-icon-wrap ${NOTIF_TARGETS[n.record_type] ? n.record_type : "system"}`}>
+      <NotifTypeIcon type={n.record_type} />
+    </div>
+    <div className="notif-body">
+      <div className="notif-msg-row">
+        <p className="notif-msg">{n.message || n.title}</p>
+        {!n.is_read && <span className="notif-new-badge">NEW</span>}
+      </div>
+      <span className="notif-time">{timeAgo(n.created_at)}</span>
+    </div>
+    {!n.is_read && (
+      <button
+        type="button"
+        className="notif-dismiss"
+        title="Mark as read"
+        aria-label="Mark as read"
+        onClick={(e) => {
+          e.stopPropagation();
+          markNotificationRead(n);
+        }}
+      >
+        <CloseIcon />
+      </button>
+    )}
+  </li>
+))
                     )}
                   </ul>
                 </div>
