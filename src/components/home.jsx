@@ -597,17 +597,79 @@ const Home = () => {
   }, [viewport]);
 
   // Clicking a notification marks it read and shows what the requester filled in.
-  const handleNotifClick = (notif) => {
+  //
+  // FIX (status persistence bug): this used to seed statusDraft purely from
+  // `notif.request_snapshot?.status` — a cached copy of the status that was
+  // only ever refreshed by a best-effort client-side write straight to the
+  // `notification` table (see updateRequestStatus below). If that write
+  // ever failed silently (e.g. RLS on the notification table, a dropped
+  // request, etc.) the cached snapshot went stale, so reopening the modal
+  // (or reopening it in a different tab/session) could show "Pending
+  // Review" again even though the request's real status — the `status`
+  // column on the civil_registry_request row, updated by
+  // PATCH /api/requests/<id>/status — had actually changed.
+  //
+  // Now, every time a notification is opened, we fetch that row's current
+  // status directly from the backend (the same source of truth the PATCH
+  // endpoint writes to) via GET /api/requests/<record_id>, and use that to
+  // drive statusDraft (and therefore the top-of-modal badge and the
+  // dropdown's selected value). The old snapshot value is still used as an
+  // instant, non-blocking placeholder so the modal never renders blank
+  // while the fetch is in flight — it just gets corrected the moment the
+  // authoritative value comes back.
+  const handleNotifClick = async (notif) => {
     markNotificationRead(notif);
     setSigFailed(false);
     setSigZoomed(false);
     setSelectedNotif(notif);
     setNotifOpen(false);
-    // NEW: seed the status editor from whatever the latest snapshot says,
-    // falling back to PENDING for a brand-new submission notification.
-    setStatusDraft((notif.request_snapshot?.status || "PENDING").toUpperCase());
     setStatusNote("");
     setStatusMsg(null);
+
+    // Seed immediately from whatever we already have locally (cached
+    // snapshot) so the modal isn't blank while the authoritative status
+    // loads from the backend just below.
+    const fallbackStatus = (notif.request_snapshot?.status || "PENDING").toUpperCase();
+    setStatusDraft(fallbackStatus);
+
+    if (!notif.record_id) return;
+
+    try {
+      const res = await fetch(`/api/requests/${notif.record_id}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      const liveStatus = (data?.status || "").toUpperCase();
+      if (!liveStatus) return;
+
+      // Correct the draft/badge with the real, currently-saved status.
+      setStatusDraft(liveStatus);
+
+      // Keep the local mirrors (selectedNotif + notifications list) in
+      // sync with the authoritative value too, so anything else in the
+      // modal that reads from request_snapshot.status stays consistent,
+      // and so re-clicking the same notification later in this session
+      // (without another round trip) still shows the right thing.
+      setSelectedNotif((prev) =>
+        prev && prev.id === notif.id
+          ? {
+              ...prev,
+              request_snapshot: { ...(prev.request_snapshot || {}), status: liveStatus },
+            }
+          : prev
+      );
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notif.id
+            ? { ...n, request_snapshot: { ...(n.request_snapshot || {}), status: liveStatus } }
+            : n
+        )
+      );
+    } catch (err) {
+      console.error("[Home] Could not load live request status:", err);
+      // Fall back silently to the snapshot-derived status already set above.
+    }
   };
 
   // Closing the details modal also resets the signature zoom state so a
