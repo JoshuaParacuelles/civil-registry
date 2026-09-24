@@ -295,6 +295,81 @@ const NotifTypeIcon = ({ type }) => {
   return <SystemIcon />;
 };
 
+/* ── Status-update toast ──────────────────────────────────────
+   Mirrors the app-wide toast notification design (icon + title +
+   message + auto-dismiss progress bar, top-right) already used
+   elsewhere in the app, so a status update surfaces the same way. ── */
+const ToastSuccessIcon = () => (
+  <svg className="notif-toast__type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9 12l2 2 4-4" />
+  </svg>
+);
+
+const ToastWarningIcon = () => (
+  <svg className="notif-toast__type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
+const ToastErrorIcon = () => (
+  <svg className="notif-toast__type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 8v4m0 4h.01" />
+  </svg>
+);
+
+const StatusToastIcon = ({ type }) => {
+  if (type === "warning") return <ToastWarningIcon />;
+  if (type === "error")   return <ToastErrorIcon />;
+  return <ToastSuccessIcon />;
+};
+
+const STATUS_TOAST_DURATION = 5000;
+
+const StatusToast = ({ id, title, message, type = "success", onDismiss }) => {
+  const [hiding, setHiding] = useState(false);
+
+  const dismiss = useCallback(() => {
+    setHiding(true);
+    setTimeout(() => onDismiss(id), 280);
+  }, [id, onDismiss]);
+
+  useEffect(() => {
+    const timer = setTimeout(dismiss, STATUS_TOAST_DURATION);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className={`notif-toast notif-toast--${type}${hiding ? " notif-toast--hiding" : ""}`}>
+      <span className="notif-toast__icon-wrap">
+        <StatusToastIcon type={type} />
+      </span>
+      <div className="notif-toast__body">
+        <div className="notif-toast__title">{title}</div>
+        {message && <div className="notif-toast__msg">{message}</div>}
+      </div>
+      <button
+        type="button"
+        className="notif-toast__close"
+        onClick={dismiss}
+        aria-label="Dismiss"
+      >
+        <CloseIcon />
+      </button>
+      <div className="notif-toast__progress">
+        <div
+          className="notif-toast__progress-bar"
+          style={{ animationDuration: `${STATUS_TOAST_DURATION}ms` }}
+        />
+      </div>
+    </div>
+  );
+};
+
 const Home = () => {
   const { hasAccess, is_admin, loading, logout } = usePermissions();
   const username = getStoredUsername();
@@ -349,7 +424,20 @@ const Home = () => {
   const [statusDraft, setStatusDraft]    = useState("");
   const [statusNote, setStatusNote]      = useState("");
   const [statusSaving, setStatusSaving]  = useState(false);
-  const [statusMsg, setStatusMsg]        = useState(null); // { type: "ok"|"err", text }
+
+  // Status-update result is now surfaced as a toast (top-right), matching
+  // the app-wide toast notification style, instead of inline modal text.
+  const [statusToasts, setStatusToasts]  = useState([]);
+  const statusToastIdRef = useRef(0);
+
+  const showStatusToast = useCallback((title, message, type = "success") => {
+    const id = `${Date.now()}-${++statusToastIdRef.current}`;
+    setStatusToasts((prev) => [...prev, { id, title, message, type }]);
+  }, []);
+
+  const dismissStatusToast = useCallback((id) => {
+    setStatusToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // Mirrors `notifications` for use inside the realtime callback below,
   // so that handler doesn't need to be re-subscribed on every state
@@ -624,7 +712,6 @@ const Home = () => {
     setSelectedNotif(notif);
     setNotifOpen(false);
     setStatusNote("");
-    setStatusMsg(null);
 
     // Seed immediately from whatever we already have locally (cached
     // snapshot) so the modal isn't blank while the authoritative status
@@ -679,7 +766,6 @@ const Home = () => {
     setSigZoomed(false);
     setStatusDraft("");
     setStatusNote("");
-    setStatusMsg(null);
   }, []);
 
   // Updates the citizen request's status via the main app's own
@@ -713,7 +799,6 @@ const Home = () => {
   const updateRequestStatus = async () => {
     if (!selectedNotif?.record_id) return;
     setStatusSaving(true);
-    setStatusMsg(null);
     try {
       const res = await fetch(`/api/requests/${selectedNotif.record_id}/status`, {
         method: "PATCH",
@@ -732,10 +817,12 @@ const Home = () => {
         status: savedStatus,
       };
 
-      setStatusMsg({
-  type: data.email_sent || data.sms_sent ? "ok" : "err",
-  text: data.message || `Updated to ${data.status_label}.`,
-});
+      const notifiedByChannel = Boolean(data.email_sent || data.sms_sent);
+      showStatusToast(
+        notifiedByChannel ? "Success" : "Notice",
+        data.message || `Updated to ${data.status_label}.`,
+        notifiedByChannel ? "success" : "warning"
+      );
       setStatusDraft(savedStatus);
       setSelectedNotif((prev) =>
         prev ? { ...prev, request_snapshot: updatedSnapshot } : prev
@@ -770,7 +857,7 @@ const Home = () => {
         );
       }
     } catch (err) {
-      setStatusMsg({ type: "err", text: err.message || "Could not update status." });
+      showStatusToast("Error", err.message || "Could not update status.", "error");
     } finally {
       setStatusSaving(false);
     }
@@ -933,6 +1020,13 @@ const Home = () => {
 
   return (
     <div className={containerClasses}>
+      {/* ── Status-update toast (fixed, top-right) ── */}
+      <div className="notif-toast-wrap">
+        {statusToasts.map((t) => (
+          <StatusToast key={t.id} {...t} onDismiss={dismissStatusToast} />
+        ))}
+      </div>
+
       {/* ── Mobile hamburger toggle (fixed, only visible ≤767px via CSS) ── */}
       <button
         type="button"
@@ -1419,11 +1513,6 @@ const Home = () => {
                       >
                         {statusSaving ? "Updating…" : "Update Status"}
                       </button>
-                      {statusMsg && (
-                        <p className={`notif-status-msg notif-status-msg--${statusMsg.type}`}>
-                          {statusMsg.text}
-                        </p>
-                      )}
                     </div>
                   </section>
                 )}
