@@ -424,7 +424,9 @@ const Home = () => {
   const [statusDraft, setStatusDraft]    = useState("");
   const [statusNote, setStatusNote]      = useState("");
   const [statusSaving, setStatusSaving]  = useState(false);
-  const [notifyVia, setNotifyVia]        = useState("email"); // "email" | "sms" | "both" | "none"
+  // CHANGED: SMS was removed, so this is now just "email" | "none"
+  // ("none" only when the request has no email address on file).
+  const [notifyVia, setNotifyVia]        = useState("email"); // "email" | "none"
 
   // Status-update result is now surfaced as a toast (top-right), matching
   // the app-wide toast notification style, instead of inline modal text.
@@ -714,14 +716,13 @@ const Home = () => {
     setNotifOpen(false);
     setStatusNote("");
 
-    // Seed the notify-via channel from whatever contact info this
-    // request's snapshot has on file. If both email and phone exist,
-    // default to email but leave the choice open in the UI; if only one
-    // exists, that's the only option anyway.
+    // CHANGED: SMS was removed, so the only channel is email. It's
+    // selected whenever the request has an email address on file, and
+    // "none" otherwise (the phone number is still displayed in the
+    // modal for reference, it just isn't texted).
     const seedSnap = notif.request_snapshot || {};
     const seedHasEmail = Boolean((seedSnap.requester_email || "").trim());
-    const seedHasPhone = Boolean((seedSnap.requester_telephone || "").trim());
-    setNotifyVia(seedHasEmail ? "email" : seedHasPhone ? "sms" : "none");
+    setNotifyVia(seedHasEmail ? "email" : "none");
 
     // Seed immediately from whatever we already have locally (cached
     // snapshot) so the modal isn't blank while the authoritative status
@@ -818,10 +819,10 @@ const Home = () => {
         body: JSON.stringify({
           status: statusDraft,
           note: statusNote.trim() || undefined,
-          // Tells the backend which channel(s) to notify the requester
-          // through: "email", "sms", "both", or "none" (no contact info
-          // on file). The backend still ultimately validates against
-          // what's actually stored on the request before sending.
+          // Tells the backend whether to email the requester: "email",
+          // or "none" (no email address on file). The backend still
+          // ultimately validates against what's actually stored on the
+          // request before sending.
           notify_via: notifyVia,
         }),
       });
@@ -836,11 +837,13 @@ const Home = () => {
         status: savedStatus,
       };
 
-      const notifiedByChannel = Boolean(data.email_sent || data.sms_sent);
+      // CHANGED: only email exists now, so success/warning depends on
+      // `email_sent` alone (the backend no longer returns `sms_sent`).
+      const notifiedByEmail = Boolean(data.email_sent);
       showStatusToast(
-        notifiedByChannel ? "Success" : "Notice",
+        notifiedByEmail ? "Success" : "Notice",
         data.message || `Updated to ${data.status_label}.`,
-        notifiedByChannel ? "success" : "warning"
+        notifiedByEmail ? "success" : "warning"
       );
       setStatusDraft(savedStatus);
       setSelectedNotif((prev) =>
@@ -1396,11 +1399,11 @@ const Home = () => {
         const target = NOTIF_TARGETS[type];
         const canOpen = target && canAccess(target.permission);
 
-        // Whether this request has an email and/or a phone number on
-        // file, used to drive the "Notify requester via" control below.
+        // Whether this request has an email address on file, used to
+        // drive the "Notify requester via" control below. The phone
+        // number is only shown for reference now (SMS was removed).
         const hasRequesterEmail = Boolean((snap.requester_email || "").trim());
         const hasRequesterPhone = Boolean((snap.requester_telephone || "").trim());
-        const canChooseChannel = hasRequesterEmail && hasRequesterPhone;
 
         // CHANGED: signature image resolution now prefers a base64/data-URL
         // image already embedded in this notification's own
@@ -1521,72 +1524,35 @@ const Home = () => {
                         ))}
                       </select>
 
-                      {/* NEW: notify-requester-via control. Auto-picks Email
-                          or SMS based on what contact info the requester
-                          actually gave; only lets the admin choose between
-                          them when both are on file, and warns instead of
-                          guessing when neither is. */}
+                      {/* CHANGED: notify-requester-via control is now email-only.
+                          The SMS and Both options were removed (SMS is a paid
+                          service). The requester's phone number is still shown
+                          here, read-only, so staff can see it — it just isn't
+                          used to send anything. */}
                       <div className="notif-notify-field">
                         <span className="notif-notify-field-label">Notify requester via</span>
-                        {!hasRequesterEmail && !hasRequesterPhone ? (
+                        {!hasRequesterEmail ? (
                           <p className="notif-notify-warning">
-                            No email or phone number on file for this request — the
-                            requester won't get an automatic notification for this update.
+                            No email address on file for this request — the requester
+                            won't get an automatic notification for this update.
                           </p>
                         ) : (
-                          <>
+                          <div className="notif-notify-toggle">
                             <div
-                              className="notif-notify-toggle"
-                              role="radiogroup"
-                              aria-label="Notification channel"
+                              className="notif-notify-option is-selected"
+                              style={{ cursor: "default" }}
                             >
-                              <button
-                                type="button"
-                                role="radio"
-                                aria-checked={notifyVia === "email"}
-                                className={`notif-notify-option${notifyVia === "email" ? " is-selected" : ""}${!hasRequesterEmail ? " is-disabled" : ""}`}
-                                disabled={!hasRequesterEmail || statusSaving}
-                                onClick={() => setNotifyVia("email")}
-                              >
-                                <span className="notif-notify-option-label">Email</span>
-                                <span className="notif-notify-option-detail">
-                                  {hasRequesterEmail ? snap.requester_email : "Not on file"}
-                                </span>
-                              </button>
-                              <button
-                                type="button"
-                                role="radio"
-                                aria-checked={notifyVia === "sms"}
-                                className={`notif-notify-option${notifyVia === "sms" ? " is-selected" : ""}${!hasRequesterPhone ? " is-disabled" : ""}`}
-                                disabled={!hasRequesterPhone || statusSaving}
-                                onClick={() => setNotifyVia("sms")}
-                              >
-                                <span className="notif-notify-option-label">SMS</span>
-                                <span className="notif-notify-option-detail">
-                                  {hasRequesterPhone ? snap.requester_telephone : "Not on file"}
-                                </span>
-                              </button>
-                              {canChooseChannel && (
-                                <button
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={notifyVia === "both"}
-                                  className={`notif-notify-option${notifyVia === "both" ? " is-selected" : ""}`}
-                                  disabled={statusSaving}
-                                  onClick={() => setNotifyVia("both")}
-                                >
-                                  <span className="notif-notify-option-label">Both</span>
-                                  <span className="notif-notify-option-detail">Email + SMS</span>
-                                </button>
-                              )}
+                              <span className="notif-notify-option-label">Email</span>
+                              <span className="notif-notify-option-detail">
+                                {snap.requester_email}
+                              </span>
                             </div>
-                            {!canChooseChannel && (
-                              <p className="notif-notify-hint">
-                                Only {hasRequesterEmail ? "an email" : "a phone number"} is on
-                                file, so this update will be sent by {hasRequesterEmail ? "email" : "SMS"}.
-                              </p>
-                            )}
-                          </>
+                          </div>
+                        )}
+                        {hasRequesterPhone && (
+                          <p className="notif-notify-hint">
+                            Phone number on file: {snap.requester_telephone}
+                          </p>
                         )}
                       </div>
 
