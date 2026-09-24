@@ -935,13 +935,11 @@ const Home = () => {
     <div className={containerClasses}>
       {/* ── Mobile hamburger toggle (fixed, only visible ≤767px via CSS) ── */}
       <button
-        type="button"
-        className={`mobile-menu-toggle${mobileMenuOpen ? " active" : ""}`}
-        aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-        aria-expanded={mobileMenuOpen}
-        aria-controls="main-sidebar"
-        onClick={() => setMobileMenuOpen((p) => !p)}
-      >
+  type="button"
+  className="notif-status-update-btn"
+  onClick={updateRequestStatus}
+  disabled={statusSaving || statusDraft === (snap.status || "").toUpperCase()}
+>
         <span />
         <span />
         <span />
