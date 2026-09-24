@@ -934,7 +934,7 @@ const Home = () => {
   return (
     <div className={containerClasses}>
       {/* ── Mobile hamburger toggle (fixed, only visible ≤767px via CSS) ── */}
-  <button
+<button
   type="button"
   className="notif-status-update-btn"
   onClick={updateRequestStatus}
