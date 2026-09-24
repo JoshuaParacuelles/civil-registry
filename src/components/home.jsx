@@ -1399,21 +1399,9 @@ const Home = () => {
         const target = NOTIF_TARGETS[type];
         const canOpen = target && canAccess(target.permission);
 
-        // Whether this request has an email address on file, used to
-        // drive the "Notify requester via" control below. The phone
-        // number is only shown for reference now (SMS was removed).
+        
         const hasRequesterEmail = Boolean((snap.requester_email || "").trim());
-        const hasRequesterPhone = Boolean((snap.requester_telephone || "").trim());
 
-        // CHANGED: signature image resolution now prefers a base64/data-URL
-        // image already embedded in this notification's own
-        // `request_snapshot` (see getSignatureSrc/SIGNATURE_BASE64_KEYS
-        // above). That data is already sitting in memory the instant the
-        // modal opens — no network round trip — so the image appears
-        // immediately with no loading delay, and it keeps showing up even
-        // if the separate Request-Slip backend (NOTIF_API_BASE) is asleep
-        // or not open at all. Only notifications saved before the image
-        // was embedded fall back to fetching it from that backend.
         const signatureSrc = getSignatureSrc(snap, type, selectedNotif.record_id);
         const showSignatureImage = Boolean(snap.has_signature) && !sigFailed;
 
@@ -1548,12 +1536,7 @@ const Home = () => {
                               </span>
                             </div>
                           </div>
-                        )}
-                        {hasRequesterPhone && (
-                          <p className="notif-notify-hint">
-                            Phone number on file: {snap.requester_telephone}
-                          </p>
-                        )}
+                        )}  
                       </div>
 
                       <textarea
