@@ -934,17 +934,18 @@ const Home = () => {
   return (
     <div className={containerClasses}>
       {/* ── Mobile hamburger toggle (fixed, only visible ≤767px via CSS) ── */}
-<button
-  type="button"
-  className="notif-status-update-btn"
-  onClick={updateRequestStatus}
-  disabled={
-    statusSaving ||
-    statusDraft === (selectedNotif?.request_snapshot?.status || "").toUpperCase()
-  }
->
-  {statusSaving ? "Updating…" : "Update Status"}
-</button>
+      <button
+        type="button"
+        className={`mobile-menu-toggle${mobileMenuOpen ? " active" : ""}`}
+        aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+        aria-expanded={mobileMenuOpen}
+        aria-controls="main-sidebar"
+        onClick={() => setMobileMenuOpen((p) => !p)}
+      >
+        <span />
+        <span />
+        <span />
+      </button>
 
       {/* ── Overlay behind the mobile drawer; tap to close ── */}
       <div
@@ -1411,7 +1412,10 @@ const Home = () => {
                         type="button"
                         className="notif-status-update-btn"
                         onClick={updateRequestStatus}
-                        disabled={statusSaving}
+                        disabled={
+                          statusSaving ||
+                          statusDraft === (selectedNotif?.request_snapshot?.status || "").toUpperCase()
+                        }
                       >
                         {statusSaving ? "Updating…" : "Update Status"}
                       </button>
