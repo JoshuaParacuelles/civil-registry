@@ -934,16 +934,17 @@ const Home = () => {
   return (
     <div className={containerClasses}>
       {/* ── Mobile hamburger toggle (fixed, only visible ≤767px via CSS) ── */}
-      <button
+  <button
   type="button"
   className="notif-status-update-btn"
   onClick={updateRequestStatus}
-  disabled={statusSaving || statusDraft === (snap.status || "").toUpperCase()}
+  disabled={
+    statusSaving ||
+    statusDraft === (selectedNotif?.request_snapshot?.status || "").toUpperCase()
+  }
 >
-        <span />
-        <span />
-        <span />
-      </button>
+  {statusSaving ? "Updating…" : "Update Status"}
+</button>
 
       {/* ── Overlay behind the mobile drawer; tap to close ── */}
       <div
