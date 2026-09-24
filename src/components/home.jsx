@@ -1400,16 +1400,9 @@ const Home = () => {
         const canOpen = target && canAccess(target.permission);
 
         
-        const hasRequesterEmail = Boolean((snap.requester_email || "").trim());
 
         const signatureSrc = getSignatureSrc(snap, type, selectedNotif.record_id);
         const showSignatureImage = Boolean(snap.has_signature) && !sigFailed;
-
-        // CHANGED: the badge at the top of the modal is now driven by
-        // `statusDraft` — the same state the "Request Status" dropdown
-        // controls — instead of the (possibly stale) `snap.status`. This
-        // makes it update the instant a different option is picked, and
-        // keeps showing the correct value after "Update Status" succeeds.
         const topStatusValue = statusDraft || (snap.status || "").toUpperCase();
         const topStatusLabel = REQUEST_STATUS_LABELS[topStatusValue] || topStatusValue;
 
@@ -1517,27 +1510,7 @@ const Home = () => {
                           service). The requester's phone number is still shown
                           here, read-only, so staff can see it — it just isn't
                           used to send anything. */}
-                      <div className="notif-notify-field">
-                        <span className="notif-notify-field-label">Notify requester via</span>
-                        {!hasRequesterEmail ? (
-                          <p className="notif-notify-warning">
-                            No email address on file for this request — the requester
-                            won't get an automatic notification for this update.
-                          </p>
-                        ) : (
-                          <div className="notif-notify-toggle">
-                            <div
-                              className="notif-notify-option is-selected"
-                              style={{ cursor: "default" }}
-                            >
-                              <span className="notif-notify-option-label">Email</span>
-                              <span className="notif-notify-option-detail">
-                                {snap.requester_email}
-                              </span>
-                            </div>
-                          </div>
-                        )}  
-                      </div>
+
 
                       <textarea
                         className="notif-status-note"
