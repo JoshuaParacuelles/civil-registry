@@ -25,6 +25,10 @@ import logoutIcon    from "../assets/sidebar-icon/logout.png";
 
 import "./home.css";
 
+/* ═══════════════════════════════════════════════════════════
+   CONSTANTS
+   ═══════════════════════════════════════════════════════════ */
+
 const MENU_KEYS = {
   DASHBOARD:         "Dashboard",
   VITAL:             "Vital Records Management",
@@ -46,8 +50,7 @@ const SETTINGS_CHILDREN = [MENU_KEYS.ACCOUNT, MENU_KEYS.AUDIT, MENU_KEYS.ROLE_MA
 const BP_TABLET_MAX = 1024;
 const BP_MOBILE_MAX = 767;
 
-// A session flag used to tell "this is a fresh login" apart from
-// "this is a refresh within the same still-logged-in session".
+// Distinguishes a fresh login from a refresh within the same session.
 const SESSION_FLAG_KEY = "homeSessionActive";
 
 const NOTIF_API_BASE =
@@ -58,14 +61,13 @@ const NOTIFICATION_TABLE = "notification";
 const NOTIF_SELECT_COLUMNS =
   "id, record_type, record_id, control_no, title, message, request_snapshot, is_read, created_at, read_at, read_by";
 
-// Safety-net reconciliation poll. Realtime delivers new/changed rows
-// instantly; this just re-syncs in case a realtime event was ever
-// missed (e.g. during a brief reconnect window). Since it now queries
-// Supabase directly instead of the request.py backend, it no longer
-// depends on that backend being awake.
+// Safety-net poll; realtime normally delivers changes instantly.
 const NOTIF_POLL_MS = 15000;
 
-// Which verifier module each notification type opens when clicked.
+// The "NEW" badge is driven by this list of clicked notifications instead of
+// is_read, so it only disappears when the notification itself is clicked.
+const NOTIF_CLICKED_KEY = "notifClickedIds";
+
 const NOTIF_TARGETS = {
   birth:    { menu: MENU_KEYS.BIRTH,    permission: "birth_verification" },
   marriage: { menu: MENU_KEYS.MARRIAGE, permission: "marriage_verification" },
@@ -74,16 +76,13 @@ const NOTIF_TARGETS = {
 
 const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "COMPLETED"];
 const REQUEST_STATUS_LABELS = {
-  PENDING: "Pending Review",
+  PENDING:    "Pending Review",
   PROCESSING: "Being Processed",
-  COMPLETED: "Complete",
-  REJECTED: "Rejected",
+  COMPLETED:  "Complete",
+  REJECTED:   "Rejected",
 };
 
-/* ── Details shown when a notification is clicked ─────────────
-   The backend stores everything the requester filled in as
-   `request_snapshot` on the notification, so no extra API call is
-   needed. Each entry is [column_name, label]. ── */
+// Sections shown in the request-details modal: [column_name, label].
 const TYPE_SECTIONS = {
   birth: {
     title: "Child's information",
@@ -120,11 +119,6 @@ const TYPE_SECTIONS = {
   },
 };
 
-// CHANGED: added `requester_email` (right after Telephone) so the
-// requester's email and phone number are both visible in the details
-// modal — previously only the phone number showed even though
-// `requester_email` is already stored on the request row and used by
-// email_service.send_status_update_email() to notify the citizen.
 const COMMON_SECTIONS = [
   {
     title: "Request details",
@@ -149,25 +143,18 @@ const COMMON_SECTIONS = [
   {
     title: "Registry reference",
     fields: [
-      ["registry_no",           "Registry no."],
-      ["date_of_registration",  "Date of registration"],
-      ["book",                  "Book"],
-      ["page",                  "Page"],
+      ["registry_no",          "Registry no."],
+      ["date_of_registration", "Date of registration"],
+      ["book",                 "Book"],
+      ["page",                 "Page"],
     ],
   },
 ];
 
-// CHANGED: the key inside `signature_printed_name`'s field renderer that
-// receives special treatment (image instead of plain text) — kept as a
-// constant so the special-case check below is self-documenting and only
-// ever touches this one field.
+// The field that renders the signature image instead of plain text.
 const SIGNATURE_FIELD_KEY = "signature_printed_name";
 
-// CHANGED: possible keys the requester's signature image may be stored
-// under directly inside `request_snapshot` (as a data URL / base64
-// string), checked in order. Keeping this as a list — rather than a
-// single hardcoded key — means whichever key the snapshot actually uses
-// is picked up automatically, without needing another code change here.
+// Keys under which an embedded signature image may be stored in request_snapshot.
 const SIGNATURE_BASE64_KEYS = [
   "signature_base64",
   "signature_image",
@@ -176,19 +163,17 @@ const SIGNATURE_BASE64_KEYS = [
   "signature",
 ];
 
-// CHANGED: looks for an already-embedded signature image inside the
-// notification's own `request_snapshot` first (this is what lets the
-// image "remain visible even when the Request-Slip system is no longer
-// being used or is not open" — it's stored alongside everything else in
-// Supabase, not fetched live from that separate backend). Only if no
-// embedded image is found does it fall back to the old signature-proxy
-// URL served by backend/request.py, for older notifications saved before
-// the image was embedded in the snapshot.
+/* ═══════════════════════════════════════════════════════════
+   HELPERS
+   ═══════════════════════════════════════════════════════════ */
+
+// Prefers a signature embedded in the snapshot (so it stays visible even when
+// the Request-Slip backend is offline); falls back to the signature endpoint
+// for older notifications.
 const getSignatureSrc = (snap, type, recordId) => {
   for (const key of SIGNATURE_BASE64_KEYS) {
     const val = snap?.[key];
     if (typeof val === "string" && val.trim()) {
-      // Accept either a full data URL already, or a bare base64 string.
       return val.startsWith("data:") ? val : `data:image/png;base64,${val}`;
     }
   }
@@ -211,8 +196,8 @@ const getStoredUsername = () => {
   catch { return ""; }
 };
 
-// Reads a submenu's persisted open/closed state, but only inside the same
-// session that set it, so a fresh login always starts with submenus closed.
+// Submenu open state persists only within the same session, so a fresh login
+// always starts with submenus closed.
 const getPersistedSubmenuState = (key) => {
   try {
     const sameSession = sessionStorage.getItem(SESSION_FLAG_KEY) === "true";
@@ -222,11 +207,9 @@ const getPersistedSubmenuState = (key) => {
   }
 };
 
-/* ── Topbar date formatting ── */
 const formatTopbarDate = (d) =>
   d.toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 
-/* "5m ago", "2h ago", "3d ago", then a short date. */
 const timeAgo = (iso) => {
   if (!iso) return "";
   const then = new Date(iso);
@@ -239,7 +222,26 @@ const timeAgo = (iso) => {
   return then.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
 };
 
-/* ── Small inline icons (no extra asset files needed) ── */
+// Returns null when nothing has been stored yet (first run).
+const loadClickedIds = () => {
+  try {
+    const raw = localStorage.getItem(NOTIF_CLICKED_KEY);
+    return raw === null ? null : new Set(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+};
+
+const saveClickedIds = (set) => {
+  try {
+    localStorage.setItem(NOTIF_CLICKED_KEY, JSON.stringify([...set].slice(-500)));
+  } catch {}
+};
+
+/* ═══════════════════════════════════════════════════════════
+   ICONS
+   ═══════════════════════════════════════════════════════════ */
+
 const CalendarIcon = () => (
   <svg className="topbar-datetime-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <rect x="3" y="5" width="18" height="16" rx="3" stroke="currentColor" strokeWidth="1.6" />
@@ -288,6 +290,12 @@ const CloseIcon = () => (
   </svg>
 );
 
+const TrashIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const NotifTypeIcon = ({ type }) => {
   if (type === "birth")    return <BirthIcon />;
   if (type === "marriage") return <MarriageIcon />;
@@ -295,10 +303,6 @@ const NotifTypeIcon = ({ type }) => {
   return <SystemIcon />;
 };
 
-/* ── Status-update toast ──────────────────────────────────────
-   Mirrors the app-wide toast notification design (icon + title +
-   message + auto-dismiss progress bar, top-right) already used
-   elsewhere in the app, so a status update surfaces the same way. ── */
 const ToastSuccessIcon = () => (
   <svg className="notif-toast__type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <circle cx="12" cy="12" r="10" />
@@ -327,6 +331,10 @@ const StatusToastIcon = ({ type }) => {
   return <ToastSuccessIcon />;
 };
 
+/* ═══════════════════════════════════════════════════════════
+   STATUS TOAST
+   ═══════════════════════════════════════════════════════════ */
+
 const STATUS_TOAST_DURATION = 5000;
 
 const StatusToast = ({ id, title, message, type = "success", onDismiss }) => {
@@ -352,12 +360,7 @@ const StatusToast = ({ id, title, message, type = "success", onDismiss }) => {
         <div className="notif-toast__title">{title}</div>
         {message && <div className="notif-toast__msg">{message}</div>}
       </div>
-      <button
-        type="button"
-        className="notif-toast__close"
-        onClick={dismiss}
-        aria-label="Dismiss"
-      >
+      <button type="button" className="notif-toast__close" onClick={dismiss} aria-label="Dismiss">
         <CloseIcon />
       </button>
       <div className="notif-toast__progress">
@@ -370,67 +373,59 @@ const StatusToast = ({ id, title, message, type = "success", onDismiss }) => {
   );
 };
 
-const Home = () => {
-  const { hasAccess, is_admin, loading, logout } = usePermissions();
-  const username = getStoredUsername();
+/* ═══════════════════════════════════════════════════════════
+   HOME
+   ═══════════════════════════════════════════════════════════ */
 
-  // is_admin from PermissionContext is the single source of truth.
-  const isAdminUser = is_admin;
+const Home = () => {
+  const { hasAccess, is_admin: isAdminUser, loading, logout } = usePermissions();
+  const username = getStoredUsername();
 
   const canAccess = useCallback(
     (mod) => {
       if (isAdminUser) return true;
       try { return !!hasAccess(mod); }
-      catch (err) { return false; }
+      catch { return false; }
     },
     [isAdminUser, hasAccess]
   );
 
+  /* ── Layout state ── */
   const [activeSubMenu, setActiveSubMenu] = useState(MENU_KEYS.DASHBOARD);
-
-  const [settingsOpen, setSettingsOpen] = useState(() =>
-    getPersistedSubmenuState("settingsOpen")
-  );
-
-  const [vitalRecordsOpen, setVitalRecordsOpen] = useState(() =>
-    getPersistedSubmenuState("vitalRecordsOpen")
-  );
-
+  const [settingsOpen, setSettingsOpen] = useState(() => getPersistedSubmenuState("settingsOpen"));
+  const [vitalRecordsOpen, setVitalRecordsOpen] = useState(() => getPersistedSubmenuState("vitalRecordsOpen"));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [viewport, setViewport] = useState(getViewport);
-
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem("sidebarCollapsed") === "true"; }
     catch { return false; }
   });
-
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-
-  // Live date shown in the topbar.
   const [now, setNow] = useState(() => new Date());
 
   /* ── Notification state ── */
-  const [notifOpen, setNotifOpen]           = useState(false);
-  const [notifications, setNotifications]   = useState([]);
-  const [unreadCount, setUnreadCount]       = useState(0);
-  const [notifLoading, setNotifLoading]     = useState(true);   // first load only
-  const [notifStatus, setNotifStatus]       = useState("connecting"); // connecting | live | error
-  const notifWrapperRef = useRef(null);
-  const [selectedNotif, setSelectedNotif] = useState(null);   // notification whose details are open
-  const [sigFailed, setSigFailed]         = useState(false);
-  const [sigZoomed, setSigZoomed]         = useState(false);  // NEW: click-to-enlarge signature
-  const [statusDraft, setStatusDraft]    = useState("");
-  const [statusNote, setStatusNote]      = useState("");
-  const [statusSaving, setStatusSaving]  = useState(false);
-  // CHANGED: SMS was removed, so this is now just "email" | "none"
-  // ("none" only when the request has no email address on file).
-  const [notifyVia, setNotifyVia]        = useState("email"); // "email" | "none"
+  const [notifOpen, setNotifOpen]         = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount]     = useState(0);
+  const [notifLoading, setNotifLoading]   = useState(true);
+  const [notifStatus, setNotifStatus]     = useState("connecting"); // connecting | live | error
+  const [clickedIds, setClickedIds]       = useState(() => loadClickedIds() ?? new Set());
+  const clickedSeededRef = useRef(loadClickedIds() !== null);
+  const notifWrapperRef  = useRef(null);
 
-  // Status-update result is now surfaced as a toast (top-right), matching
-  // the app-wide toast notification style, instead of inline modal text.
-  const [statusToasts, setStatusToasts]  = useState([]);
+  /* ── Request-details modal state ── */
+  const [selectedNotif, setSelectedNotif] = useState(null);
+  const [sigFailed, setSigFailed]         = useState(false);
+  const [sigZoomed, setSigZoomed]         = useState(false);
+  const [statusDraft, setStatusDraft]     = useState("");
+  const [statusNote, setStatusNote]       = useState("");
+  const [statusSaving, setStatusSaving]   = useState(false);
+  const [notifyVia, setNotifyVia]         = useState("email"); // "email" | "none" (no email on file)
+
+  /* ── Toasts ── */
+  const [statusToasts, setStatusToasts] = useState([]);
   const statusToastIdRef = useRef(0);
 
   const showStatusToast = useCallback((title, message, type = "success") => {
@@ -442,10 +437,8 @@ const Home = () => {
     setStatusToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Mirrors `notifications` for use inside the realtime callback below,
-  // so that handler doesn't need to be re-subscribed on every state
-  // change (and doesn't need to nest a setState call inside another
-  // setState updater to know a row's previous is_read value).
+  // Mirrors `notifications` so the realtime handler can read the latest list
+  // without being re-subscribed on every change.
   const notificationsRef = useRef(notifications);
   useEffect(() => { notificationsRef.current = notifications; }, [notifications]);
 
@@ -461,7 +454,7 @@ const Home = () => {
         ...(canAccess("scims_lookup")          ? [MENU_KEYS.SCIMS]    : []),
       ];
 
-  // Mark this tab's session as "active" the moment Home mounts.
+  /* ── Effects ── */
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_FLAG_KEY, "true"); } catch {}
   }, []);
@@ -484,23 +477,14 @@ const Home = () => {
 
   // Lock body scroll while the mobile drawer is open.
   useEffect(() => {
-    if (viewport === "mobile" && mobileMenuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    document.body.style.overflow = viewport === "mobile" && mobileMenuOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [viewport, mobileMenuOpen]);
 
   /* ═══════════════════════════════════════════════════════════
-     NOTIFICATIONS
-     Reads/writes go straight to Supabase (always-on), not through
-     either Flask backend, so the bell keeps working regardless of
-     whether the Request website's server happens to be awake.
+     NOTIFICATIONS (read/write directly against Supabase)
      ═══════════════════════════════════════════════════════════ */
 
-  // Pulls the latest notifications + unread count in one go, directly
-  // from Supabase.
   const fetchNotifications = useCallback(async () => {
     try {
       const [listResult, countResult] = await Promise.all([
@@ -520,9 +504,17 @@ const Home = () => {
 
       setNotifications(Array.isArray(listResult.data) ? listResult.data : []);
       setUnreadCount(typeof countResult.count === "number" ? countResult.count : 0);
-      // Don't downgrade an already-live realtime connection just because
-      // this particular reconciliation fetch succeeded before the
-      // channel finished subscribing.
+
+      // First run only: treat already-read notifications as clicked so old
+      // ones don't all suddenly show NEW.
+      if (!clickedSeededRef.current && Array.isArray(listResult.data)) {
+        clickedSeededRef.current = true;
+        const seed = new Set(listResult.data.filter((n) => n.is_read).map((n) => n.id));
+        saveClickedIds(seed);
+        setClickedIds(seed);
+      }
+
+      // Don't downgrade an already-live realtime connection.
       setNotifStatus((prev) => (prev === "live" ? "live" : "connecting"));
     } catch (err) {
       console.error("[Home] Could not load notifications:", err);
@@ -532,9 +524,7 @@ const Home = () => {
     }
   }, []);
 
-  // Load once on mount, subscribe to live changes via Supabase Realtime,
-  // and keep a periodic reconciliation poll as a safety net. All three
-  // talk to Supabase directly, independent of either Flask backend.
+  // Initial load + realtime subscription + reconciliation poll.
   useEffect(() => {
     fetchNotifications();
 
@@ -567,13 +557,9 @@ const Home = () => {
         }
       )
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setNotifStatus("live");
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          setNotifStatus("error");
-        } else {
-          setNotifStatus("connecting");
-        }
+        if (status === "SUBSCRIBED") setNotifStatus("live");
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setNotifStatus("error");
+        else setNotifStatus("connecting");
       });
 
     const poll = setInterval(() => {
@@ -613,29 +599,23 @@ const Home = () => {
 
   const toggleNotifDropdown = () => {
     setNotifOpen((prev) => {
-      if (!prev) fetchNotifications(); // refresh right as it opens
+      if (!prev) fetchNotifications();
       return !prev;
     });
   };
 
-  // Marks one notification as read (optimistic; re-syncs if the call fails).
+  // Optimistic; re-syncs from the server if the call fails.
   const markNotificationRead = useCallback(
     async (notif) => {
       if (!notif || notif.is_read) return;
 
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
-      );
+      setNotifications((prev) => prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n)));
       setUnreadCount((c) => Math.max(0, c - 1));
 
       try {
         const { error } = await supabase
           .from(NOTIFICATION_TABLE)
-          .update({
-            is_read: true,
-            read_at: new Date().toISOString(),
-            read_by: username || null,
-          })
+          .update({ is_read: true, read_at: new Date().toISOString(), read_by: username || null })
           .eq("id", notif.id);
         if (error) throw error;
       } catch (err) {
@@ -655,11 +635,7 @@ const Home = () => {
     try {
       const { error } = await supabase
         .from(NOTIFICATION_TABLE)
-        .update({
-          is_read: true,
-          read_at: new Date().toISOString(),
-          read_by: username || null,
-        })
+        .update({ is_read: true, read_at: new Date().toISOString(), read_by: username || null })
         .eq("is_read", false);
       if (error) throw error;
     } catch (err) {
@@ -667,6 +643,171 @@ const Home = () => {
       fetchNotifications();
     }
   }, [unreadCount, username, fetchNotifications]);
+
+  const markNotificationClicked = useCallback((id) => {
+    setClickedIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      saveClickedIds(next);
+      return next;
+    });
+  }, []);
+
+  // Requires a DELETE policy on the notification table; without one Supabase
+  // returns no error but deletes nothing, which is detected below.
+  const deleteNotification = useCallback(
+    async (notif) => {
+      if (!notif) return;
+
+      setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+      if (!notif.is_read) setUnreadCount((c) => Math.max(0, c - 1));
+
+      try {
+        const { data, error } = await supabase
+          .from(NOTIFICATION_TABLE)
+          .delete()
+          .eq("id", notif.id)
+          .select("id");
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          throw new Error("Nothing was deleted (check the delete policy on the notification table).");
+        }
+      } catch (err) {
+        console.error("[Home] Could not delete notification:", err);
+        fetchNotifications();
+      }
+    },
+    [fetchNotifications]
+  );
+
+  /* ── Request-details modal ── */
+
+  // Opens the modal, then loads the request's authoritative status from the
+  // backend. The cached snapshot status is only a placeholder until it arrives.
+  const handleNotifClick = async (notif) => {
+    markNotificationClicked(notif.id);
+    markNotificationRead(notif);
+    setSigFailed(false);
+    setSigZoomed(false);
+    setSelectedNotif(notif);
+    setNotifOpen(false);
+    setStatusNote("");
+
+    const snap = notif.request_snapshot || {};
+    setNotifyVia((snap.requester_email || "").trim() ? "email" : "none");
+    setStatusDraft((snap.status || "PENDING").toUpperCase());
+
+    if (!notif.record_id) return;
+
+    try {
+      const res = await fetch(`/api/requests/${notif.record_id}`, { credentials: "include" });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      const liveStatus = (data?.status || "").toUpperCase();
+      if (!liveStatus) return;
+
+      setStatusDraft(liveStatus);
+      setSelectedNotif((prev) =>
+        prev && prev.id === notif.id
+          ? { ...prev, request_snapshot: { ...(prev.request_snapshot || {}), status: liveStatus } }
+          : prev
+      );
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notif.id
+            ? { ...n, request_snapshot: { ...(n.request_snapshot || {}), status: liveStatus } }
+            : n
+        )
+      );
+    } catch (err) {
+      console.error("[Home] Could not load live request status:", err);
+    }
+  };
+
+  const closeNotifDetails = useCallback(() => {
+    setSelectedNotif(null);
+    setSigZoomed(false);
+    setStatusDraft("");
+    setStatusNote("");
+    setNotifyVia("email");
+  }, []);
+
+  // Saves the new status via the backend, then mirrors it into the open modal,
+  // the notifications list, and the notification's own snapshot in Supabase so
+  // reopening the notification always shows the saved status.
+  const updateRequestStatus = async () => {
+    if (!selectedNotif?.record_id) return;
+    setStatusSaving(true);
+    try {
+      const res = await fetch(`/api/requests/${selectedNotif.record_id}/status`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: statusDraft,
+          note: statusNote.trim() || undefined,
+          notify_via: notifyVia,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      const savedStatus = (data.status || statusDraft).toUpperCase();
+      const updatedSnapshot = { ...(selectedNotif.request_snapshot || {}), status: savedStatus };
+
+      const notifiedByEmail = Boolean(data.email_sent);
+      showStatusToast(
+        notifiedByEmail ? "Success" : "Notice",
+        data.message || `Updated to ${data.status_label}.`,
+        notifiedByEmail ? "success" : "warning"
+      );
+
+      setStatusDraft(savedStatus);
+      setStatusNote("");
+      setSelectedNotif((prev) => (prev ? { ...prev, request_snapshot: updatedSnapshot } : prev));
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === selectedNotif.id ? { ...n, request_snapshot: updatedSnapshot } : n))
+      );
+
+      try {
+        const { error: snapshotError } = await supabase
+          .from(NOTIFICATION_TABLE)
+          .update({ request_snapshot: updatedSnapshot })
+          .eq("id", selectedNotif.id);
+        if (snapshotError) throw snapshotError;
+      } catch (snapshotErr) {
+        console.error("[Home] Status saved, but could not persist it to the notification snapshot:", snapshotErr);
+      }
+    } catch (err) {
+      showStatusToast("Error", err.message || "Could not update status.", "error");
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const openInVerifier = (notif) => {
+    const target = NOTIF_TARGETS[notif.record_type];
+    if (target && canAccess(target.permission)) {
+      setActiveSubMenu(target.menu);
+      setVitalRecordsOpen(true);
+      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
+      if (viewport === "mobile") setMobileMenuOpen(false);
+    }
+    setSelectedNotif(null);
+  };
+
+  // Escape closes the details modal (or just the zoomed image first, if open).
+  useEffect(() => {
+    if (!selectedNotif) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key !== "Escape") return;
+      if (sigZoomed) setSigZoomed(false);
+      else closeNotifDetails();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selectedNotif, sigZoomed, closeNotifDetails]);
 
   /* ── Sidebar / menu handlers ── */
   const toggleSidebar = useCallback(() => {
@@ -686,229 +827,6 @@ const Home = () => {
   const closeMobileMenu = useCallback(() => {
     if (viewport === "mobile") setMobileMenuOpen(false);
   }, [viewport]);
-
-  // Clicking a notification marks it read and shows what the requester filled in.
-  //
-  // FIX (status persistence bug): this used to seed statusDraft purely from
-  // `notif.request_snapshot?.status` — a cached copy of the status that was
-  // only ever refreshed by a best-effort client-side write straight to the
-  // `notification` table (see updateRequestStatus below). If that write
-  // ever failed silently (e.g. RLS on the notification table, a dropped
-  // request, etc.) the cached snapshot went stale, so reopening the modal
-  // (or reopening it in a different tab/session) could show "Pending
-  // Review" again even though the request's real status — the `status`
-  // column on the civil_registry_request row, updated by
-  // PATCH /api/requests/<id>/status — had actually changed.
-  //
-  // Now, every time a notification is opened, we fetch that row's current
-  // status directly from the backend (the same source of truth the PATCH
-  // endpoint writes to) via GET /api/requests/<record_id>, and use that to
-  // drive statusDraft (and therefore the top-of-modal badge and the
-  // dropdown's selected value). The old snapshot value is still used as an
-  // instant, non-blocking placeholder so the modal never renders blank
-  // while the fetch is in flight — it just gets corrected the moment the
-  // authoritative value comes back.
-  const handleNotifClick = async (notif) => {
-    markNotificationRead(notif);
-    setSigFailed(false);
-    setSigZoomed(false);
-    setSelectedNotif(notif);
-    setNotifOpen(false);
-    setStatusNote("");
-
-    // CHANGED: SMS was removed, so the only channel is email. It's
-    // selected whenever the request has an email address on file, and
-    // "none" otherwise (the phone number is still displayed in the
-    // modal for reference, it just isn't texted).
-    const seedSnap = notif.request_snapshot || {};
-    const seedHasEmail = Boolean((seedSnap.requester_email || "").trim());
-    setNotifyVia(seedHasEmail ? "email" : "none");
-
-    // Seed immediately from whatever we already have locally (cached
-    // snapshot) so the modal isn't blank while the authoritative status
-    // loads from the backend just below.
-    const fallbackStatus = (notif.request_snapshot?.status || "PENDING").toUpperCase();
-    setStatusDraft(fallbackStatus);
-
-    if (!notif.record_id) return;
-
-    try {
-      const res = await fetch(`/api/requests/${notif.record_id}`, {
-        credentials: "include",
-      });
-      if (!res.ok) return;
-      const data = await res.json().catch(() => null);
-      const liveStatus = (data?.status || "").toUpperCase();
-      if (!liveStatus) return;
-
-      // Correct the draft/badge with the real, currently-saved status.
-      setStatusDraft(liveStatus);
-
-      // Keep the local mirrors (selectedNotif + notifications list) in
-      // sync with the authoritative value too, so anything else in the
-      // modal that reads from request_snapshot.status stays consistent,
-      // and so re-clicking the same notification later in this session
-      // (without another round trip) still shows the right thing.
-      setSelectedNotif((prev) =>
-        prev && prev.id === notif.id
-          ? {
-              ...prev,
-              request_snapshot: { ...(prev.request_snapshot || {}), status: liveStatus },
-            }
-          : prev
-      );
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === notif.id
-            ? { ...n, request_snapshot: { ...(n.request_snapshot || {}), status: liveStatus } }
-            : n
-        )
-      );
-    } catch (err) {
-      console.error("[Home] Could not load live request status:", err);
-      // Fall back silently to the snapshot-derived status already set above.
-    }
-  };
-
-  // Closing the details modal also resets the signature zoom state so a
-  // stale enlarged image never lingers on the next notification opened.
-  const closeNotifDetails = useCallback(() => {
-    setSelectedNotif(null);
-    setSigZoomed(false);
-    setStatusDraft("");
-    setStatusNote("");
-    setNotifyVia("email");
-  }, []);
-
-  // Updates the citizen request's status via the main app's own
-  // session-gated endpoint. On success, refreshes this notification's
-  // snapshot locally so the modal reflects the new status immediately,
-  // and the citizen sees it live via the same Supabase Realtime channel
-  // this bell already subscribes to (a fresh "…Request Update"
-  // notification lands for the new status change).
-  // CHANGED: the top-of-modal status badge now renders from `statusDraft`
-  // (see the "Request details" JSX below) rather than from
-  // `request_snapshot.status`, so it always mirrors whichever status is
-  // selected in the dropdown — both while choosing a new value and after
-  // a successful save. We still keep `request_snapshot.status` in sync
-  // here too, so the badge stays correct even if the modal is reopened
-  // later from a freshly-fetched notification.
-  //
-  // FIX: previously only `selectedNotif` (local, modal-only state) was
-  // updated on success. The `notifications` list — which is what
-  // `handleNotifClick` reads from the next time this same notification
-  // is opened — and the `notification` row in Supabase itself were never
-  // touched, so the saved snapshot's `status` stayed stale. That's why
-  // reopening the modal (or reopening it after a refresh) kept showing
-  // "Pending Review" again even though the update had "succeeded".
-  // Now the new status is written into: (1) `selectedNotif` for the
-  // modal that's currently open, (2) the `notifications` array so
-  // reopening the same notification later in this session shows the
-  // right value immediately, and (3) the notification's own
-  // `request_snapshot` column in Supabase, so the correct status is
-  // fetched back from the database on any future load/reopen — on this
-  // device or any other.
-  const updateRequestStatus = async () => {
-    if (!selectedNotif?.record_id) return;
-    setStatusSaving(true);
-    try {
-      const res = await fetch(`/api/requests/${selectedNotif.record_id}/status`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: statusDraft,
-          note: statusNote.trim() || undefined,
-          // Tells the backend whether to email the requester: "email",
-          // or "none" (no email address on file). The backend still
-          // ultimately validates against what's actually stored on the
-          // request before sending.
-          notify_via: notifyVia,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.error) {
-        throw new Error(data?.error || `HTTP ${res.status}`);
-      }
-
-      const savedStatus = (data.status || statusDraft).toUpperCase();
-      const updatedSnapshot = {
-        ...(selectedNotif.request_snapshot || {}),
-        status: savedStatus,
-      };
-
-      // CHANGED: only email exists now, so success/warning depends on
-      // `email_sent` alone (the backend no longer returns `sms_sent`).
-      const notifiedByEmail = Boolean(data.email_sent);
-      showStatusToast(
-        notifiedByEmail ? "Success" : "Notice",
-        data.message || `Updated to ${data.status_label}.`,
-        notifiedByEmail ? "success" : "warning"
-      );
-      setStatusDraft(savedStatus);
-      setSelectedNotif((prev) =>
-        prev ? { ...prev, request_snapshot: updatedSnapshot } : prev
-      );
-      setStatusNote("");
-
-      // Keep the notifications list in sync so reopening this same
-      // notification later (without a full refetch) still shows the
-      // status that was just saved, instead of the old cached snapshot.
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === selectedNotif.id
-            ? { ...n, request_snapshot: updatedSnapshot }
-            : n
-        )
-      );
-
-      // Persist the new status into this notification's own snapshot in
-      // Supabase, so it's the value actually read back the next time the
-      // notification list (or this modal) is loaded from the database —
-      // not just something held in memory for the current session.
-      try {
-        const { error: snapshotError } = await supabase
-          .from(NOTIFICATION_TABLE)
-          .update({ request_snapshot: updatedSnapshot })
-          .eq("id", selectedNotif.id);
-        if (snapshotError) throw snapshotError;
-      } catch (snapshotErr) {
-        console.error(
-          "[Home] Status saved, but could not persist it to the notification snapshot:",
-          snapshotErr
-        );
-      }
-    } catch (err) {
-      showStatusToast("Error", err.message || "Could not update status.", "error");
-    } finally {
-      setStatusSaving(false);
-    }
-  };
-
-  // "Open in verifier" button inside the details modal.
-  const openInVerifier = (notif) => {
-    const target = NOTIF_TARGETS[notif.record_type];
-    if (target && canAccess(target.permission)) {
-      setActiveSubMenu(target.menu);
-      setVitalRecordsOpen(true);
-      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
-      closeMobileMenu();
-    }
-    setSelectedNotif(null);
-  };
-
-  // Escape closes the details modal (or just the zoomed image first, if open).
-  useEffect(() => {
-    if (!selectedNotif) return undefined;
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") {
-        if (sigZoomed) setSigZoomed(false);
-        else closeNotifDetails();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [selectedNotif, sigZoomed, closeNotifDetails]);
 
   const handleMenuClick = (menu) => {
     if (menu === MENU_KEYS.VITAL) {
@@ -944,9 +862,8 @@ const Home = () => {
     closeMobileMenu();
   };
 
-  // Logout: if the context's logout() throws, retry once with a direct
-  // credentialed call so the server-side "is_online = false" update gets a
-  // real chance to commit before the tab navigates away.
+  // If the context's logout() throws, retry once with a direct call so the
+  // server-side "is_online = false" update still gets a chance to commit.
   const handleConfirmLogout = async () => {
     setLoggingOut(true);
     try {
@@ -965,6 +882,7 @@ const Home = () => {
     window.location.replace("/");
   };
 
+  /* ── Derived values ── */
   const showLabels =
     viewport === "mobile" ||
     (viewport === "tablet"  && tabletExpanded) ||
@@ -972,7 +890,7 @@ const Home = () => {
 
   const sidebarClasses = [
     "sidebar",
-    viewport === "mobile"  && mobileMenuOpen  ? "mobile-open"     : "",
+    viewport === "mobile"  && mobileMenuOpen   ? "mobile-open"     : "",
     viewport === "desktop" && sidebarCollapsed ? "collapsed"       : "",
     viewport === "tablet"  && tabletExpanded   ? "tablet-expanded" : "",
     viewport === "tablet"  && !tabletExpanded  ? "collapsed"       : "",
@@ -980,15 +898,20 @@ const Home = () => {
 
   const containerClasses = [
     "dashboard-container",
-    viewport === "desktop" && sidebarCollapsed  ? "sidebar-is-collapsed"       : "",
-    viewport === "tablet"  && tabletExpanded    ? "sidebar-is-tablet-expanded" : "",
-    viewport === "tablet"  && !tabletExpanded   ? "sidebar-is-collapsed"       : "",
+    viewport === "desktop" && sidebarCollapsed ? "sidebar-is-collapsed"       : "",
+    viewport === "tablet"  && tabletExpanded   ? "sidebar-is-tablet-expanded" : "",
+    viewport === "tablet"  && !tabletExpanded  ? "sidebar-is-collapsed"       : "",
   ].filter(Boolean).join(" ");
 
   const displayName = username ? toTitleCase(username) : "Admin";
+  const badgeText = unreadCount > 99 ? "99+" : String(unreadCount);
+
+  const statusTitle =
+    notifStatus === "live"    ? "Live — connected to real-time notifications"
+    : notifStatus === "error" ? "Can't reach the server — retrying"
+    :                           "Connecting…";
 
   const renderContent = () => {
-    // Wait for PermissionContext before making any permission decision.
     if (loading) {
       return (
         <div className="module-loading-state" style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>
@@ -998,58 +921,43 @@ const Home = () => {
     }
 
     switch (activeSubMenu) {
-      case MENU_KEYS.DASHBOARD:
-        return <PaymentInventory />;
-
       case MENU_KEYS.HEATMAPS:
         return canAccess("heatmaps") ? <Heatmaps /> : <AccessDenied />;
-
       case MENU_KEYS.DOCUMENT_TRACKING:
         return canAccess("document_tracking") ? <DocumentTracking /> : <AccessDenied />;
-
       case MENU_KEYS.ACCOUNT:
         return <ChangePassword />;
-
       case MENU_KEYS.BIRTH:
         return canAccess("birth_verification") ? <UnifiedBirthRegistry /> : <AccessDenied />;
-
       case MENU_KEYS.MARRIAGE:
         return canAccess("marriage_verification") ? <UnifiedMarriageRegistry /> : <AccessDenied />;
-
       case MENU_KEYS.DEATH:
         return canAccess("death_verification") ? <DeathVerifier /> : <AccessDenied />;
-
       case MENU_KEYS.SCIMS:
         return canAccess("scims_lookup") ? <ExternalIndividualsLookup /> : <AccessDenied />;
-
       case MENU_KEYS.AUDIT:
         return canAccess("audit_logs") ? <AuditLogs /> : <AccessDenied />;
-
       case MENU_KEYS.ROLE_MANAGEMENT:
         return canAccess("role_management") ? <RoleManagement /> : <AccessDenied />;
-
+      case MENU_KEYS.DASHBOARD:
       default:
         return <PaymentInventory />;
     }
   };
 
-  const badgeText = unreadCount > 99 ? "99+" : String(unreadCount);
-
-  const statusTitle =
-    notifStatus === "live"       ? "Live — connected to real-time notifications"
-    : notifStatus === "error"    ? "Can't reach the server — retrying"
-    :                              "Connecting…";
-
+  /* ═══════════════════════════════════════════════════════════
+     RENDER
+     ═══════════════════════════════════════════════════════════ */
   return (
     <div className={containerClasses}>
-      {/* ── Status-update toast (fixed, top-right) ── */}
+      {/* Status-update toasts */}
       <div className="notif-toast-wrap">
         {statusToasts.map((t) => (
           <StatusToast key={t.id} {...t} onDismiss={dismissStatusToast} />
         ))}
       </div>
 
-      {/* ── Mobile hamburger toggle (fixed, only visible ≤767px via CSS) ── */}
+      {/* Mobile hamburger */}
       <button
         type="button"
         className={`mobile-menu-toggle${mobileMenuOpen ? " active" : ""}`}
@@ -1063,13 +971,14 @@ const Home = () => {
         <span />
       </button>
 
-      {/* ── Overlay behind the mobile drawer; tap to close ── */}
+      {/* Overlay behind the mobile drawer */}
       <div
         className={`mobile-overlay${mobileMenuOpen ? " active" : ""}`}
         onClick={closeMobileMenu}
         aria-hidden="true"
       />
 
+      {/* ── Sidebar ── */}
       <aside id="main-sidebar" className={sidebarClasses} aria-label="Main navigation">
         <div className="sidebar-header">
           <img src={logoImg} alt="Local Civil Registry" className="logo-img" />
@@ -1084,9 +993,7 @@ const Home = () => {
             {showLabels && (
               <div className="sidebar-user-info">
                 <span className="sidebar-user-name">{displayName}</span>
-                <span className="sidebar-user-role">
-                  {isAdminUser ? "Admin Panel" : "Active"}
-                </span>
+                <span className="sidebar-user-role">{isAdminUser ? "Admin Panel" : "Active"}</span>
               </div>
             )}
           </div>
@@ -1117,9 +1024,7 @@ const Home = () => {
                 >
                   <img src={vitalIcon} alt="" className="menu-icon" />
                   {showLabels && <span>Vital Records Management</span>}
-                  {showLabels && (
-                    <span className={`arrow${vitalRecordsOpen ? " down" : ""}`} />
-                  )}
+                  {showLabels && <span className={`arrow${vitalRecordsOpen ? " down" : ""}`} />}
                 </li>
 
                 {showLabels && (
@@ -1207,9 +1112,7 @@ const Home = () => {
             >
               <img src={accountIcon} alt="" className="menu-icon" />
               {showLabels && <span>System Settings</span>}
-              {showLabels && (
-                <span className={`arrow${settingsOpen ? " down" : ""}`} />
-              )}
+              {showLabels && <span className={`arrow${settingsOpen ? " down" : ""}`} />}
             </li>
 
             {showLabels && (
@@ -1244,11 +1147,7 @@ const Home = () => {
           </ul>
 
           <div className="sidebar-footer">
-            <button
-              className="footer-item"
-              onClick={() => setShowLogoutModal(true)}
-              type="button"
-            >
+            <button className="footer-item" onClick={() => setShowLogoutModal(true)} type="button">
               <img src={logoutIcon} alt="" className="menu-icon" />
               {showLabels && <span>Logout</span>}
             </button>
@@ -1256,13 +1155,13 @@ const Home = () => {
         </div>
       </aside>
 
+      {/* ── Main content ── */}
       <div className="main-content-wrapper">
         <header className="topbar">
           <div className="topbar-left">
             <button className="topbar-toggle" onClick={toggleSidebar} type="button">
               <span className="topbar-toggle-icon">☰</span>
             </button>
-
             <span className="topbar-breadcrumb-current">{activeSubMenu}</span>
           </div>
 
@@ -1274,25 +1173,19 @@ const Home = () => {
               </span>
             </div>
 
-            {/* ── Notification bell + dropdown ── */}
+            {/* Notification bell + dropdown */}
             <div className="notif-wrapper" ref={notifWrapperRef}>
               <button
                 type="button"
                 className="notif-btn"
-                aria-label={
-                  unreadCount > 0
-                    ? `Notifications, ${unreadCount} unread`
-                    : "Notifications"
-                }
+                aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
                 aria-haspopup="true"
                 aria-expanded={notifOpen}
                 title="Notifications"
                 onClick={toggleNotifDropdown}
               >
                 <BellIcon />
-                {unreadCount > 0 && (
-                  <span className="notif-count-badge">{badgeText}</span>
-                )}
+                {unreadCount > 0 && <span className="notif-count-badge">{badgeText}</span>}
               </button>
 
               {notifOpen && (
@@ -1300,9 +1193,7 @@ const Home = () => {
                   <div className="notif-panel-header">
                     <div className="notif-panel-title-row">
                       <span className="notif-panel-title">Notifications</span>
-                      {unreadCount > 0 && (
-                        <span className="notif-panel-count">{unreadCount} new</span>
-                      )}
+                      {unreadCount > 0 && <span className="notif-panel-count">{unreadCount} new</span>}
                       <span
                         className={`notif-sse-dot ${notifStatus}`}
                         title={statusTitle}
@@ -1311,11 +1202,7 @@ const Home = () => {
                     </div>
 
                     {unreadCount > 0 && (
-                      <button
-                        type="button"
-                        className="notif-mark-all"
-                        onClick={markAllNotificationsRead}
-                      >
+                      <button type="button" className="notif-mark-all" onClick={markAllNotificationsRead}>
                         Mark all as read
                       </button>
                     )}
@@ -1335,9 +1222,7 @@ const Home = () => {
                     ) : notifications.length === 0 ? (
                       <li className="notif-empty">
                         <BellIcon />
-                        <span>
-                          {notifStatus === "error" ? "Can't load notifications" : "No notifications yet"}
-                        </span>
+                        <span>{notifStatus === "error" ? "Can't load notifications" : "No notifications yet"}</span>
                         <span className="notif-empty-sub">
                           {notifStatus === "error"
                             ? "Check your Supabase connection (see console for details)."
@@ -1345,39 +1230,51 @@ const Home = () => {
                         </span>
                       </li>
                     ) : (
-                notifications.map((n) => (
-  <li
-    key={n.id}
-    className={`notif-item${n.is_read ? "" : " unread"}`}
-    onClick={() => handleNotifClick(n)}
-  >
-    <span className="notif-dot" />
-    <div className={`notif-icon-wrap ${NOTIF_TARGETS[n.record_type] ? n.record_type : "system"}`}>
-      <NotifTypeIcon type={n.record_type} />
-    </div>
-    <div className="notif-body">
-      <div className="notif-msg-row">
-        <p className="notif-msg">{n.message || n.title}</p>
-        {!n.is_read && <span className="notif-new-badge">NEW</span>}
-      </div>
-      <span className="notif-time">{timeAgo(n.created_at)}</span>
-    </div>
-    {!n.is_read && (
-      <button
-        type="button"
-        className="notif-dismiss"
-        title="Mark as read"
-        aria-label="Mark as read"
-        onClick={(e) => {
-          e.stopPropagation();
-          markNotificationRead(n);
-        }}
-      >
-        <CloseIcon />
-      </button>
-    )}
-  </li>
-))
+                      notifications.map((n) => (
+                        <li
+                          key={n.id}
+                          className={`notif-item${n.is_read ? "" : " unread"}`}
+                          onClick={() => handleNotifClick(n)}
+                        >
+                          <span className="notif-dot" />
+                          <div className={`notif-icon-wrap ${NOTIF_TARGETS[n.record_type] ? n.record_type : "system"}`}>
+                            <NotifTypeIcon type={n.record_type} />
+                          </div>
+                          <div className="notif-body">
+                            <div className="notif-msg-row">
+                              <p className="notif-msg">{n.message || n.title}</p>
+                              {!clickedIds.has(n.id) && <span className="notif-new-badge">NEW</span>}
+                            </div>
+                            <span className="notif-time">{timeAgo(n.created_at)}</span>
+                          </div>
+                          {!n.is_read && (
+                            <button
+                              type="button"
+                              className="notif-dismiss"
+                              title="Mark as read"
+                              aria-label="Mark as read"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markNotificationRead(n);
+                              }}
+                            >
+                              <CloseIcon />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="notif-delete"
+                            title="Delete notification"
+                            aria-label="Delete notification"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteNotification(n);
+                            }}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </li>
+                      ))
                     )}
                   </ul>
                 </div>
@@ -1386,9 +1283,7 @@ const Home = () => {
           </div>
         </header>
 
-        <main className="main-content">
-          {renderContent()}
-        </main>
+        <main className="main-content">{renderContent()}</main>
       </div>
 
       {/* ── Request details (opens when a notification is clicked) ── */}
@@ -1398,8 +1293,6 @@ const Home = () => {
         const sections = [TYPE_SECTIONS[type], ...COMMON_SECTIONS].filter(Boolean);
         const target = NOTIF_TARGETS[type];
         const canOpen = target && canAccess(target.permission);
-
-        
 
         const signatureSrc = getSignatureSrc(snap, type, selectedNotif.record_id);
         const showSignatureImage = Boolean(snap.has_signature) && !sigFailed;
@@ -1432,12 +1325,7 @@ const Home = () => {
                     {topStatusLabel}
                   </span>
                 )}
-                <button
-                  type="button"
-                  className="notif-detail-close"
-                  aria-label="Close"
-                  onClick={closeNotifDetails}
-                >
+                <button type="button" className="notif-detail-close" aria-label="Close" onClick={closeNotifDetails}>
                   <CloseIcon />
                 </button>
               </div>
@@ -1453,14 +1341,8 @@ const Home = () => {
                         {section.fields.map(([key, label]) => (
                           <div key={key} className="notif-detail-field">
                             <dt>{label}</dt>
-                            {/* CHANGED: the "Signature over printed name" field now
-                                renders the requester's actual signature image
-                                directly in its own designated area, instead of
-                                (or in addition to) the typed name — click to
-                                enlarge, same as before. Every other field keeps
-                                rendering exactly as it did previously. */}
                             {key === SIGNATURE_FIELD_KEY && showSignatureImage ? (
-                              <dd className="notif-detail-field-signature">
+                              <dd>
                                 <img
                                   className="notif-detail-signature"
                                   src={signatureSrc}
@@ -1505,13 +1387,6 @@ const Home = () => {
                         ))}
                       </select>
 
-                      {/* CHANGED: notify-requester-via control is now email-only.
-                          The SMS and Both options were removed (SMS is a paid
-                          service). The requester's phone number is still shown
-                          here, read-only, so staff can see it — it just isn't
-                          used to send anything. */}
-
-
                       <textarea
                         className="notif-status-note"
                         placeholder="Optional note to include in the citizen's notification…"
@@ -1540,18 +1415,14 @@ const Home = () => {
                   Close
                 </button>
                 {canOpen && (
-                  <button
-                    type="button"
-                    className="notif-detail-open-btn"
-                    onClick={() => openInVerifier(selectedNotif)}
-                  >
+                  <button type="button" className="notif-detail-open-btn" onClick={() => openInVerifier(selectedNotif)}>
                     Open in {target.menu}
                   </button>
                 )}
               </div>
             </div>
 
-            {/* NEW: full-size signature lightbox */}
+            {/* Full-size signature lightbox */}
             {sigZoomed && (
               <div
                 className="sig-zoom-overlay"
@@ -1583,11 +1454,9 @@ const Home = () => {
         );
       })()}
 
+      {/* ── Logout confirmation ── */}
       {showLogoutModal && (
-        <div
-          className="logout-modal-overlay"
-          onClick={() => !loggingOut && setShowLogoutModal(false)}
-        >
+        <div className="logout-modal-overlay" onClick={() => !loggingOut && setShowLogoutModal(false)}>
           <div className="logout-modal" onClick={(e) => e.stopPropagation()}>
             <h2>Confirm Logout</h2>
             <p>Are you sure you want to exit? You'll need to sign in again to continue.</p>
