@@ -825,46 +825,77 @@ body {
   font-weight: 500;
 }
 
-.notif-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+.notif-kebab-wrap {
+  position: relative;
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
-.notif-action-btn {
-  display: inline-flex;
+.notif-kebab-btn {
+  display: flex;
   align-items: center;
   justify-content: center;
-  white-space: nowrap;
-  font-family: var(--font);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 9px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-raised);
-  color: var(--text-soft);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
+  padding: 0;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.notif-action-btn:hover {
-  background: var(--bg-hover);
+.notif-kebab-btn:hover,
+.notif-kebab-btn[aria-expanded="true"] {
+  background: var(--bg-raised);
+  border-color: var(--border-strong);
   color: var(--text-primary);
 }
 
-.notif-action-btn--danger {
-  color: #dc2626;
-  border-color: rgba(220, 38, 38, 0.22);
-  background: rgba(220, 38, 38, 0.07);
+.notif-action-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 150px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  animation: notifSlide 0.15s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.notif-action-btn--danger:hover {
-  background: rgba(220, 38, 38, 0.14);
+.notif-action-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.notif-action-menu-item:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+.notif-action-menu-item--danger { color: #dc2626; }
+
+.notif-action-menu-item--danger:hover {
+  background: rgba(220, 38, 38, 0.09);
   color: #b91c1c;
-  border-color: rgba(220, 38, 38, 0.4);
 }
 
 .notif-empty {

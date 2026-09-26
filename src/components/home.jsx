@@ -265,6 +265,14 @@ const CloseIcon = () => (
   </svg>
 );
 
+const KebabIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="5" cy="12" r="1.8" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+    <circle cx="19" cy="12" r="1.8" fill="currentColor" />
+  </svg>
+);
+
 const NotifTypeIcon = ({ type }) => {
   if (type === "birth")    return <BirthIcon />;
   if (type === "marriage") return <MarriageIcon />;
@@ -370,6 +378,7 @@ const Home = () => {
   const [notifLoading, setNotifLoading]   = useState(true);
   const [notifStatus, setNotifStatus]     = useState("connecting");
   const [clickedIds, setClickedIds]       = useState(() => loadClickedIds() ?? new Set());
+  const [openActionMenuId, setOpenActionMenuId] = useState(null);
   const clickedSeededRef = useRef(loadClickedIds() !== null);
   const notifWrapperRef  = useRef(null);
 
@@ -539,6 +548,33 @@ const Home = () => {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [notifOpen]);
+
+  useEffect(() => {
+    if (!notifOpen) setOpenActionMenuId(null);
+  }, [notifOpen]);
+
+  useEffect(() => {
+    if (openActionMenuId === null) return undefined;
+
+    const onPointerDown = (e) => {
+      if (!e.target.closest(".notif-kebab-wrap")) setOpenActionMenuId(null);
+    };
+    const onKeyDown = (e) => { if (e.key === "Escape") setOpenActionMenuId(null); };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openActionMenuId]);
+
+  const toggleActionMenu = (id, e) => {
+    e.stopPropagation();
+    setOpenActionMenuId((prev) => (prev === id ? null : id));
+  };
 
   const toggleNotifDropdown = () => {
     setNotifOpen((prev) => {
@@ -1186,41 +1222,63 @@ const Home = () => {
                               {!clickedIds.has(n.id) && <span className="notif-new-badge">NEW</span>}
                             </div>
                             <span className="notif-time">{timeAgo(n.created_at)}</span>
-                            <div className="notif-actions">
-                              {n.is_read ? (
-                                <button
-                                  type="button"
-                                  className="notif-action-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    markNotificationUnread(n);
-                                  }}
-                                >
-                                  Mark as Unread
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="notif-action-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    markNotificationRead(n);
-                                  }}
-                                >
-                                  Mark as read
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                className="notif-action-btn notif-action-btn--danger"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteNotification(n);
-                                }}
+                          </div>
+                          <div className="notif-kebab-wrap">
+                            <button
+                              type="button"
+                              className="notif-kebab-btn"
+                              aria-label="More actions"
+                              aria-haspopup="true"
+                              aria-expanded={openActionMenuId === n.id}
+                              onClick={(e) => toggleActionMenu(n.id, e)}
+                            >
+                              <KebabIcon />
+                            </button>
+
+                            {openActionMenuId === n.id && (
+                              <div
+                                className="notif-action-menu"
+                                role="menu"
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                Remove
-                              </button>
-                            </div>
+                                {n.is_read ? (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="notif-action-menu-item"
+                                    onClick={() => {
+                                      markNotificationUnread(n);
+                                      setOpenActionMenuId(null);
+                                    }}
+                                  >
+                                    Mark as Unread
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="notif-action-menu-item"
+                                    onClick={() => {
+                                      markNotificationRead(n);
+                                      setOpenActionMenuId(null);
+                                    }}
+                                  >
+                                    Mark as read
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="notif-action-menu-item notif-action-menu-item--danger"
+                                  onClick={() => {
+                                    deleteNotification(n);
+                                    setOpenActionMenuId(null);
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </li>
                       ))
