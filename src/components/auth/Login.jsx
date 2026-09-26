@@ -6,25 +6,8 @@ import "./Login.css";
 import bgImage from "../../assets/home.jpg";
 import loginLogo from "../../assets/scc.png";
 
-// BUG FIX: this was hardcoded to the absolute Render URL
-// ("https://civil-registry.onrender.com"), which made every login
-// request cross-origin/cross-site relative to the page — even in local
-// dev, since it pointed at the deployed backend instead of localhost.
-// That meant the session cookie Set-Cookie'd back by the login response
-// was a third-party cookie from the browser's point of view, which
-// modern browsers block or drop by default. The result: login appeared
-// to succeed, but the cookie never actually stuck, so the very next
-// /api/session check (in PermissionContext) came back unauthenticated
-// and bounced the user straight back to the login page.
-//
-// Relative by default — same pattern as PermissionContext.jsx. In local
-// dev this goes through the Vite proxy to localhost:5000; in production
-// it goes through the vercel.json rewrite to the Render backend. Either
-// way the request stays same-origin from the browser's perspective, so
-// the cookie is set and sent as first-party.
 const API = import.meta.env.VITE_API_BASE_URL || "";
 
-/* ── Icons ─────────────────────────────────────────────────────── */
 const UserIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -66,7 +49,6 @@ const LockFilledIcon = () => (
   </svg>
 );
 
-/* ── Toast System ────────────────────────────────────────────────── */
 let _toastSetters = [];
 
 function useToasts() {
@@ -149,31 +131,13 @@ function Toast({ id, title, message, duration = 5000, success = true }) {
   );
 }
 
-/* ── Mobile-only style override ──────────────────────────────────
-   Requested fix: on mobile the page must be fully white (no bleed-
-   through from the .login-right background photo behind the curve)
-   and the toast must anchor to the UPPER-RIGHT corner — same as
-   desktop — instead of stretching across the bottom of the screen.
-
-   This is kept here (rather than only in Login.css) because the
-   CSS-only version wasn't reliably taking effect. Rendering it as a
-   <style> tag inside the component guarantees it loads after
-   Login.css, and the `!important`s make the override unambiguous
-   regardless of import/cache order. It only targets the existing
-   `≤768px` mobile breakpoint, so the desktop layout (S-curve,
-   background photo, top-right toast) is completely unaffected.
-   ────────────────────────────────────────────────────────────────── */
 const MobileOverrideStyles = () => (
   <style>{`
     @media (max-width: 768px) {
-      /* Hide the background photo panel entirely so nothing shows
-         through behind the curved/white form panel. */
       .login-right {
         display: none !important;
       }
 
-      /* Make sure the page shell and the form panel are both a flat,
-         completely white background. */
       .login-page {
         background: #ffffff !important;
       }
@@ -182,8 +146,6 @@ const MobileOverrideStyles = () => (
         background: #ffffff !important;
       }
 
-      /* Anchor the toast to the upper-right corner, matching the
-         desktop position, instead of stretching across the bottom. */
       .toast-wrap {
         top: 20px !important;
         bottom: auto !important;
@@ -201,7 +163,6 @@ const MobileOverrideStyles = () => (
   `}</style>
 );
 
-/* ── Main Component ──────────────────────────────────────────────── */
 const Login = () => {
   const [username, setUsername]         = useState("");
   const [password, setPassword]         = useState("");
@@ -210,7 +171,6 @@ const Login = () => {
   const [isLocked, setIsLocked]         = useState(false);
 
   useEffect(() => {
-    // If already authenticated, route directly
     if (sessionStorage.getItem("isAuthenticated") === "true") {
       window.location.href = "/dashboard";
     }
@@ -235,13 +195,11 @@ const Login = () => {
         const userObj = response.data.user || {};
         const loggedUsername = userObj.username || username;
 
-        // Persist session flags explicitly
         sessionStorage.setItem("isAuthenticated", "true");
         sessionStorage.setItem("username", loggedUsername);
 
         pushToast({ title: "Login successful!", message: msg, success: true, duration: 2000 });
 
-        // Direct window refresh-navigation to trigger context re-mount
         setTimeout(() => {
           window.location.href = "/dashboard";
         }, 400);
@@ -352,16 +310,16 @@ const Login = () => {
                 className={`login-btn${loading ? " btn-loading" : ""}${isLocked ? " btn-locked" : ""}`}
                 disabled={loading}
               >
-               {loading ? (
-  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-    <span className="spinner" />
-    Logging in…
-  </span>
-) : isLocked ? (
-  "Account Locked"
-) : (
-  "Log in"
-)}
+                {loading ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <span className="spinner" />
+                    Logging in…
+                  </span>
+                ) : isLocked ? (
+                  "Account Locked"
+                ) : (
+                  "Log in"
+                )}
               </button>
             </form>
           </div>
