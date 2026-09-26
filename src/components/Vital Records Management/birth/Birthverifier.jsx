@@ -30,9 +30,9 @@ const STEPS = [
   { key: "releasing", label: "Releasing" },
 ];
 
-const BTN = "h-[34px] px-[14px] border-0 rounded-full text-[12.5px] font-semibold cursor-pointer whitespace-nowrap inline-flex items-center gap-[5px] [font-family:var(--f)] transition-all duration-150 touch-manipulation [-webkit-tap-highlight-color:transparent] flex-shrink-0";
-const BTN_PRIMARY = `${BTN} !bg-[#2563eb] !text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] min-w-[110px] justify-center hover:enabled:!bg-[#1d4ed8] hover:enabled:-translate-y-px hover:enabled:shadow-[0_4px_16px_rgba(37,99,235,0.35)] disabled:!bg-[rgba(37,99,235,0.35)] disabled:cursor-not-allowed disabled:shadow-none`;
-const BTN_SECONDARY = `${BTN} !bg-white !text-[var(--txt2)] border border-[1.5px] border-[var(--border-strong)] shadow-none hover:enabled:!bg-[var(--surf-2)] hover:enabled:!text-[var(--txt)] hover:enabled:border-[var(--txt3)] hover:enabled:-translate-y-px disabled:!bg-white disabled:!text-[var(--txt3)] disabled:border-[var(--border-lt)] disabled:cursor-not-allowed`;
+const BTN = "h-8.5 px-3.5 border-0 rounded-full text-[12.5px] font-semibold cursor-pointer whitespace-nowrap inline-flex items-center gap-1.25 [font-family:var(--f)] transition-all duration-150 touch-manipulation [-webkit-tap-highlight-color:transparent] shrink-0";
+const BTN_PRIMARY = `${BTN} bg-[#2563eb]! text-white! shadow-[0_2px_8px_rgba(37,99,235,0.25)] min-w-27.5 justify-center hover:enabled:bg-[#1d4ed8]! hover:enabled:-translate-y-px hover:enabled:shadow-[0_4px_16px_rgba(37,99,235,0.35)] disabled:bg-[rgba(37,99,235,0.35)]! disabled:cursor-not-allowed disabled:shadow-none`;
+const BTN_SECONDARY = `${BTN} bg-white! text-(--txt2)! border-[1.5px] border-(--border-strong) shadow-none hover:enabled:bg-(--surf-2)! hover:enabled:text-(--txt)! hover:enabled:border-(--txt3) hover:enabled:-translate-y-px disabled:bg-white! disabled:text-(--txt3)! disabled:border-(--border-lt) disabled:cursor-not-allowed`;
 
 function useViewport() {
   const [width, setWidth] = useState(
@@ -313,7 +313,7 @@ function printPdfFromData(pdfData) {
 const OfficeLogo = ({ className = "" }) => {
   if (LOGO_SRC || LOGO_SRC_2) {
     return (
-      <div className="flex items-center gap-[6px]">
+      <div className="flex items-center gap-1.5">
         {LOGO_SRC && <img src={LOGO_SRC} alt="Office Seal" className={className} />}
         {LOGO_SRC_2 && <img src={LOGO_SRC_2} alt="LCR Seal" className={className} />}
       </div>
@@ -358,12 +358,12 @@ function NegativeCertDocument({ certData }) {
 
   return (
     <div className="w-full">
-      <div className="absolute -top-[48pt] -left-[46pt]">
+      <div className="absolute -top-16 left-[-46pt]">
         <OfficeLogo className="w-[62pt] h-[62pt] block" />
       </div>
       <p className="text-right mb-[28pt] text-[12pt]">{todayDate}</p>
       <p className="text-[12pt] mb-[16pt] font-normal">TO WHOM IT MAY CONCERN:</p>
-      <p className="indent-[36pt] text-justify mb-[12pt] text-[12pt]">
+      <p className="indent-12 text-justify mb-4 text-[12pt]">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of birth of&nbsp;
         <strong className="font-bold text-black">{(subjectName || "").toUpperCase()}</strong>
         &nbsp;who is alleged to have been born {dateStr}in {city} from parents,&nbsp;
@@ -372,39 +372,39 @@ function NegativeCertDocument({ certData }) {
         as requested, a true copy of his/her Certificate of Live Birth or transcription from
         the Register of Births.
       </p>
-      <p className="indent-[36pt] text-justify mb-[12pt] text-[12pt]">
+      <p className="indent-12 text-justify mb-4 text-[12pt]">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Birth for the
         year <strong>{year}</strong> are still intact in the archives of this office.
       </p>
-      <p className="indent-[36pt] text-justify mb-[12pt] text-[12pt]">
+      <p className="indent-12 text-justify mb-4 text-[12pt]">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This certification is issued to&nbsp;
         <strong className="font-bold text-black">{reqName}</strong> upon his/her request.
       </p>
-      <div className="mt-[36pt] flex justify-end">
+      <div className="mt-12 flex justify-end">
         <div className="text-center min-w-[200pt]">
           <div className="font-bold text-[12pt] text-black">{certifyingOfficer.name}</div>
           <div className="italic text-[12pt] font-bold text-black">{certifyingOfficer.title}</div>
         </div>
       </div>
       <div className="mt-[28pt]">
-        <div className="text-[12pt] mb-[18pt]">Verified by:</div>
+        <div className="text-[12pt] mb-6">Verified by:</div>
         <span className="font-bold text-[12pt] text-center block">{verifiedBy.name}</span>
         <span className="italic text-[12pt] font-bold text-center block">{verifiedBy.title}</span>
       </div>
       <div className="mt-[32pt] text-[12pt]">
-        <div className="mb-[6pt] flex gap-1 items-end">
-          <span className="min-w-[90pt] flex-shrink-0">Amount Paid</span>
-          <span className="min-w-[8pt] flex-shrink-0 mr-1">:</span>
+        <div className="mb-2 flex gap-1 items-end">
+          <span className="min-w-30 shrink-0">Amount Paid</span>
+          <span className="min-w-[8pt] shrink-0 mr-1">:</span>
           <span className="flex-1 text-[12pt] text-black">{amountPaid || "₱75.00"}</span>
         </div>
-        <div className="mb-[6pt] flex gap-1 items-end">
-          <span className="min-w-[90pt] flex-shrink-0">O.R. Number</span>
-          <span className="min-w-[8pt] flex-shrink-0 mr-1">:</span>
+        <div className="mb-2 flex gap-1 items-end">
+          <span className="min-w-30 shrink-0">O.R. Number</span>
+          <span className="min-w-[8pt] shrink-0 mr-1">:</span>
           <span className="flex-1 text-[12pt] text-black">{orNumber || ""}</span>
         </div>
-        <div className="mb-[6pt] flex gap-1 items-end">
-          <span className="min-w-[90pt] flex-shrink-0">Date Paid</span>
-          <span className="min-w-[8pt] flex-shrink-0 mr-1">:</span>
+        <div className="mb-2 flex gap-1 items-end">
+          <span className="min-w-30 shrink-0">Date Paid</span>
+          <span className="min-w-[8pt] shrink-0 mr-1">:</span>
           <span className="flex-1 text-[12pt] text-black">{datePaid || todayDate}</span>
         </div>
       </div>
@@ -464,14 +464,14 @@ function printNegativeCertificate(certData) {
 }
 
 const IconDocument = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[14px] h-[14px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
     <polyline points="14 2 14 8 20 8"/>
   </svg>
 );
 
 const IconClipboard = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[14px] h-[14px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="9" y="2" width="6" height="4" rx="1" ry="1"/>
     <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
     <line x1="12" y1="11" x2="12" y2="17"/>
@@ -480,7 +480,7 @@ const IconClipboard = ({ className = "" }) => (
 );
 
 const IconGrid = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[14px] h-[14px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
     <line x1="9" y1="9" x2="15" y2="9"/>
     <line x1="9" y1="13" x2="15" y2="13"/>
@@ -489,7 +489,7 @@ const IconGrid = ({ className = "" }) => (
 );
 
 const IconArchive = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[11px] h-[11px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="21 8 21 21 3 21 3 8"/>
     <rect x="1" y="3" width="22" height="5"/>
     <line x1="10" y1="12" x2="14" y2="12"/>
@@ -497,14 +497,14 @@ const IconArchive = ({ className = "" }) => (
 );
 
 const IconLock = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[22px] h-[22px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-5.5 h-5.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
     <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
   </svg>
 );
 
 const IconUpload = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[14px] h-[14px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
     <polyline points="17 8 12 3 7 8"/>
     <line x1="12" y1="3" x2="12" y2="15"/>
@@ -512,14 +512,14 @@ const IconUpload = ({ className = "" }) => (
 );
 
 const IconSearch = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[11px] h-[11px] ${className}`} viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75 ${className}`} viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="11" cy="11" r="8"/>
     <line x1="21" y1="21" x2="16.65" y2="16.65"/>
   </svg>
 );
 
 const IconPrint = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[11px] h-[11px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="6 9 6 2 18 2 18 9"/>
     <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
     <rect x="6" y="14" width="12" height="8"/>
@@ -527,7 +527,7 @@ const IconPrint = ({ className = "" }) => (
 );
 
 const IconInfo = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[11px] h-[11px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10"/>
     <line x1="12" y1="8" x2="12" y2="12"/>
     <line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -535,20 +535,20 @@ const IconInfo = ({ className = "" }) => (
 );
 
 const IconCheck = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[14px] h-[14px] ${className}`} viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="20 6 9 17 4 12"/>
   </svg>
 );
 
 const IconEye = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[18px] h-[18px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-4.5 h-4.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
     <circle cx="12" cy="12" r="3"/>
   </svg>
 );
 
 const IconEyeOff = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[18px] h-[18px] ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-4.5 h-4.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
     <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
     <line x1="1" y1="1" x2="23" y2="23"/>
@@ -556,20 +556,20 @@ const IconEyeOff = ({ className = "" }) => (
 );
 
 const IconFolder = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[30px] h-[30px] ${className}`} viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-7.5 h-7.5 ${className}`} viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
   </svg>
 );
 
 const IconDocumentLg = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[26px] h-[26px] ${className}`} viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-6.5 h-6.5 ${className}`} viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
     <polyline points="14 2 14 8 20 8"/>
   </svg>
 );
 
 const FileIconSm = () => (
-  <svg className="inline-flex items-center justify-center flex-shrink-0 align-middle stroke-current fill-none w-[11px] h-[11px]" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className="inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
     <polyline points="14 2 14 8 20 8"/>
   </svg>
@@ -604,7 +604,7 @@ function removeToast(id) {
 function ToastContainer() {
   const toasts = useToasts();
   return (
-    <div className="fixed top-5 right-5 z-[99999] flex flex-col gap-[10px] pointer-events-none">
+    <div className="fixed top-5 right-5 z-99999 flex flex-col gap-2.5 pointer-events-none">
       {toasts.map((t) => (
         <Toast key={t.id} {...t} />
       ))}
@@ -634,11 +634,11 @@ function Toast({ id, title, message, duration = 5000, type = "success" }) {
 
   return (
     <div
-      className="bg-white border border-[#e5e7eb] rounded-[10px] shadow-[0_4px_20px_rgba(0,0,0,0.10),0_1px_6px_rgba(0,0,0,0.06)] pt-[13px] px-[14px] pb-4 min-w-[280px] max-w-[360px] flex items-start gap-[11px] pointer-events-auto relative overflow-hidden"
+      className="bg-white border border-[#e5e7eb] rounded-[10px] shadow-[0_4px_20px_rgba(0,0,0,0.10),0_1px_6px_rgba(0,0,0,0.06)] pt-3.25 px-3.5 pb-4 min-w-70 max-w-90 flex items-start gap-2.75 pointer-events-auto relative overflow-hidden"
       style={{ animation: hiding ? "bvToastSlideOut 0.28s ease forwards" : "bvToastSlideIn 0.35s cubic-bezier(0.22,1,0.36,1) both" }}
     >
       <svg
-        className="w-5 h-5 flex-shrink-0 mt-px"
+        className="w-5 h-5 shrink-0 mt-px"
         viewBox="0 0 24 24"
         fill="none"
         stroke={color}
@@ -668,15 +668,15 @@ function Toast({ id, title, message, duration = 5000, type = "success" }) {
       </svg>
 
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-bold text-[#1a2332] mb-[2px] [font-family:var(--f)] leading-[1.3]">{title}</div>
-        {message && <div className="text-xs text-[#4a5568] leading-[1.5] [font-family:var(--f)] break-words">{message}</div>}
+        <div className="text-[13px] font-bold text-[#1a2332] mb-0.5 [font-family:var(--f)] leading-[1.3]">{title}</div>
+        {message && <div className="text-xs text-[#4a5568] leading-normal [font-family:var(--f)] wrap-break-word">{message}</div>}
       </div>
 
-      <button className="bg-transparent border-0 cursor-pointer text-[#9ca3af] text-[17px] leading-none p-0 flex-shrink-0 -mt-px [font-family:var(--f)] transition-colors duration-150 hover:text-[#1a2332]" onClick={dismiss} aria-label="Dismiss">
+      <button className="bg-transparent border-0 cursor-pointer text-[#9ca3af] text-[17px] leading-none p-0 shrink-0 -mt-px [font-family:var(--f)] transition-colors duration-150 hover:text-[#1a2332]" onClick={dismiss} aria-label="Dismiss">
         ×
       </button>
 
-      <div className="h-[3px] bg-[#f3f4f6] absolute bottom-0 left-0 right-0 overflow-hidden rounded-b-[10px]">
+      <div className="h-0.75 bg-[#f3f4f6] absolute bottom-0 left-0 right-0 overflow-hidden rounded-b-[10px]">
         <div
           className="h-full w-full rounded-b-[10px]"
           style={{ animation: `bvToastShrink ${duration}ms linear forwards`, background: color }}
@@ -697,14 +697,14 @@ function useShowNotif() {
 const ConfirmModal = ({
   title, message, confirmLabel, confirmColor = "#dc2626", onConfirm, onCancel,
 }) => (
-  <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] [backdrop-filter:blur(4px)] z-[9998] flex items-center justify-center p-4" style={{ animation: "fadeIn 0.15s ease" }} onClick={onCancel}>
-    <div className="modal-box-glow bg-white rounded-[14px] px-[18px] py-5 max-w-[360px] w-full shadow-[0_16px_48px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] border border-[var(--border-strong)] relative overflow-hidden" style={{ animation: "slideUp 0.2s ease" }} onClick={(e) => e.stopPropagation()}>
-      <h3 className="m-0 mb-[7px] text-[15px] font-bold text-[var(--txt)] [font-family:var(--fh)]">{title}</h3>
-      <p className="m-0 mb-4 text-[12.5px] text-[var(--txt2)] leading-[1.6]" dangerouslySetInnerHTML={{ __html: message }} />
-      <div className="flex gap-[7px] justify-end items-center flex-wrap">
-        <button className="px-[14px] py-[7px] rounded-[7px] border border-[var(--border-strong)] !bg-white !text-[var(--txt2)] text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 touch-manipulation flex-shrink-0 hover:!bg-[var(--surf-2)] hover:!text-[var(--txt)] hover:border-[var(--txt3)]" onClick={onCancel}>Cancel</button>
+  <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] [backdrop-filter:blur(4px)] z-9998 flex items-center justify-center p-4" style={{ animation: "fadeIn 0.15s ease" }} onClick={onCancel}>
+    <div className="modal-box-glow bg-white rounded-[14px] px-4.5 py-5 max-w-90 w-full shadow-[0_16px_48px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] border border-(--border-strong) relative overflow-hidden" style={{ animation: "slideUp 0.2s ease" }} onClick={(e) => e.stopPropagation()}>
+      <h3 className="m-0 mb-1.75 text-[15px] font-bold text-(--txt) [font-family:var(--fh)]">{title}</h3>
+      <p className="m-0 mb-4 text-[12.5px] text-(--txt2) leading-[1.6]" dangerouslySetInnerHTML={{ __html: message }} />
+      <div className="flex gap-1.75 justify-end items-center flex-wrap">
+        <button className="px-3.5 py-1.75 rounded-[7px] border border-(--border-strong) bg-white! text-(--txt2)! text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 touch-manipulation shrink-0 hover:bg-(--surf-2)! hover:text-(--txt)! hover:border-(--txt3)" onClick={onCancel}>Cancel</button>
         <button
-          className="px-[14px] py-[7px] rounded-[7px] border-0 !text-white text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 touch-manipulation flex-shrink-0 !bg-[#dc2626] hover:brightness-90 hover:-translate-y-px"
+          className="px-3.5 py-1.75 rounded-[7px] border-0 text-white! text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 touch-manipulation shrink-0 bg-[#dc2626]! hover:brightness-90 hover:-translate-y-px"
           onClick={onConfirm}
         >
           {confirmLabel}
@@ -716,12 +716,12 @@ const ConfirmModal = ({
 
 const NegCertField = ({ label, htmlFor, required, error, children }) => (
   <div className="flex flex-col gap-1">
-    <label className="flex items-center gap-[5px] text-[10px] font-bold uppercase tracking-[0.5px] text-[var(--txt3)] leading-none" htmlFor={htmlFor}>
+    <label className="flex items-center gap-1.25 text-[10px] font-bold uppercase tracking-[0.5px] text-(--txt3) leading-none" htmlFor={htmlFor}>
       {label}
       {required && <span className="text-[#dc2626] ml-px text-[11px]"> *</span>}
     </label>
     {children}
-    {error && <span className="text-[10.5px] font-semibold text-[var(--red)] flex items-center gap-[3px]">&#9888; {error}</span>}
+    {error && <span className="text-[10.5px] font-semibold text-(--red) flex items-center gap-0.75">&#9888; {error}</span>}
   </div>
 );
 
@@ -747,21 +747,21 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
     });
   };
 
-  const inputCls = (err) => `h-9 px-[11px] border border-[1.5px] border-[var(--border-strong)] rounded-[7px] text-[13px] [font-family:var(--f)] text-[var(--txt)] bg-white outline-none w-full transition-[border-color,box-shadow,background] duration-150 [-webkit-appearance:none] focus:border-[var(--blue)] focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] focus:bg-white${err ? " !border-[var(--red)] !shadow-[0_0_0_3px_rgba(220,38,38,0.10)]" : ""}`;
+  const inputCls = (err) => `h-9 px-2.75 border-[1.5px] border-(--border-strong) rounded-[7px] text-[13px] [font-family:var(--f)] text-(--txt) bg-white outline-none w-full transition-[border-color,box-shadow,background] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] focus:bg-white${err ? " border-(--red)! shadow-[0_0_0_3px_rgba(220,38,38,0.10)]!" : ""}`;
 
   return (
-    <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] [backdrop-filter:blur(4px)] z-[9998] flex items-center justify-center p-4" style={{ animation: "fadeIn 0.15s ease" }} onClick={onCancel}>
-      <div className="modal-box-glow bg-white rounded-[14px] max-w-[420px] w-full shadow-[0_16px_48px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] border border-[var(--border-strong)] relative overflow-hidden p-0" style={{ animation: "slideUp 0.2s ease" }} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-[11px] px-4 pt-[14px] pb-3 bg-[var(--surf-2)] border-b border-[var(--border)]">
+    <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] [backdrop-filter:blur(4px)] z-9998 flex items-center justify-center p-4" style={{ animation: "fadeIn 0.15s ease" }} onClick={onCancel}>
+      <div className="modal-box-glow bg-white rounded-[14px] max-w-105 w-full shadow-[0_16px_48px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] border border-(--border-strong) relative overflow-hidden p-0" style={{ animation: "slideUp 0.2s ease" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2.75 px-4 pt-3.5 pb-3 bg-(--surf-2) border-b border-(--border)">
           <div className="min-w-0">
-            <h3 className="mb-[2px] [font-family:var(--fh)] text-[14px] font-extrabold text-[var(--txt)] tracking-[-0.2px]">Negative Certificate Details</h3>
-            <p className="m-0 text-[11.5px] text-[var(--txt2)] leading-[1.4]">
-              For&nbsp;<strong className="text-[var(--blue)]">{subjectName || "this person"}</strong>
+            <h3 className="mb-0.5 [font-family:var(--fh)] text-[14px] font-extrabold text-(--txt) tracking-[-0.2px]">Negative Certificate Details</h3>
+            <p className="m-0 text-[11.5px] text-(--txt2) leading-[1.4]">
+              For&nbsp;<strong className="text-(--blue)">{subjectName || "this person"}</strong>
             </p>
           </div>
         </div>
 
-        <div className="flex flex-col gap-[10px] px-4 pt-[14px]">
+        <div className="flex flex-col gap-2.5 px-4 pt-3.5">
           <NegCertField label="Date of Birth" htmlFor="negcert-dob" required error={dobError}>
             <input
               id="negcert-dob"
@@ -799,10 +799,10 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
           </NegCertField>
         </div>
 
-        <div className="flex gap-[7px] justify-end items-center flex-wrap px-4 pt-3 pb-[14px] border-t border-[var(--border)] mt-3">
-          <button className="px-[14px] py-[7px] rounded-[7px] border border-[var(--border-strong)] !bg-white !text-[var(--txt2)] text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 touch-manipulation flex-shrink-0 hover:!bg-[var(--surf-2)] hover:!text-[var(--txt)] hover:border-[var(--txt3)]" onClick={onCancel}>Cancel</button>
+        <div className="flex gap-1.75 justify-end items-center flex-wrap px-4 pt-3 pb-3.5 border-t border-(--border) mt-3">
+          <button className="px-3.5 py-1.75 rounded-[7px] border border-(--border-strong) bg-white! text-(--txt2)! text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 touch-manipulation shrink-0 hover:bg-(--surf-2)! hover:text-(--txt)! hover:border-(--txt3)" onClick={onCancel}>Cancel</button>
           <button
-            className="px-[14px] py-[7px] rounded-[7px] border-0 !text-white text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 touch-manipulation flex-shrink-0 whitespace-nowrap !bg-[#d97706] hover:!bg-[#b45309]"
+            className="px-3.5 py-1.75 rounded-[7px] border-0 text-white! text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 touch-manipulation shrink-0 whitespace-nowrap bg-[#d97706]! hover:bg-[#b45309]!"
             onClick={handleSubmit}
           >
             Issue Negative Certificate &rarr;
@@ -839,30 +839,30 @@ const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-[rgba(15,23,42,0.55)] [backdrop-filter:blur(6px)] z-[9999] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-[14px] w-full max-w-[900px] h-[88vh] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] border border-[var(--border-strong)]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-3 py-[10px] bg-[var(--surf-2)] text-[var(--txt)] flex-shrink-0 gap-[10px] flex-wrap border-b border-[var(--border)]">
-          <span className="font-semibold text-[12.5px] flex-1 break-words text-[var(--txt)] flex items-center gap-[5px]">
-            <span className="inline-flex items-center flex-shrink-0 text-[var(--txt3)]"><IconDocument /></span>
+    <div className="fixed inset-0 bg-[rgba(15,23,42,0.55)] [backdrop-filter:blur(6px)] z-9999 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-[14px] w-full max-w-225 h-[88vh] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] border border-(--border-strong)" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-3 py-2.5 bg-(--surf-2) text-(--txt) shrink-0 gap-2.5 flex-wrap border-b border-(--border)">
+          <span className="font-semibold text-[12.5px] flex-1 wrap-break-word text-(--txt) flex items-center gap-1.25">
+            <span className="inline-flex items-center shrink-0 text-(--txt3)"><IconDocument /></span>
             {fileName}
           </span>
-          <div className="flex gap-[5px] flex-shrink-0 items-center">
+          <div className="flex gap-1.25 shrink-0 items-center">
             {pdfUrl && (
-              <button className="px-[10px] py-1 rounded-[5px] border-0 !text-white text-[11.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 whitespace-nowrap touch-manipulation flex-shrink-0 !bg-[#2563eb] hover:brightness-90 hover:-translate-y-px" onClick={handlePrint} disabled={printing}>
+              <button className="px-2.5 py-1 rounded-[5px] border-0 text-white! text-[11.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 whitespace-nowrap touch-manipulation shrink-0 bg-[#2563eb]! hover:brightness-90 hover:-translate-y-px" onClick={handlePrint} disabled={printing}>
                 {printing ? "Printing…" : "Print"}
               </button>
             )}
-            <button className="px-[10px] py-1 rounded-[5px] border-0 !text-white text-[11.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 whitespace-nowrap touch-manipulation flex-shrink-0 !bg-[#64748b] hover:brightness-90 hover:-translate-y-px" onClick={onClose}>&#10005; Close</button>
+            <button className="px-2.5 py-1 rounded-[5px] border-0 text-white! text-[11.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 whitespace-nowrap touch-manipulation shrink-0 bg-[#64748b]! hover:brightness-90 hover:-translate-y-px" onClick={onClose}>&#10005; Close</button>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden bg-[var(--bg)]">
+        <div className="flex-1 overflow-hidden bg-(--bg)">
           {pdfUrl ? (
             <iframe key={pdfUrl} src={`${pdfUrl}#toolbar=1&navpanes=0`} title={fileName} className="w-full h-full border-0 block" />
           ) : (
-            <div className="flex flex-col items-center justify-center gap-[7px] py-11 px-[18px] border border-[1.5px] border-dashed border-[var(--border-strong)] rounded-[9px] bg-[var(--surf-2)] text-center">
-              <span className="flex items-center justify-center text-[var(--txt3)]"><IconDocumentLg /></span>
-              <div className="text-[13px] font-bold text-[var(--txt2)]">Unable to display PDF</div>
-              <div className="text-[11.5px] text-[var(--txt3)] max-w-[260px] leading-[1.6]">The selected PDF is empty or invalid.</div>
+            <div className="flex flex-col items-center justify-center gap-1.75 py-11 px-4.5 border-[1.5px] border-dashed border-(--border-strong) rounded-[9px] bg-(--surf-2) text-center">
+              <span className="flex items-center justify-center text-(--txt3)"><IconDocumentLg /></span>
+              <div className="text-[13px] font-bold text-(--txt2)">Unable to display PDF</div>
+              <div className="text-[11.5px] text-(--txt3) max-w-65 leading-[1.6]">The selected PDF is empty or invalid.</div>
             </div>
           )}
         </div>
@@ -875,8 +875,8 @@ const StepBar = ({ current }) => {
   const idx = STEPS.findIndex((s) => s.key === current);
   const { isMobile } = useViewport();
   return (
-    <div className="bg-white border-b border-[var(--border)] pt-[10px] px-[18px] pb-0 flex-shrink-0 w-full shadow-[inset_0_1px_0_rgba(255,255,255,0.80)] print:hidden">
-      <div className="pb-[10px]">
+    <div className="bg-white border-b border-(--border) pt-2.5 px-4.5 pb-0 shrink-0 w-full shadow-[inset_0_1px_0_rgba(255,255,255,0.80)] print:hidden">
+      <div className="pb-2.5">
         <div className="flex items-start relative">
           {STEPS.map((s, i) => {
             const done = i < idx;
@@ -884,19 +884,19 @@ const StepBar = ({ current }) => {
             const isLast = i === STEPS.length - 1;
             const segDone = i < idx;
             const circleCls = done
-              ? "!bg-[rgba(5,150,105,0.10)] !text-[#059669] !border-[rgba(5,150,105,0.30)]"
+              ? "bg-[rgba(5,150,105,0.10)]! text-[#059669]! border-[rgba(5,150,105,0.30)]!"
               : active
-              ? "!bg-[#2563eb] !text-white !border-[#2563eb] shadow-[0_0_0_3px_rgba(37,99,235,0.18)]"
-              : "!bg-[#f1f5f9] !text-[var(--txt3)] !border-[var(--border-strong)]";
+              ? "bg-[#2563eb]! text-white! border-[#2563eb]! shadow-[0_0_0_3px_rgba(37,99,235,0.18)]"
+              : "bg-[#f1f5f9]! text-(--txt3)! border-(--border-strong)!";
             const labelCls = done
-              ? "font-medium !text-[#059669]"
+              ? "font-medium text-[#059669]!"
               : active
-              ? "font-bold !text-[#2563eb]"
-              : "font-normal text-[var(--txt3)]";
+              ? "font-bold text-[#2563eb]!"
+              : "font-normal text-(--txt3)";
             return (
               <React.Fragment key={s.key}>
-                <div className="flex flex-col items-center gap-[5px] flex-shrink-0 z-[2] relative">
-                  <div className={`w-[26px] h-[26px] rounded-full flex items-center justify-center font-bold text-[11px] transition-all duration-300 [font-family:var(--f)] flex-shrink-0 border-2 ${circleCls}`}>
+                <div className="flex flex-col items-center gap-1.25 shrink-0 z-2 relative">
+                  <div className={`w-6.5 h-6.5 rounded-full flex items-center justify-center font-bold text-[11px] transition-all duration-300 [font-family:var(--f)] shrink-0 border-2 ${circleCls}`}>
                     {done ? "✓" : i + 1}
                   </div>
                   {(!isMobile || active) && (
@@ -904,9 +904,9 @@ const StepBar = ({ current }) => {
                   )}
                 </div>
                 {!isLast && (
-                  <div className="flex-1 relative h-[26px] flex items-center min-w-[20px]">
-                    <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-[var(--border-strong)] rounded-[2px]" />
-                    {segDone && <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] rounded-[2px] transition-all duration-500 bg-[linear-gradient(90deg,#059669,#2563eb)]" />}
+                  <div className="flex-1 relative h-6.5 flex items-center min-w-5">
+                    <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-(--border-strong) rounded-sm" />
+                    {segDone && <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 rounded-sm transition-all duration-500 bg-[linear-gradient(90deg,#059669,#2563eb)]" />}
                   </div>
                 )}
               </React.Fragment>
@@ -940,13 +940,13 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center py-9 px-[18px] gap-[14px]">
-      <div className="w-[52px] h-[52px] bg-[var(--blue-lt)] border border-[1.5px] border-[var(--blue-bd)] rounded-full flex items-center justify-center text-[var(--blue)] flex-shrink-0">
+    <div className="flex flex-col items-center justify-center py-9 px-4.5 gap-3.5">
+      <div className="w-13 h-13 bg-(--blue-lt) border-[1.5px] border-(--blue-bd) rounded-full flex items-center justify-center text-(--blue) shrink-0">
         <IconLock />
       </div>
-      <p className="text-[12.5px] text-[var(--txt2)] text-center max-w-[340px] leading-[1.65]">{description}</p>
-      <div className="w-full max-w-[300px] flex flex-col gap-[7px]">
-        <label className="text-[10px] font-bold text-[var(--blue)] uppercase tracking-[0.4px]" htmlFor="pw-gate-input">Administrator Password</label>
+      <p className="text-[12.5px] text-(--txt2) text-center max-w-85 leading-[1.65]">{description}</p>
+      <div className="w-full max-w-75 flex flex-col gap-1.75">
+        <label className="text-[10px] font-bold text-(--blue) uppercase tracking-[0.4px]" htmlFor="pw-gate-input">Administrator Password</label>
         <div className="relative">
           <input
             id="pw-gate-input"
@@ -956,11 +956,11 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
             onChange={(e) => setPwInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
             placeholder="Enter password"
-            className="w-full h-[38px] pl-3 pr-[34px] border border-[1.5px] border-[var(--border-strong)] rounded-[7px] text-sm [font-family:var(--f)] text-[var(--txt)] bg-white outline-none tracking-[2px] transition-[border-color,box-shadow] duration-150 [-webkit-appearance:none] focus:border-[var(--blue)] focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] focus:bg-white placeholder:tracking-normal"
+            className="w-full h-9.5 pl-3 pr-8.5 border-[1.5px] border-(--border-strong) rounded-[7px] text-sm [font-family:var(--f)] text-(--txt) bg-white outline-none tracking-[2px] transition-[border-color,box-shadow] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] focus:bg-white placeholder:tracking-normal"
             autoFocus
           />
           <button
-            className="absolute right-[9px] top-1/2 -translate-y-1/2 bg-transparent border-0 cursor-pointer opacity-40 touch-manipulation flex items-center text-[var(--txt)] p-0 hover:opacity-75"
+            className="absolute right-2.25 top-1/2 -translate-y-1/2 bg-transparent border-0 cursor-pointer opacity-40 touch-manipulation flex items-center text-(--txt) p-0 hover:opacity-75"
             type="button"
             onClick={() => setShowPw((v) => !v)}
             title={showPw ? "Hide password" : "Show password"}
@@ -970,7 +970,7 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
           </button>
         </div>
         <button className={`${BTN_PRIMARY} w-full justify-center h-9 text-[12.5px]`} onClick={handleSubmit} disabled={loading}>
-          {loading ? (<><div className="w-[13px] h-[13px] border-2 border-[var(--blue-md)] border-t-[var(--blue)] rounded-full animate-spin flex-shrink-0" />&nbsp;Verifying…</>) : "Unlock & View Records →"}
+          {loading ? (<><div className="w-3.25 h-3.25 border-2 border-(--blue-md) border-t-(--blue) rounded-full animate-spin shrink-0" />&nbsp;Verifying…</>) : "Unlock & View Records →"}
         </button>
       </div>
     </div>
@@ -980,11 +980,11 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
 const RelativesChips = ({ record }) => {
   const father = getFatherDisplayName(record);
   const mother = getMotherDisplayName(record);
-  if (!father && !mother) return <span className="text-[10.5px] text-[var(--txt3)] italic">—</span>;
+  if (!father && !mother) return <span className="text-[10.5px] text-(--txt3) italic">—</span>;
   return (
-    <div className="flex flex-col gap-[2px] min-w-[110px]">
-      {father && <span className="inline-flex items-center gap-[3px] text-[10.5px] font-semibold px-[7px] py-[2px] rounded-[10px] whitespace-nowrap bg-[#dbeafe] text-[#1d4ed8] border border-[rgba(37,99,235,0.22)]">{father}</span>}
-      {mother && <span className="inline-flex items-center gap-[3px] text-[10.5px] font-semibold px-[7px] py-[2px] rounded-[10px] whitespace-nowrap bg-[#fce7f3] text-[#9d174d] border border-[rgba(219,39,119,0.22)]">{mother}</span>}
+    <div className="flex flex-col gap-0.5 min-w-27.5">
+      {father && <span className="inline-flex items-center gap-0.75 text-[10.5px] font-semibold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap bg-[#dbeafe] text-[#1d4ed8] border border-[rgba(37,99,235,0.22)]">{father}</span>}
+      {mother && <span className="inline-flex items-center gap-0.75 text-[10.5px] font-semibold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap bg-[#fce7f3] text-[#9d174d] border border-[rgba(219,39,119,0.22)]">{mother}</span>}
     </div>
   );
 };
@@ -999,22 +999,22 @@ const NegativeCertPreview = ({
   const year = dateOfBirth ? new Date(dateOfBirth).getFullYear() : new Date().getFullYear();
 
   return (
-    <div className="flex flex-col border border-[1.5px] border-[rgba(220,38,38,0.28)] rounded-[9px] overflow-hidden shadow-[var(--shadow-sm)]">
-      <div className="flex items-center justify-between px-3 py-2 bg-[var(--surf-2)] gap-2 flex-shrink-0 flex-wrap border-b border-[var(--border)]">
-        <div className="flex items-center gap-[7px] min-w-0 flex-1">
-          <span className="inline-flex items-center flex-shrink-0 text-[var(--txt3)]"><IconClipboard /></span>
-          <span className="text-[12.5px] font-semibold text-[var(--txt)] whitespace-nowrap overflow-hidden text-ellipsis">Certificate of No Birth Record</span>
-          <span className="inline-flex items-center px-[7px] py-[2px] rounded-[20px] bg-[var(--blue-lt)] border border-[var(--blue-bd)] text-[9.5px] font-bold text-[var(--blue)] whitespace-nowrap tracking-[0.3px] flex-shrink-0">Negative Certificate</span>
+    <div className="flex flex-col border-[1.5px] border-[rgba(220,38,38,0.28)] rounded-[9px] overflow-hidden shadow-(--shadow-sm)">
+      <div className="flex items-center justify-between px-3 py-2 bg-(--surf-2) gap-2 shrink-0 flex-wrap border-b border-(--border)">
+        <div className="flex items-center gap-1.75 min-w-0 flex-1">
+          <span className="inline-flex items-center shrink-0 text-(--txt3)"><IconClipboard /></span>
+          <span className="text-[12.5px] font-semibold text-(--txt) whitespace-nowrap overflow-hidden text-ellipsis">Certificate of No Birth Record</span>
+          <span className="inline-flex items-center px-1.75 py-0.5 rounded-[20px] bg-(--blue-lt) border border-(--blue-bd) text-[9.5px] font-bold text-(--blue) whitespace-nowrap tracking-[0.3px] shrink-0">Negative Certificate</span>
         </div>
-        <button className="inline-flex items-center gap-[5px] px-3 py-[6px] rounded-[7px] border-0 !bg-[#2563eb] !text-white text-xs font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap flex-shrink-0 transition-all duration-150 shadow-[0_2px_8px_rgba(37,99,235,0.25)] touch-manipulation hover:enabled:!bg-[#1d4ed8] hover:enabled:-translate-y-px" onClick={onPrint}>
-          <span className="flex items-center flex-shrink-0"><IconPrint /></span>
+        <button className="inline-flex items-center gap-1.25 px-3 py-1.5 rounded-[7px] border-0 bg-[#2563eb]! text-white! text-xs font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap shrink-0 transition-all duration-150 shadow-[0_2px_8px_rgba(37,99,235,0.25)] touch-manipulation hover:enabled:bg-[#1d4ed8]! hover:enabled:-translate-y-px" onClick={onPrint}>
+          <span className="flex items-center shrink-0"><IconPrint /></span>
           Print Certificate
         </button>
       </div>
-      <div className="bg-white overflow-y-auto max-h-[calc(100vh-var(--home-topbar-height)-52px-240px)] min-h-[300px] [-webkit-overflow-scrolling:touch] max-[640px]:max-h-[44vh] max-[640px]:min-h-[220px] max-[480px]:max-h-[38vh] max-[480px]:min-h-[180px]">
-        <div className="pt-10 px-[52px] pb-9 [font-family:'Times_New_Roman',Times,serif] text-black text-[13px] leading-[1.7] relative max-[640px]:pt-6 max-[640px]:px-5 max-[640px]:pb-5 max-[640px]:text-xs max-[480px]:pt-[18px] max-[480px]:px-[14px] max-[480px]:pb-4 max-[480px]:text-[11.5px]">
-          <div className="absolute top-[18px] left-5 max-[640px]:top-3 max-[640px]:left-[14px] max-[480px]:top-2 max-[480px]:left-[10px]">
-            <OfficeLogo className="w-14 h-14 block max-[640px]:w-[42px] max-[640px]:h-[42px] max-[480px]:w-[34px] max-[480px]:h-[34px]" />
+      <div className="bg-white overflow-y-auto max-h-[calc(100vh-var(--home-topbar-height)-52px-240px)] min-h-75 [-webkit-overflow-scrolling:touch] max-[640px]:max-h-[44vh] max-[640px]:min-h-55 max-[480px]:max-h-[38vh] max-[480px]:min-h-45">
+        <div className="pt-10 px-13 pb-9 font-['Times_New_Roman',Times,serif] text-black text-[13px] leading-[1.7] relative max-[640px]:pt-6 max-[640px]:px-5 max-[640px]:pb-5 max-[640px]:text-xs max-[480px]:pt-4.5 max-[480px]:px-3.5 max-[480px]:pb-4 max-[480px]:text-[11.5px]">
+          <div className="absolute top-4.5 left-5 max-[640px]:top-3 max-[640px]:left-3.5 max-[480px]:top-2 max-[480px]:left-2.5">
+            <OfficeLogo className="w-14 h-14 block max-[640px]:w-10.5 max-[640px]:h-10.5 max-[480px]:w-8.5 max-[480px]:h-8.5" />
           </div>
           <p className="text-right mb-6 text-[13px] text-black">{todayDate}</p>
           <p className="text-[13px] mb-4 font-normal text-black">TO WHOM IT MAY CONCERN:</p>
@@ -1024,16 +1024,16 @@ const NegativeCertPreview = ({
             who is alleged to have been born on{" "}
             {dateOfBirth
               ? <strong className="font-bold text-black">{formatCertDate(dateOfBirth)}</strong>
-              : <strong className="font-bold text-black !text-[#94a3b8] italic !font-normal">[DATE OF BIRTH]</strong>
+              : <strong className="text-[#94a3b8]! italic font-normal!">[DATE OF BIRTH]</strong>
             }{" "}
             in {OFFICE_CONFIG.cityMunicipality} from parents,{" "}
             {fatherName
               ? <strong className="font-bold text-black">{fatherName.toUpperCase()}</strong>
-              : <strong className="font-bold text-black !text-[#94a3b8] italic !font-normal">[FATHER'S NAME]</strong>
+              : <strong className="text-[#94a3b8]! italic font-normal!">[FATHER'S NAME]</strong>
             }{" "}and{" "}
             {motherName
               ? <strong className="font-bold text-black">{motherName.toUpperCase()}</strong>
-              : <strong className="font-bold text-black !text-[#94a3b8] italic !font-normal">[MOTHER'S NAME]</strong>
+              : <strong className="text-[#94a3b8]! italic font-normal!">[MOTHER'S NAME]</strong>
             }{" "}hence, we cannot issue, as requested, a true copy of his/her Certificate of Live Birth or transcription from the Register of Births.
           </p>
           <p className="text-justify mb-3 text-[13px] text-black leading-[1.75]">
@@ -1043,29 +1043,29 @@ const NegativeCertPreview = ({
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This certification is issued to{" "}
             {requestorName
               ? <strong className="font-bold text-black">{requestorName.toUpperCase()}</strong>
-              : <strong className="font-bold text-black !text-[#94a3b8] italic !font-normal">[REQUESTOR'S NAME]</strong>
+              : <strong className="text-[#94a3b8]! italic font-normal!">[REQUESTOR'S NAME]</strong>
             }{" "}upon his/her request.
           </p>
           <div className="mt-8 flex justify-end">
-            <div className="text-center min-w-[200px] max-[640px]:min-w-[150px]">
+            <div className="text-center min-w-50 max-[640px]:min-w-37.5">
               <div className="font-bold text-[13px] text-black">{officer.name}</div>
               <div className="italic text-[12.5px] text-black"><strong>{officer.title}</strong></div>
             </div>
           </div>
           <div className="mt-6">
-            <div className="text-[13px] text-black mb-[14px]">Verified by:</div>
+            <div className="text-[13px] text-black mb-3.5">Verified by:</div>
             <div className="block font-bold text-[13px] text-black text-center">{verified.name}</div>
             <div className="block italic text-[12.5px] text-black text-center"><strong>{verified.title}</strong></div>
           </div>
           <div className="mt-7">
-            <div className="flex items-end gap-1 mb-[6px] text-[13px] text-black">
-              <span className="min-w-[90px] flex-shrink-0">Amount Paid</span>
-              <span className="flex-shrink-0 mr-1">:</span>
+            <div className="flex items-end gap-1 mb-1.5 text-[13px] text-black">
+              <span className="min-w-22.5 shrink-0">Amount Paid</span>
+              <span className="shrink-0 mr-1">:</span>
               <span className="flex-1 text-[13px] text-black">{OFFICE_CONFIG.amountPaid}</span>
             </div>
-            <div className="flex items-end gap-1 mb-[6px] text-[13px] text-black">
-              <span className="min-w-[90px] flex-shrink-0">O.R. Number</span>
-              <span className="flex-shrink-0 mr-1">:</span>
+            <div className="flex items-end gap-1 mb-1.5 text-[13px] text-black">
+              <span className="min-w-22.5 shrink-0">O.R. Number</span>
+              <span className="shrink-0 mr-1">:</span>
               <input
                 id="or-number"
                 name="orNumber"
@@ -1077,16 +1077,16 @@ const NegativeCertPreview = ({
                 placeholder="Enter O.R. Number"
               />
             </div>
-            <div className="flex items-end gap-1 mb-[6px] text-[13px] text-black">
-              <span className="min-w-[90px] flex-shrink-0">Date Paid</span>
-              <span className="flex-shrink-0 mr-1">:</span>
+            <div className="flex items-end gap-1 mb-1.5 text-[13px] text-black">
+              <span className="min-w-22.5 shrink-0">Date Paid</span>
+              <span className="shrink-0 mr-1">:</span>
               <span className="flex-1 text-[13px] text-black">{todayDate}</span>
             </div>
           </div>
         </div>
       </div>
-      <div className="flex items-start gap-[7px] px-3 py-2 bg-[rgba(217,119,6,0.06)] border-t border-[rgba(217,119,6,0.18)] text-[11px] text-[#92400e] leading-[1.55]">
-        <span className="flex-shrink-0 flex items-center mt-px"><IconInfo /></span>
+      <div className="flex items-start gap-1.75 px-3 py-2 bg-[rgba(217,119,6,0.06)] border-t border-[rgba(217,119,6,0.18)] text-[11px] text-[#92400e] leading-[1.55]">
+        <span className="shrink-0 flex items-center mt-px"><IconInfo /></span>
         <span>Preview reflects the data you entered. Enter the O.R. Number, then click "Print Certificate" to print the completed document.</span>
       </div>
     </div>
@@ -1105,9 +1105,9 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
   const limitReached = queue.length >= MAX_UPLOAD;
 
   const getLimitClass = () => {
-    if (limitReached) return "bg-[var(--red-lt)] text-[var(--red)] border border-[var(--red-bd)]";
-    if (queue.length >= MAX_UPLOAD - 1) return "bg-[var(--amber-lt)] text-[var(--amber)] border border-[rgba(217,119,6,0.30)]";
-    return "bg-[var(--green-lt)] text-[var(--green)] border border-[var(--green-bd)]";
+    if (limitReached) return "bg-(--red-lt) text-(--red) border border-(--red-bd)";
+    if (queue.length >= MAX_UPLOAD - 1) return "bg-(--amber-lt) text-(--amber) border border-[rgba(217,119,6,0.30)]";
+    return "bg-(--green-lt) text-(--green) border border-(--green-bd)";
   };
 
   const existingFileKeys = new Set(
@@ -1168,31 +1168,31 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] [backdrop-filter:blur(4px)] z-[9998] flex items-center justify-center p-4 max-[480px]:items-end max-[480px]:p-0" style={{ animation: "fadeIn 0.15s ease" }} onClick={onClose}>
-      <div className="bg-white rounded-[14px] w-full max-w-[500px] max-h-[90vh] flex flex-col overflow-hidden shadow-[var(--shadow-lg)] border border-[var(--border-strong)] max-[640px]:max-w-full max-[480px]:rounded-t-[14px] max-[480px]:rounded-b-none max-[480px]:fixed max-[480px]:bottom-0 max-[480px]:left-0 max-[480px]:right-0 max-[480px]:max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-[9px] px-[13px] py-[11px] bg-[var(--surf-2)] text-[var(--txt)] flex-shrink-0 border-b border-[var(--border)]">
-          <div className="w-7 h-7 bg-[var(--blue-lt)] rounded-[6px] flex items-center justify-center flex-shrink-0 border border-[var(--blue-bd)] text-[var(--blue)]"><IconUpload /></div>
+    <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] [backdrop-filter:blur(4px)] z-9998 flex items-center justify-center p-4 max-[480px]:items-end max-[480px]:p-0" style={{ animation: "fadeIn 0.15s ease" }} onClick={onClose}>
+      <div className="bg-white rounded-[14px] w-full max-w-125 max-h-[90vh] flex flex-col overflow-hidden shadow-(--shadow-lg) border border-(--border-strong) max-[640px]:max-w-full max-[480px]:rounded-t-[14px] max-[480px]:rounded-b-none max-[480px]:fixed max-[480px]:bottom-0 max-[480px]:left-0 max-[480px]:right-0 max-[480px]:max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2.25 px-3.25 py-2.75 bg-(--surf-2) text-(--txt) shrink-0 border-b border-(--border)">
+          <div className="w-7 h-7 bg-(--blue-lt) rounded-md flex items-center justify-center shrink-0 border border-(--blue-bd) text-(--blue)"><IconUpload /></div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-bold text-[var(--txt)]">Upload Birth Record PDFs</div>
-            <div className="text-[10px] text-[var(--txt3)] mt-px">
+            <div className="text-[13px] font-bold text-(--txt)">Upload Birth Record PDFs</div>
+            <div className="text-[10px] text-(--txt3) mt-px">
               {stage === "upload"
                 ? `Select up to ${MAX_UPLOAD} PDF files to upload`
                 : `${uploadedRecords.length} file${uploadedRecords.length > 1 ? "s" : ""} uploaded successfully`}
             </div>
           </div>
-          <button className="w-[26px] h-[26px] border border-[var(--border-strong)] !bg-white rounded-[5px] cursor-pointer flex items-center justify-center text-xs text-[var(--txt2)] flex-shrink-0 ml-auto touch-manipulation transition-all duration-150 hover:!bg-[var(--red-lt)] hover:border-[var(--red-bd)] hover:!text-[var(--red)]" onClick={onClose}>&#10005;</button>
+          <button className="w-6.5 h-6.5 border border-(--border-strong) bg-white! rounded-[5px] cursor-pointer flex items-center justify-center text-xs text-(--txt2) shrink-0 ml-auto touch-manipulation transition-all duration-150 hover:bg-(--red-lt)! hover:border-(--red-bd) hover:text-(--red)!" onClick={onClose}>&#10005;</button>
         </div>
 
         {stage === "upload" && (
-          <div className="flex-1 overflow-y-auto p-[14px] flex flex-col gap-[10px] [-webkit-overflow-scrolling:touch] bg-white">
-            <div className="flex items-center justify-between gap-[7px] flex-wrap">
-              <span className={`inline-flex items-center gap-1 px-2 py-[3px] rounded-[20px] text-[10.5px] font-bold ${getLimitClass()}`}>
+          <div className="flex-1 overflow-y-auto p-3.5 flex flex-col gap-2.5 [-webkit-overflow-scrolling:touch] bg-white">
+            <div className="flex items-center justify-between gap-1.75 flex-wrap">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.75 rounded-[20px] text-[10.5px] font-bold ${getLimitClass()}`}>
                 {queue.length} / {MAX_UPLOAD} files
               </span>
-              {limitReached && <span className="text-[11px] text-[var(--red)] font-semibold">Maximum limit reached</span>}
+              {limitReached && <span className="text-[11px] text-(--red) font-semibold">Maximum limit reached</span>}
             </div>
             <div
-              className={`border-2 border-dashed border-[var(--blue-bd)] rounded-[9px] bg-[var(--blue-lt)] py-5 px-[14px] flex flex-col items-center gap-[7px] cursor-pointer text-center transition-all duration-150 touch-manipulation hover:border-[var(--blue)] hover:bg-[var(--blue-md)]${limitReached ? " opacity-45 !cursor-not-allowed pointer-events-none" : ""}`}
+              className={`border-2 border-dashed border-(--blue-bd) rounded-[9px] bg-(--blue-lt) py-5 px-3.5 flex flex-col items-center gap-1.75 cursor-pointer text-center transition-all duration-150 touch-manipulation hover:border-(--blue) hover:bg-(--blue-md)${limitReached ? " opacity-45 cursor-not-allowed! pointer-events-none" : ""}`}
               onClick={() => !isUploading && !limitReached && fileRef.current?.click()}
             >
               <input
@@ -1207,20 +1207,20 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
               />
               {isUploading ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-[var(--blue-md)] border-t-[var(--blue)] rounded-full animate-spin flex-shrink-0" />
-                  <span className="text-[12.5px] text-[var(--blue)]">Uploading…</span>
+                  <div className="w-4 h-4 border-2 border-(--blue-md) border-t-(--blue) rounded-full animate-spin shrink-0" />
+                  <span className="text-[12.5px] text-(--blue)">Uploading…</span>
                 </div>
               ) : limitReached ? (
                 <>
                   <div className="text-[26px] opacity-20">&#128683;</div>
-                  <div className="text-[13px] font-bold text-[var(--txt)]">Upload limit reached</div>
-                  <div className="text-[11.5px] text-[var(--txt2)] leading-[1.5]">Remove a file to add another</div>
+                  <div className="text-[13px] font-bold text-(--txt)">Upload limit reached</div>
+                  <div className="text-[11.5px] text-(--txt2) leading-normal">Remove a file to add another</div>
                 </>
               ) : (
                 <>
-                  <div className="flex items-center justify-center text-[var(--txt3)] opacity-40"><IconDocumentLg /></div>
-                  <div className="text-[13px] font-bold text-[var(--txt)]">Click to select PDF files</div>
-                  <div className="text-[11.5px] text-[var(--txt2)] leading-[1.5]">
+                  <div className="flex items-center justify-center text-(--txt3) opacity-40"><IconDocumentLg /></div>
+                  <div className="text-[13px] font-bold text-(--txt)">Click to select PDF files</div>
+                  <div className="text-[11.5px] text-(--txt2) leading-normal">
                     PDF only · Max {MAX_UPLOAD} files · Max 20 MB each
                     {slotsLeft < MAX_UPLOAD ? ` · ${slotsLeft} slot${slotsLeft !== 1 ? "s" : ""} remaining` : ""}
                   </div>
@@ -1228,22 +1228,22 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
               )}
             </div>
             {queue.length > 0 && (
-              <div className="border border-[var(--border-strong)] rounded-[7px] overflow-hidden">
-                <div className="flex items-center justify-between px-[10px] py-[6px] bg-[var(--surf-2)] border-b border-[var(--border)] text-[11px] font-bold text-[var(--blue)] gap-[7px]">
+              <div className="border border-(--border-strong) rounded-[7px] overflow-hidden">
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-(--surf-2) border-b border-(--border) text-[11px] font-bold text-(--blue) gap-1.75">
                   <span>Upload Queue ({queue.length})</span>
                   {!isUploading && (
-                    <button className="bg-transparent border-0 text-[11px] text-[var(--red)] font-bold cursor-pointer" onClick={() => setQueue([])}>Clear All</button>
+                    <button className="bg-transparent border-0 text-[11px] text-(--red) font-bold cursor-pointer" onClick={() => setQueue([])}>Clear All</button>
                   )}
                 </div>
                 {queue.map((item) => (
-                  <div key={item.id} className="flex items-center gap-[7px] px-[10px] py-[7px] border-b border-[var(--border-lt)] bg-white last:border-b-0">
-                    <span className="flex-shrink-0 flex items-center opacity-50 text-[var(--txt3)]"><FileIconSm /></span>
-                    <span className="flex-1 text-xs font-semibold text-[var(--txt)] overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={item.file.name}>{ensurePdfName(item.file.name)}</span>
-                    <span className={`text-[10.5px] font-bold px-[7px] py-[2px] rounded-[10px] whitespace-nowrap flex-shrink-0 ${
-                      item.status === "pending" ? "bg-[var(--amber-lt)] text-[var(--amber)] border border-[rgba(217,119,6,0.30)]" :
-                      item.status === "uploading" ? "bg-[var(--blue-lt)] text-[var(--blue)] border border-[var(--blue-bd)]" :
-                      item.status === "done" ? "bg-[var(--green-lt)] text-[var(--green)] border border-[var(--green-bd)]" :
-                      "bg-[var(--red-lt)] text-[var(--red)] border border-[var(--red-bd)]"
+                  <div key={item.id} className="flex items-center gap-1.75 px-2.5 py-1.75 border-b border-(--border-lt) bg-white last:border-b-0">
+                    <span className="shrink-0 flex items-center opacity-50 text-(--txt3)"><FileIconSm /></span>
+                    <span className="flex-1 text-xs font-semibold text-(--txt) overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={item.file.name}>{ensurePdfName(item.file.name)}</span>
+                    <span className={`text-[10.5px] font-bold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap shrink-0 ${
+                      item.status === "pending" ? "bg-(--amber-lt) text-(--amber) border border-[rgba(217,119,6,0.30)]" :
+                      item.status === "uploading" ? "bg-(--blue-lt) text-(--blue) border border-(--blue-bd)" :
+                      item.status === "done" ? "bg-(--green-lt) text-(--green) border border-(--green-bd)" :
+                      "bg-(--red-lt) text-(--red) border border-(--red-bd)"
                     }`}>
                       {item.status === "pending" && "Pending"}
                       {item.status === "uploading" && "Uploading…"}
@@ -1251,7 +1251,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                       {item.status === "error" && `Error: ${item.error || "Unknown"}`}
                     </span>
                     {!isUploading && item.status !== "done" && (
-                      <button className="bg-transparent border-0 cursor-pointer text-xs text-[var(--red)] px-[3px] py-[2px] rounded-[3px] transition-colors duration-150 flex-shrink-0 touch-manipulation hover:text-[#b91c1c] hover:bg-[var(--red-lt)]" onClick={() => removeFromQueue(item.id)} title="Remove">
+                      <button className="bg-transparent border-0 cursor-pointer text-xs text-(--red) px-0.75 py-0.5 rounded-[3px] transition-colors duration-150 shrink-0 touch-manipulation hover:text-[#b91c1c] hover:bg-(--red-lt)" onClick={() => removeFromQueue(item.id)} title="Remove">
                         &#10005;
                       </button>
                     )}
@@ -1259,7 +1259,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                 ))}
               </div>
             )}
-            <div className="flex justify-end items-center gap-[7px] pt-[6px] flex-wrap">
+            <div className="flex justify-end items-center gap-1.75 pt-1.5 flex-wrap">
               <button className={BTN_SECONDARY} onClick={onClose} disabled={isUploading}>Cancel</button>
               <button
                 className={BTN_PRIMARY}
@@ -1267,7 +1267,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                 disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done")}
               >
                 {isUploading
-                  ? <><div className="w-[13px] h-[13px] border-2 border-white/25 border-t-white rounded-full animate-spin flex-shrink-0" />&nbsp;Uploading…</>
+                  ? <><div className="w-3.25 h-3.25 border-2 border-white/25 border-t-white rounded-full animate-spin shrink-0" />&nbsp;Uploading…</>
                   : `Upload ${queue.filter((q) => q.status === "pending").length} File${queue.filter((q) => q.status === "pending").length !== 1 ? "s" : ""}`}
               </button>
             </div>
@@ -1275,39 +1275,39 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
         )}
 
         {stage === "results" && (
-          <div className="flex-1 overflow-y-auto p-[14px] flex flex-col gap-[10px] [-webkit-overflow-scrolling:touch] bg-white">
-            <div className="flex items-start gap-[9px] bg-[var(--green-lt)] border border-[var(--green-bd)] rounded-[7px] px-3 py-[10px]">
-              <div className="text-xl flex-shrink-0 flex items-center text-[var(--green)]"><IconCheck /></div>
+          <div className="flex-1 overflow-y-auto p-3.5 flex flex-col gap-2.5 [-webkit-overflow-scrolling:touch] bg-white">
+            <div className="flex items-start gap-2.25 bg-(--green-lt) border border-(--green-bd) rounded-[7px] px-3 py-2.5">
+              <div className="text-xl shrink-0 flex items-center text-(--green)"><IconCheck /></div>
               <div>
                 <div className="text-[12.5px] font-bold text-[#065f46]">
                   {uploadedRecords.length} file{uploadedRecords.length > 1 ? "s" : ""} uploaded successfully
                 </div>
-                <div className="text-[11px] text-[#047857] mt-[2px] break-all">
+                <div className="text-[11px] text-[#047857] mt-0.5 break-all">
                   {uploadedRecords.map((r) => getRecordDisplayName(r)).join(", ")}
                 </div>
               </div>
             </div>
             <div>
-              <div className="flex items-center justify-between px-[10px] py-[6px] bg-[var(--surf-2)] border border-[var(--border-strong)] rounded-t-[7px]">
-                <span className="text-[11px] font-bold text-[var(--blue)]">Matching surname records: {matches.length}</span>
+              <div className="flex items-center justify-between px-2.5 py-1.5 bg-(--surf-2) border border-(--border-strong) rounded-t-[7px]">
+                <span className="text-[11px] font-bold text-(--blue)">Matching surname records: {matches.length}</span>
               </div>
               {matches.length === 0 ? (
-                <div className="p-[10px] border border-[var(--border-lt)] text-xs text-[var(--txt3)] text-center bg-white">No other records share the same surname.</div>
+                <div className="p-2.5 border border-(--border-lt) text-xs text-(--txt3) text-center bg-white">No other records share the same surname.</div>
               ) : matches.map((r, i) => {
                 const isNew = uploadedRecords.some((u) => normalizeFileKey(u.file_name) === normalizeFileKey(r.file_name));
                 return (
-                  <div key={r.id || i} className={`flex items-center justify-between px-[10px] py-[6px] border border-t-0 border-[var(--border-lt)] bg-white flex-wrap gap-[5px]${isNew ? " !bg-[rgba(217,119,6,0.04)] border-l-[3px] border-l-[var(--amber)]" : ""}`}>
-                    <div className="flex items-center gap-[6px] flex-wrap">
-                      <span className="flex-shrink-0 flex items-center opacity-50 text-[var(--txt3)]"><FileIconSm /></span>
-                      <span className="text-[12.5px] font-semibold text-[var(--txt)] break-words">{getRecordDisplayName(r)}</span>
-                      {isNew && <span className="bg-[rgba(217,119,6,0.10)] text-[var(--amber)] text-[9.5px] font-bold px-[6px] py-px rounded-[20px] border border-[rgba(217,119,6,0.28)]">Just Uploaded</span>}
+                  <div key={r.id || i} className={`flex items-center justify-between px-2.5 py-1.5 border border-t-0 border-(--border-lt) bg-white flex-wrap gap-1.25${isNew ? " bg-[rgba(217,119,6,0.04)]! border-l-[3px] border-l-(--amber)" : ""}`}>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="shrink-0 flex items-center opacity-50 text-(--txt3)"><FileIconSm /></span>
+                      <span className="text-[12.5px] font-semibold text-(--txt) wrap-break-word">{getRecordDisplayName(r)}</span>
+                      {isNew && <span className="bg-[rgba(217,119,6,0.10)] text-(--amber) text-[9.5px] font-bold px-1.5 py-px rounded-[20px] border border-[rgba(217,119,6,0.28)]">Just Uploaded</span>}
                     </div>
-                    <span className="text-[11px] text-[var(--txt3)] whitespace-nowrap">{formatDate(r.uploaded_at || new Date())}</span>
+                    <span className="text-[11px] text-(--txt3) whitespace-nowrap">{formatDate(r.uploaded_at || new Date())}</span>
                   </div>
                 );
               })}
             </div>
-            <div className="flex justify-end items-center gap-[7px] pt-[6px] flex-wrap">
+            <div className="flex justify-end items-center gap-1.75 pt-1.5 flex-wrap">
               <button className={BTN_PRIMARY} onClick={onClose}>Done</button>
             </div>
           </div>
@@ -1346,33 +1346,33 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
   };
 
   if (loadingPdf) return (
-    <div className="flex items-center justify-center gap-[10px] py-11 px-[18px] border border-[1.5px] border-dashed border-[var(--blue-bd)] rounded-[9px] bg-[var(--blue-lt)] text-[12.5px] text-[var(--blue)] font-semibold">
-      <div className="w-4 h-4 border-2 border-[var(--blue-md)] border-t-[var(--blue)] rounded-full animate-spin flex-shrink-0" /><span>Loading document…</span>
+    <div className="flex items-center justify-center gap-2.5 py-11 px-4.5 border-[1.5px] border-dashed border-(--blue-bd) rounded-[9px] bg-(--blue-lt) text-[12.5px] text-(--blue) font-semibold">
+      <div className="w-4 h-4 border-2 border-(--blue-md) border-t-(--blue) rounded-full animate-spin shrink-0" /><span>Loading document…</span>
     </div>
   );
 
   if (!pdfUrl) return (
-    <div className="flex flex-col items-center justify-center gap-[7px] py-11 px-[18px] border border-[1.5px] border-dashed border-[var(--border-strong)] rounded-[9px] bg-[var(--surf-2)] text-center">
-      <span className="flex items-center justify-center text-[var(--txt3)]"><IconDocumentLg /></span>
-      <div className="text-[13px] font-bold text-[var(--txt2)]">No document to display</div>
-      <div className="text-[11.5px] text-[var(--txt3)] max-w-[260px] leading-[1.6]">Select a record to preview it here.</div>
+    <div className="flex flex-col items-center justify-center gap-1.75 py-11 px-4.5 border-[1.5px] border-dashed border-(--border-strong) rounded-[9px] bg-(--surf-2) text-center">
+      <span className="flex items-center justify-center text-(--txt3)"><IconDocumentLg /></span>
+      <div className="text-[13px] font-bold text-(--txt2)">No document to display</div>
+      <div className="text-[11.5px] text-(--txt3) max-w-65 leading-[1.6]">Select a record to preview it here.</div>
     </div>
   );
 
   return (
-    <div className="flex flex-col border border-[1.5px] border-[var(--blue-bd)] rounded-[9px] overflow-hidden shadow-[var(--shadow-sm)]">
-      <div className="flex items-center justify-between px-3 py-2 bg-[var(--surf-2)] gap-2 flex-shrink-0 flex-wrap border-b border-[var(--border)]">
-        <div className="flex items-center gap-[7px] min-w-0 flex-1">
-          <span className="flex items-center flex-shrink-0 text-[var(--txt3)]"><IconDocument /></span>
-          <span className="text-[12.5px] font-semibold text-[var(--txt)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[min(280px,38vw)]">{displayName}</span>
-          <span className="inline-flex items-center px-[7px] py-[2px] rounded-[20px] bg-[rgba(0,0,0,0.05)] border border-[var(--border-strong)] text-[9.5px] font-bold text-[var(--txt2)] whitespace-nowrap tracking-[0.3px] flex-shrink-0">Live Birth Certificate</span>
+    <div className="flex flex-col border-[1.5px] border-(--blue-bd) rounded-[9px] overflow-hidden shadow-(--shadow-sm)">
+      <div className="flex items-center justify-between px-3 py-2 bg-(--surf-2) gap-2 shrink-0 flex-wrap border-b border-(--border)">
+        <div className="flex items-center gap-1.75 min-w-0 flex-1">
+          <span className="flex items-center shrink-0 text-(--txt3)"><IconDocument /></span>
+          <span className="text-[12.5px] font-semibold text-(--txt) whitespace-nowrap overflow-hidden text-ellipsis max-w-[min(280px,38vw)]">{displayName}</span>
+          <span className="inline-flex items-center px-1.75 py-0.5 rounded-[20px] bg-[rgba(0,0,0,0.05)] border border-(--border-strong) text-[9.5px] font-bold text-(--txt2) whitespace-nowrap tracking-[0.3px] shrink-0">Live Birth Certificate</span>
         </div>
-        <button className="inline-flex items-center gap-[5px] px-3 py-[6px] rounded-[7px] border-0 !bg-[#2563eb] !text-white text-xs font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap flex-shrink-0 transition-all duration-150 shadow-[0_2px_8px_rgba(37,99,235,0.25)] touch-manipulation disabled:opacity-60 disabled:cursor-not-allowed hover:enabled:!bg-[#1d4ed8] hover:enabled:-translate-y-px" onClick={handlePrint} disabled={printing}>
-          <span className="flex items-center flex-shrink-0"><IconPrint /></span>
+        <button className="inline-flex items-center gap-1.25 px-3 py-1.5 rounded-[7px] border-0 bg-[#2563eb]! text-white! text-xs font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap shrink-0 transition-all duration-150 shadow-[0_2px_8px_rgba(37,99,235,0.25)] touch-manipulation disabled:opacity-60 disabled:cursor-not-allowed hover:enabled:bg-[#1d4ed8]! hover:enabled:-translate-y-px" onClick={handlePrint} disabled={printing}>
+          <span className="flex items-center shrink-0"><IconPrint /></span>
           {printing ? "Printing…" : "Print"}
         </button>
       </div>
-      <div className="h-[calc(100vh-var(--home-topbar-height)-52px-200px)] min-h-[280px] bg-[var(--bg)] overflow-hidden max-[768px]:h-[46vh] max-[768px]:min-h-[260px] max-[640px]:h-[42vh] max-[640px]:min-h-[220px] max-[480px]:h-[38vh] max-[480px]:min-h-[185px]">
+      <div className="h-[calc(100vh-var(--home-topbar-height)-52px-200px)] min-h-70 bg-(--bg) overflow-hidden max-[768px]:h-[46vh] max-[768px]:min-h-65 max-[640px]:h-[42vh] max-[640px]:min-h-55 max-[480px]:h-[38vh] max-[480px]:min-h-46.25">
         <iframe key={pdfUrl} src={`${pdfUrl}#toolbar=1&navpanes=0`} title={displayName} className="w-full h-full border-0 block" />
       </div>
     </div>
@@ -1384,21 +1384,21 @@ const MobileRecordCardArchive = ({ record, index, onView, onDelete }) => {
   const father = getFatherDisplayName(record);
   const mother = getMotherDisplayName(record);
   return (
-    <div className="px-4 py-[14px] border-b border-[var(--border-lt)] flex flex-col gap-2 bg-white transition-colors duration-150 last:border-b-0 hover:bg-[var(--surf-2)]">
+    <div className="px-4 py-3.5 border-b border-(--border-lt) flex flex-col gap-2 bg-white transition-colors duration-150 last:border-b-0 hover:bg-(--surf-2)">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] text-[var(--txt3)] font-bold bg-[var(--surf-2)] px-[6px] py-[2px] rounded-[4px] flex-shrink-0 leading-[1.4]">#{index + 1}</span>
-        <span className="text-[13.5px] font-bold text-[var(--txt)] flex-1 min-w-0 break-words leading-[1.4]">{displayName}</span>
+        <span className="text-[10px] text-(--txt3) font-bold bg-(--surf-2) px-1.5 py-0.5 rounded shrink-0 leading-[1.4]">#{index + 1}</span>
+        <span className="text-[13.5px] font-bold text-(--txt) flex-1 min-w-0 wrap-break-word leading-[1.4]">{displayName}</span>
       </div>
       {(father || mother) && (
-        <div className="flex gap-[6px] flex-wrap [row-gap:6px]">
-          {father && <span className="inline-flex items-center gap-[3px] text-[10.5px] font-semibold px-[7px] py-[2px] rounded-[10px] whitespace-nowrap bg-[#dbeafe] text-[#1d4ed8] border border-[rgba(37,99,235,0.22)]">{father}</span>}
-          {mother && <span className="inline-flex items-center gap-[3px] text-[10.5px] font-semibold px-[7px] py-[2px] rounded-[10px] whitespace-nowrap bg-[#fce7f3] text-[#9d174d] border border-[rgba(219,39,119,0.22)]">{mother}</span>}
+        <div className="flex gap-1.5 flex-wrap gap-y-1.5">
+          {father && <span className="inline-flex items-center gap-0.75 text-[10.5px] font-semibold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap bg-[#dbeafe] text-[#1d4ed8] border border-[rgba(37,99,235,0.22)]">{father}</span>}
+          {mother && <span className="inline-flex items-center gap-0.75 text-[10.5px] font-semibold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap bg-[#fce7f3] text-[#9d174d] border border-[rgba(219,39,119,0.22)]">{mother}</span>}
         </div>
       )}
-      <div className="text-[11px] text-[var(--txt3)] font-medium leading-[1.4]">{formatDate(record.archived_at)}</div>
-      <div className="flex items-center gap-2 flex-wrap pt-[2px]">
-        <button className="inline-flex items-center gap-[3px] px-[14px] py-[6px] rounded-[6px] border-0 !text-white text-xs font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation !bg-[#2563eb] hover:brightness-90 hover:-translate-y-px" onClick={onView}>View</button>
-        <button className="inline-flex items-center gap-[3px] px-[14px] py-[6px] rounded-[6px] border-0 !text-white text-xs font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation !bg-[#dc2626] hover:brightness-90 hover:-translate-y-px" onClick={onDelete}>Delete</button>
+      <div className="text-[11px] text-(--txt3) font-medium leading-[1.4]">{formatDate(record.archived_at)}</div>
+      <div className="flex items-center gap-2 flex-wrap pt-0.5">
+        <button className="inline-flex items-center gap-0.75 px-3.5 py-1.5 rounded-md border-0 text-white! text-xs font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation bg-[#2563eb]! hover:brightness-90 hover:-translate-y-px" onClick={onView}>View</button>
+        <button className="inline-flex items-center gap-0.75 px-3.5 py-1.5 rounded-md border-0 text-white! text-xs font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation bg-[#dc2626]! hover:brightness-90 hover:-translate-y-px" onClick={onDelete}>Delete</button>
       </div>
     </div>
   );
@@ -1709,7 +1709,7 @@ export default function UnifiedBirthRegistry() {
     : allArchivedRecords;
 
   return (
-    <div className="flex flex-col [font-family:var(--f)] bg-[var(--bg)] antialiased w-full min-h-[calc(100vh-var(--home-topbar-height))] m-0 p-0 overflow-x-hidden text-[var(--txt)]">
+    <div className="flex flex-col [font-family:var(--f)] bg-(--bg) antialiased w-full min-h-[calc(100vh-var(--home-topbar-height))] m-0 p-0 overflow-x-hidden text-(--txt)">
       <ToastContainer />
 
       {confirmModal && <ConfirmModal {...confirmModal} onCancel={() => setConfirmModal(null)} />}
@@ -1734,12 +1734,12 @@ export default function UnifiedBirthRegistry() {
         />
       )}
 
-      <div className="sticky top-0 z-[90] bg-white border-b border-[var(--border)] flex items-center justify-between px-4 flex-shrink-0 w-full min-h-[52px] gap-2 shadow-[0_1px_4px_rgba(0,0,0,0.06)] max-[768px]:px-[11px] max-[768px]:py-[7px] max-[480px]:min-h-[44px] max-[480px]:px-[9px] max-[480px]:py-[7px] max-[480px]:gap-[6px] print:hidden">
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-lg leading-none flex items-center text-[var(--blue)]"><IconGrid /></span>
-          {!isMobile && <span className="[font-family:var(--fh)] text-[13px] font-bold text-[var(--txt)] whitespace-nowrap">Birth Registry</span>}
+      <div className="sticky top-0 z-90 bg-white border-b border-(--border) flex items-center justify-between px-4 shrink-0 w-full min-h-13 gap-2 shadow-[0_1px_4px_rgba(0,0,0,0.06)] max-[768px]:px-2.75 max-[768px]:py-1.75 max-[480px]:min-h-11 max-[480px]:px-2.25 max-[480px]:py-1.75 max-[480px]:gap-1.5 print:hidden">
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-lg leading-none flex items-center text-(--blue)"><IconGrid /></span>
+          {!isMobile && <span className="[font-family:var(--fh)] text-[13px] font-bold text-(--txt) whitespace-nowrap">Birth Registry</span>}
         </div>
-        <div className="flex gap-[5px] items-center flex-nowrap max-[480px]:gap-[3px]">
+        <div className="flex gap-1.25 items-center flex-nowrap max-[480px]:gap-0.75">
           {[
             { key: "transaction", label: isMobile ? "Transaction" : "New Transaction" },
             { key: "archive", label: "Archive" },
@@ -1747,10 +1747,10 @@ export default function UnifiedBirthRegistry() {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`px-[13px] py-[6px] rounded-lg border border-transparent cursor-pointer text-xs font-semibold inline-flex items-center gap-[5px] [font-family:var(--f)] transition-all duration-150 leading-none whitespace-nowrap touch-manipulation flex-shrink-0 max-[480px]:px-[7px] max-[480px]:py-[5px] max-[480px]:text-[11px] max-[480px]:rounded-[7px] max-[480px]:gap-[3px] ${
+              className={`px-3.25 py-1.5 rounded-lg border border-transparent cursor-pointer text-xs font-semibold inline-flex items-center gap-1.25 [font-family:var(--f)] transition-all duration-150 leading-none whitespace-nowrap touch-manipulation shrink-0 max-[480px]:px-1.75 max-[480px]:py-1.25 max-[480px]:text-[11px] max-[480px]:rounded-[7px] max-[480px]:gap-0.75 ${
                 tab === t.key
-                  ? "!bg-[#2563eb] !text-white !border-[#2563eb] shadow-[0_0_0_3px_rgba(37,99,235,0.15),0_2px_8px_rgba(37,99,235,0.25)] hover:!bg-[#1d4ed8] hover:-translate-y-px"
-                  : "!bg-[rgba(37,99,235,0.07)] !text-[#2563eb] !border-[rgba(37,99,235,0.30)] hover:!bg-[rgba(37,99,235,0.14)] hover:!border-[#2563eb] hover:!text-[#1d4ed8] hover:-translate-y-px"
+                  ? "bg-[#2563eb]! text-white! border-[#2563eb]! shadow-[0_0_0_3px_rgba(37,99,235,0.15),0_2px_8px_rgba(37,99,235,0.25)] hover:bg-[#1d4ed8]! hover:-translate-y-px"
+                  : "bg-[rgba(37,99,235,0.07)]! text-[#2563eb]! border-[rgba(37,99,235,0.30)]! hover:bg-[rgba(37,99,235,0.14)]! hover:border-[#2563eb]! hover:text-[#1d4ed8]! hover:-translate-y-px"
               }`}
             >
               <span className="leading-none max-[360px]:hidden">{t.label}</span>
@@ -1760,27 +1760,27 @@ export default function UnifiedBirthRegistry() {
       </div>
 
       {tab === "transaction" && (
-        <div className="w-full p-[14px] bg-[var(--bg)] max-[768px]:p-[9px] max-[480px]:p-[7px]">
+        <div className="w-full p-3.5 bg-(--bg) max-[768px]:p-2.25 max-[480px]:p-1.75">
           <div className="flex flex-col bg-transparent">
             <StepBar current={step} />
-            <div className="pt-3 flex flex-col bg-transparent max-[900px]:pt-[9px] max-[768px]:pt-[7px] max-[480px]:pt-[5px]">
-              <div className="bg-white rounded-[9px] border border-[var(--border)] shadow-[var(--shadow-sm)] flex flex-col">
+            <div className="pt-3 flex flex-col bg-transparent max-[900px]:pt-2.25 max-[768px]:pt-1.75 max-[480px]:pt-1.25">
+              <div className="bg-white rounded-[9px] border border-(--border) shadow-(--shadow-sm) flex flex-col">
 
                 {step === "select" && (
                   <>
                     <div className="flex flex-col">
-                      <div className="px-[18px] pt-4 pb-3 flex flex-col gap-[14px] max-[900px]:px-3 max-[900px]:pt-3 max-[900px]:pb-[9px] max-[768px]:px-[11px] max-[768px]:pt-[11px] max-[768px]:pb-[9px] max-[768px]:gap-[10px] max-[480px]:px-[9px] max-[480px]:pt-[9px] max-[480px]:pb-[7px] max-[480px]:gap-[9px]">
-                        <div className="pb-[10px] border-b border-[var(--border)]">
-                          <div className="[font-family:var(--fh)] text-[clamp(13px,3vw,15px)] font-extrabold text-[var(--txt)] mb-[3px] tracking-[-0.3px]">Search &amp; Select Birth Record</div>
+                      <div className="px-4.5 pt-4 pb-3 flex flex-col gap-3.5 max-[900px]:px-3 max-[900px]:pt-3 max-[900px]:pb-2.25 max-[768px]:px-2.75 max-[768px]:pt-2.75 max-[768px]:pb-2.25 max-[768px]:gap-2.5 max-[480px]:px-2.25 max-[480px]:pt-2.25 max-[480px]:pb-1.75 max-[480px]:gap-2.25">
+                        <div className="pb-2.5 border-b border-(--border)">
+                          <div className="[font-family:var(--fh)] text-[clamp(13px,3vw,15px)] font-extrabold text-(--txt) mb-0.75 tracking-[-0.3px]">Search &amp; Select Birth Record</div>
                         </div>
-                        <div className="bg-[var(--blue-lt)] border border-[1.5px] border-[var(--blue-bd)] rounded-[9px] px-[14px] py-3 max-[480px]:p-[10px]">
-                          <div className="flex gap-2 items-end flex-wrap max-[480px]:flex-col max-[480px]:gap-[7px]">
-                            <div className="flex flex-col gap-1 flex-1 min-w-[130px] max-[480px]:min-w-0 max-[480px]:w-full">
-                              <label className="text-[10px] font-bold uppercase tracking-[0.5px] text-[var(--txt3)]" htmlFor="search-last-name">Last Name</label>
+                        <div className="bg-(--blue-lt) border-[1.5px] border-(--blue-bd) rounded-[9px] px-3.5 py-3 max-[480px]:p-2.5">
+                          <div className="flex gap-2 items-end flex-wrap max-[480px]:flex-col max-[480px]:gap-1.75">
+                            <div className="flex flex-col gap-1 flex-1 min-w-32.5 max-[480px]:min-w-0 max-[480px]:w-full">
+                              <label className="text-[10px] font-bold uppercase tracking-[0.5px] text-(--txt3)" htmlFor="search-last-name">Last Name</label>
                               <input
                                 id="search-last-name"
                                 name="lastName"
-                                className={`h-9 px-[11px] border border-[1.5px] border-[var(--border-strong)] rounded-[7px] text-[13px] [font-family:var(--f)] text-[var(--txt)] bg-white outline-none w-full transition-[border-color,box-shadow] duration-150 [-webkit-appearance:none] focus:border-[var(--blue)] focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] max-[480px]:h-10 max-[480px]:text-base${lastNameError ? " !border-[var(--red)] !shadow-[0_0_0_3px_rgba(220,38,38,0.10)]" : ""}`}
+                                className={`h-9 px-2.75 border-[1.5px] border-(--border-strong) rounded-[7px] text-[13px] [font-family:var(--f)] text-(--txt) bg-white outline-none w-full transition-[border-color,box-shadow] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] max-[480px]:h-10 max-[480px]:text-base${lastNameError ? " border-(--red)! shadow-[0_0_0_3px_rgba(220,38,38,0.10)]!" : ""}`}
                                 type="text"
                                 value={srchLastName}
                                 onChange={(e) => { setSrchLastName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setLastNameError(""); }}
@@ -1788,34 +1788,34 @@ export default function UnifiedBirthRegistry() {
                                 placeholder="e.g. Dela Cruz"
                                 autoFocus
                               />
-                              {lastNameError && <span className="text-[10.5px] font-semibold text-[var(--red)] flex items-center gap-[3px] mt-[2px]">&#9888; {lastNameError}</span>}
+                              {lastNameError && <span className="text-[10.5px] font-semibold text-(--red) flex items-center gap-0.75 mt-0.5">&#9888; {lastNameError}</span>}
                             </div>
-                            <div className="flex flex-col gap-1 flex-1 min-w-[130px] max-[480px]:min-w-0 max-[480px]:w-full">
-                              <label className="text-[10px] font-bold uppercase tracking-[0.5px] text-[var(--txt3)]" htmlFor="search-first-name">First Name</label>
+                            <div className="flex flex-col gap-1 flex-1 min-w-32.5 max-[480px]:min-w-0 max-[480px]:w-full">
+                              <label className="text-[10px] font-bold uppercase tracking-[0.5px] text-(--txt3)" htmlFor="search-first-name">First Name</label>
                               <input
                                 id="search-first-name"
                                 name="firstName"
-                                className={`h-9 px-[11px] border border-[1.5px] border-[var(--border-strong)] rounded-[7px] text-[13px] [font-family:var(--f)] text-[var(--txt)] bg-white outline-none w-full transition-[border-color,box-shadow] duration-150 [-webkit-appearance:none] focus:border-[var(--blue)] focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] max-[480px]:h-10 max-[480px]:text-base${firstNameError ? " !border-[var(--red)] !shadow-[0_0_0_3px_rgba(220,38,38,0.10)]" : ""}`}
+                                className={`h-9 px-2.75 border-[1.5px] border-(--border-strong) rounded-[7px] text-[13px] [font-family:var(--f)] text-(--txt) bg-white outline-none w-full transition-[border-color,box-shadow] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] max-[480px]:h-10 max-[480px]:text-base${firstNameError ? " border-(--red)! shadow-[0_0_0_3px_rgba(220,38,38,0.10)]!" : ""}`}
                                 type="text"
                                 value={srchFirstName}
                                 onChange={(e) => { setSrchFirstName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setFirstNameError(""); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
                                 placeholder="e.g. Juan"
                               />
-                              {firstNameError && <span className="text-[10.5px] font-semibold text-[var(--red)] flex items-center gap-[3px] mt-[2px]">&#9888; {firstNameError}</span>}
+                              {firstNameError && <span className="text-[10.5px] font-semibold text-(--red) flex items-center gap-0.75 mt-0.5">&#9888; {firstNameError}</span>}
                             </div>
-                            <button className="h-9 px-[18px] border-0 rounded-full !bg-[#2563eb] !text-white text-[12.5px] font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap flex-shrink-0 inline-flex items-center justify-center transition-all duration-150 touch-manipulation self-end shadow-[0_2px_8px_rgba(37,99,235,0.25)] hover:enabled:!bg-[#1d4ed8] hover:enabled:-translate-y-px max-[480px]:w-full max-[480px]:justify-center max-[480px]:h-10 max-[480px]:text-[13px]" onClick={handleSearch}>Search</button>
+                            <button className="h-9 px-4.5 border-0 rounded-full bg-[#2563eb]! text-white! text-[12.5px] font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap shrink-0 inline-flex items-center justify-center transition-all duration-150 touch-manipulation self-end shadow-[0_2px_8px_rgba(37,99,235,0.25)] hover:enabled:bg-[#1d4ed8]! hover:enabled:-translate-y-px max-[480px]:w-full max-[480px]:justify-center max-[480px]:h-10 max-[480px]:text-[13px]" onClick={handleSearch}>Search</button>
                           </div>
                         </div>
 
                         {hasSearched && (
-                          <div className="border border-[var(--border-strong)] rounded-[9px] overflow-hidden bg-white">
-                            <div className="flex items-center justify-between px-3 py-[7px] bg-[var(--surf-2)] border-b border-[var(--border)] flex-wrap gap-[5px]">
+                          <div className="border border-(--border-strong) rounded-[9px] overflow-hidden bg-white">
+                            <div className="flex items-center justify-between px-3 py-1.75 bg-(--surf-2) border-b border-(--border) flex-wrap gap-1.25">
                               <div className="flex flex-col gap-px">
-                                <div className="text-[11px] text-[var(--txt3)] font-medium">
+                                <div className="text-[11px] text-(--txt3) font-medium">
                                   {sortedResults.length} record{sortedResults.length !== 1 ? "s" : ""} found
                                   {sortedResults.filter((r) => r._isArchived).length > 0 && (
-                                    <span className="text-[var(--amber)] font-bold">
+                                    <span className="text-(--amber) font-bold">
                                       &nbsp;&middot;&nbsp;{sortedResults.filter((r) => r._isArchived).length} from archive
                                     </span>
                                   )}
@@ -1825,8 +1825,8 @@ export default function UnifiedBirthRegistry() {
 
                             {sortedResults.length === 0 ? (
                               <div className="py-7 px-4 text-center flex flex-col items-center gap-2">
-                                <p className="text-[14px] font-bold text-[var(--txt)] m-0">No records found for "{searchLN}"</p>
-                                <button className="px-[14px] py-[7px] rounded-full border border-[1.5px] border-[rgba(217,119,6,0.35)] !bg-[#d97706] !text-white text-xs font-bold cursor-pointer [font-family:var(--f)] inline-flex items-center justify-center flex-shrink-0 transition-all duration-150 touch-manipulation hover:!bg-[#b45309]" onClick={openNegCertModal}>
+                                <p className="text-[14px] font-bold text-(--txt) m-0">No records found for "{searchLN}"</p>
+                                <button className="px-3.5 py-1.75 rounded-full border-[1.5px] border-[rgba(217,119,6,0.35)] bg-[#d97706]! text-white! text-xs font-bold cursor-pointer [font-family:var(--f)] inline-flex items-center justify-center shrink-0 transition-all duration-150 touch-manipulation hover:bg-[#b45309]!" onClick={openNegCertModal}>
                                   Issue Negative Certificate
                                 </button>
                               </div>
@@ -1845,41 +1845,41 @@ export default function UnifiedBirthRegistry() {
                                     <div
                                       key={`${r._isArchived ? "arc" : "act"}-${r.id}`}
                                       className={[
-                                        "flex items-center px-[14px] py-[11px] gap-[10px] border-b border-[var(--border-lt)] bg-white transition-colors duration-150 flex-wrap last:border-b-0 hover:bg-[var(--surf-2)] max-[640px]:px-[11px] max-[640px]:py-[9px] max-[640px]:gap-2",
-                                        isSelected ? "!bg-[rgba(37,99,235,0.05)] border-l-[3px] border-l-[var(--blue)] hover:!bg-[rgba(37,99,235,0.08)]" : "",
+                                        "flex items-center px-3.5 py-2.75 gap-2.5 border-b border-(--border-lt) bg-white transition-colors duration-150 flex-wrap last:border-b-0 hover:bg-(--surf-2) max-[640px]:px-2.75 max-[640px]:py-2.25 max-[640px]:gap-2",
+                                        isSelected ? "bg-[rgba(37,99,235,0.05)]! border-l-[3px] border-l-(--blue) hover:bg-[rgba(37,99,235,0.08)]!" : "",
                                         r._isArchived ? "opacity-80" : "",
                                       ].filter(Boolean).join(" ")}
                                     >
-                                      <div className="flex-1 min-w-0 flex flex-col gap-[5px]">
-                                        <div className="flex items-center gap-[6px] flex-wrap leading-[1.3]">
-                                          <span className="text-[13.5px] font-bold text-[var(--txt)] tracking-[-0.15px]">{display}</span>
-                                          {r._isArchived && <span className="text-[9px] font-bold px-[7px] py-px rounded-[20px] bg-[var(--amber-lt)] text-[var(--amber)] border border-[rgba(217,119,6,0.30)] tracking-[0.2px] flex-shrink-0">Archived</span>}
+                                      <div className="flex-1 min-w-0 flex flex-col gap-1.25">
+                                        <div className="flex items-center gap-1.5 flex-wrap leading-[1.3]">
+                                          <span className="text-[13.5px] font-bold text-(--txt) tracking-[-0.15px]">{display}</span>
+                                          {r._isArchived && <span className="text-[9px] font-bold px-1.75 py-px rounded-[20px] bg-(--amber-lt) text-(--amber) border border-[rgba(217,119,6,0.30)] tracking-[0.2px] shrink-0">Archived</span>}
                                         </div>
-                                        <div className="flex gap-[5px] flex-wrap items-center">
-                                          {father && <span className="inline-flex items-center text-[11px] font-semibold px-[10px] py-[3px] rounded-[20px] whitespace-nowrap tracking-[0.1px] bg-[#dbeafe] text-[#1d4ed8] border border-[rgba(37,99,235,0.25)]">{father}</span>}
-                                          {mother && <span className="inline-flex items-center text-[11px] font-semibold px-[10px] py-[3px] rounded-[20px] whitespace-nowrap tracking-[0.1px] bg-[#fce7f3] text-[#9d174d] border border-[rgba(219,39,119,0.25)]">{mother}</span>}
+                                        <div className="flex gap-1.25 flex-wrap items-center">
+                                          {father && <span className="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.75 rounded-[20px] whitespace-nowrap tracking-[0.1px] bg-[#dbeafe] text-[#1d4ed8] border border-[rgba(37,99,235,0.25)]">{father}</span>}
+                                          {mother && <span className="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.75 rounded-[20px] whitespace-nowrap tracking-[0.1px] bg-[#fce7f3] text-[#9d174d] border border-[rgba(219,39,119,0.25)]">{mother}</span>}
                                           {!father && !mother && (
-                                            <span className="text-[11px] text-[var(--txt3)]">No parent info recorded</span>
+                                            <span className="text-[11px] text-(--txt3)">No parent info recorded</span>
                                           )}
                                         </div>
                                       </div>
 
-                                      <div className="flex items-center gap-[5px] flex-shrink-0 max-[640px]:w-full max-[640px]:justify-start">
+                                      <div className="flex items-center gap-1.25 shrink-0 max-[640px]:w-full max-[640px]:justify-start">
                                         <button
-                                          className="inline-flex items-center justify-center align-middle gap-1 min-w-[80px] px-3 py-[5px] rounded-full border border-[1.5px] border-[#2563eb] !bg-[#2563eb] !text-white text-[11.5px] font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap transition-all duration-150 leading-none touch-manipulation flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 hover:enabled:!bg-[#1d4ed8] hover:enabled:border-[#1d4ed8] hover:enabled:-translate-y-px hover:enabled:shadow-[0_3px_10px_rgba(37,99,235,0.25)]"
+                                          className="inline-flex items-center justify-center align-middle gap-1 min-w-20 px-3 py-1.25 rounded-full border-[1.5px] border-[#2563eb] bg-[#2563eb]! text-white! text-[11.5px] font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap transition-all duration-150 leading-none touch-manipulation shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 hover:enabled:bg-[#1d4ed8]! hover:enabled:border-[#1d4ed8] hover:enabled:-translate-y-px hover:enabled:shadow-[0_3px_10px_rgba(37,99,235,0.25)]"
                                           onClick={() => handlePreviewPdf(r.id, r)}
                                           disabled={isLoadingPrev}
                                           title="View Live Birth PDF"
                                         >
                                           {isLoadingPrev
-                                            ? <><div className="w-[13px] h-[13px] border-2 border-white/25 border-t-white rounded-full animate-spin flex-shrink-0" />&nbsp;Loading…</>
+                                            ? <><div className="w-3.25 h-3.25 border-2 border-white/25 border-t-white rounded-full animate-spin shrink-0" />&nbsp;Loading…</>
                                             : "View"}
                                         </button>
                                         <button
-                                          className={`min-w-[80px] px-3 py-[5px] rounded-full border border-[1.5px] !text-white text-[11.5px] font-bold [font-family:var(--f)] whitespace-nowrap inline-flex items-center justify-center flex-shrink-0 transition-all duration-150 touch-manipulation ${
+                                          className={`min-w-20 px-3 py-1.25 rounded-full border-[1.5px] text-white! text-[11.5px] font-bold [font-family:var(--f)] whitespace-nowrap inline-flex items-center justify-center shrink-0 transition-all duration-150 touch-manipulation ${
                                             isSelected
-                                              ? "!bg-[#047857] border-[#047857] cursor-default"
-                                              : "!bg-[#059669] border-[#059669] cursor-pointer hover:!bg-[#047857] hover:border-[#047857]"
+                                              ? "bg-[#047857]! border-[#047857] cursor-default"
+                                              : "bg-[#059669]! border-[#059669] cursor-pointer hover:bg-[#047857]! hover:border-[#047857]"
                                           }`}
                                           onClick={() => !isSelected && handleSelectFromSearch(r)}
                                         >
@@ -1889,9 +1889,9 @@ export default function UnifiedBirthRegistry() {
                                     </div>
                                   );
                                 })}
-                                <div className="flex items-center justify-center gap-2 px-[14px] py-[9px] bg-[var(--surf-2)] border-t border-[var(--border-lt)] flex-wrap">
-                                  <span className="text-[11.5px] text-[var(--txt3)]">Not the right person?</span>
-                                  <button className="px-[10px] py-1 rounded-full border border-[1.5px] border-[rgba(217,119,6,0.35)] !bg-[#d97706] !text-white text-[11px] font-bold cursor-pointer [font-family:var(--f)] inline-flex items-center justify-center flex-shrink-0 transition-all duration-150 touch-manipulation hover:!bg-[#b45309]" onClick={openNegCertModal}>
+                                <div className="flex items-center justify-center gap-2 px-3.5 py-2.25 bg-(--surf-2) border-t border-(--border-lt) flex-wrap">
+                                  <span className="text-[11.5px] text-(--txt3)">Not the right person?</span>
+                                  <button className="px-2.5 py-1 rounded-full border-[1.5px] border-[rgba(217,119,6,0.35)] bg-[#d97706]! text-white! text-[11px] font-bold cursor-pointer [font-family:var(--f)] inline-flex items-center justify-center shrink-0 transition-all duration-150 touch-manipulation hover:bg-[#b45309]!" onClick={openNegCertModal}>
                                     Issue Negative Certificate
                                   </button>
                                 </div>
@@ -1901,9 +1901,9 @@ export default function UnifiedBirthRegistry() {
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-[7px] px-4 py-[10px] border-t border-[var(--border)] bg-[var(--surf-2)] justify-end items-center flex-shrink-0 flex-nowrap rounded-b-[9px] max-[768px]:px-[11px] max-[768px]:py-[7px] max-[768px]:gap-[5px] max-[480px]:px-[9px] max-[480px]:gap-2">
+                    <div className="flex gap-1.75 px-4 py-2.5 border-t border-(--border) bg-(--surf-2) justify-end items-center shrink-0 flex-nowrap rounded-b-[9px] max-[768px]:px-2.75 max-[768px]:py-1.75 max-[768px]:gap-1.25 max-[480px]:px-2.25 max-[480px]:gap-2">
                       <button
-                        className={`${BTN_PRIMARY} flex-shrink-0 !w-auto whitespace-nowrap`}
+                        className={`${BTN_PRIMARY} shrink-0 w-auto! whitespace-nowrap`}
                         onClick={handleProceedToPayment}
                         disabled={!selectedRecord && recordStatus !== "NOT_FOUND"}
                       >
@@ -1916,10 +1916,10 @@ export default function UnifiedBirthRegistry() {
                 {step === "payment" && (
                   <>
                     <div className="flex flex-col">
-                      <div className="px-[14px] pt-4 pb-3 flex flex-col gap-[14px] max-[900px]:px-3 max-[900px]:pt-3 max-[900px]:pb-[9px] max-[768px]:px-[9px] max-[768px]:pt-[11px] max-[768px]:pb-[9px] max-[768px]:gap-[10px] max-[480px]:px-[9px] max-[480px]:pt-[9px] max-[480px]:pb-[7px] max-[480px]:gap-[9px]">
-                        <div className="pb-[10px] border-b border-[var(--border)]">
-                          <div className="[font-family:var(--fh)] text-[clamp(13px,3vw,15px)] font-extrabold text-[var(--txt)] mb-[3px] tracking-[-0.3px]">Review &amp; Print Document</div>
-                          <p className="text-[clamp(11px,2vw,12px)] text-[var(--txt2)] m-0 leading-[1.6]">
+                      <div className="px-3.5 pt-4 pb-3 flex flex-col gap-3.5 max-[900px]:px-3 max-[900px]:pt-3 max-[900px]:pb-2.25 max-[768px]:px-2.25 max-[768px]:pt-2.75 max-[768px]:pb-2.25 max-[480px]:px-2.25 max-[480px]:pt-2.25 max-[480px]:pb-1.75 max-[480px]:gap-2.25">
+                        <div className="pb-2.5 border-b border-(--border)">
+                          <div className="[font-family:var(--fh)] text-[clamp(13px,3vw,15px)] font-extrabold text-(--txt) mb-0.75 tracking-[-0.3px]">Review &amp; Print Document</div>
+                          <p className="text-[clamp(11px,2vw,12px)] text-(--txt2) m-0 leading-[1.6]">
                             {isPositive
                               ? "Review the Live Birth Certificate below. Print the selected PDF before proceeding to release."
                               : "A Negative Certificate will be issued — no document on file for this record."}
@@ -1947,9 +1947,9 @@ export default function UnifiedBirthRegistry() {
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-[7px] px-4 py-[10px] border-t border-[var(--border)] bg-[var(--surf-2)] justify-end items-center flex-shrink-0 flex-nowrap rounded-b-[9px] max-[768px]:px-[11px] max-[768px]:py-[7px] max-[768px]:gap-[5px] max-[480px]:px-[9px] max-[480px]:gap-2">
-                      <button className={`${BTN_SECONDARY} flex-shrink-0 !w-auto whitespace-nowrap`} onClick={() => setStep("select")}>← Back</button>
-                      <button className={`${BTN_PRIMARY} flex-shrink-0 !w-auto whitespace-nowrap`} onClick={handleConfirmPayment}>
+                    <div className="flex gap-1.75 px-4 py-2.5 border-t border-(--border) bg-(--surf-2) justify-end items-center shrink-0 flex-nowrap rounded-b-[9px] max-[768px]:px-2.75 max-[768px]:py-1.75 max-[768px]:gap-1.25 max-[480px]:px-2.25 max-[480px]:gap-2">
+                      <button className={`${BTN_SECONDARY} shrink-0 w-auto! whitespace-nowrap`} onClick={() => setStep("select")}>← Back</button>
+                      <button className={`${BTN_PRIMARY} shrink-0 w-auto! whitespace-nowrap`} onClick={handleConfirmPayment}>
                         Proceed to Release →
                       </button>
                     </div>
@@ -1959,35 +1959,35 @@ export default function UnifiedBirthRegistry() {
                 {step === "releasing" && (
                   <>
                     <div className="flex flex-col">
-                      <div className="px-[9px] pt-[9px] pb-[7px] flex flex-col gap-[9px] items-center max-[768px]:px-[11px] max-[768px]:pt-[11px] max-[768px]:pb-[9px] max-[900px]:px-3 max-[900px]:pt-3 max-[900px]:pb-[9px]">
-                        <div className="flex flex-col items-center justify-center gap-[14px] py-9 px-5 text-center w-full max-[640px]:gap-[11px] max-[640px]:py-7 max-[640px]:px-[14px]" style={{ animation: "releaseIn 0.45s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-                          <div className="release-ring relative w-[86px] h-[86px] flex items-center justify-center max-[640px]:w-[74px] max-[640px]:h-[74px]">
-                            <div className="w-[86px] h-[86px] rounded-full flex items-center justify-center shadow-[0_8px_32px_rgba(5,150,105,0.30),0_2px_8px_rgba(5,150,105,0.18),inset_0_1px_0_rgba(255,255,255,0.20)] max-[640px]:w-[74px] max-[640px]:h-[74px]" style={{ background: "linear-gradient(135deg,#059669 0%,#047857 60%,#065f46 100%)" }}>
+                      <div className="px-2.25 pt-2.25 pb-1.75 flex flex-col gap-2.25 items-center max-[768px]:px-2.75 max-[768px]:pt-2.75 max-[768px]:pb-2.25 max-[900px]:px-3 max-[900px]:pt-3 max-[900px]:pb-2.25">
+                        <div className="flex flex-col items-center justify-center gap-3.5 py-9 px-5 text-center w-full max-[640px]:gap-2.75 max-[640px]:py-7 max-[640px]:px-3.5" style={{ animation: "releaseIn 0.45s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+                          <div className="release-ring relative w-21.5 h-21.5 flex items-center justify-center max-[640px]:w-18.5 max-[640px]:h-18.5">
+                            <div className="w-21.5 h-21.5 rounded-full flex items-center justify-center shadow-[0_8px_32px_rgba(5,150,105,0.30),0_2px_8px_rgba(5,150,105,0.18),inset_0_1px_0_rgba(255,255,255,0.20)] max-[640px]:w-18.5 max-[640px]:h-18.5" style={{ background: "linear-gradient(135deg,#059669 0%,#047857 60%,#065f46 100%)" }}>
                               <span className="text-[34px] text-white leading-none font-black max-[640px]:text-[28px]">&#10003;</span>
                             </div>
                           </div>
                           <div className="[font-family:var(--fh)] text-[clamp(32px,7vw,48px)] font-extrabold leading-none tracking-[-2px] bg-clip-text text-transparent" style={{ backgroundImage: "linear-gradient(135deg,var(--green),#34d399)" }}>100%</div>
-                          <div className="[font-family:var(--fh)] text-[clamp(16px,3.5vw,20px)] font-extrabold text-[var(--txt)] tracking-[-0.4px] m-0">Request Complete</div>
-                          <div className="text-[13px] text-[var(--txt2)] max-w-[280px] leading-[1.65] m-0">
+                          <div className="[font-family:var(--fh)] text-[clamp(16px,3.5vw,20px)] font-extrabold text-(--txt) tracking-[-0.4px] m-0">Request Complete</div>
+                          <div className="text-[13px] text-(--txt2) max-w-70 leading-[1.65] m-0">
                             The document is ready for release to the requester.
                           </div>
-                          <div className="inline-flex items-center gap-[7px] px-[18px] py-[7px] rounded-[40px] bg-[var(--green-lt)] border border-[1.5px] border-[var(--green-bd)] text-[12.5px] font-bold text-[#065f46] [font-family:var(--fh)] shadow-[0_2px_12px_rgba(5,150,105,0.12)]">
-                            <span className="w-2 h-2 rounded-full bg-[var(--green)] flex-shrink-0" style={{ animation: "dotBlink 1.4s ease-in-out infinite" }} />
+                          <div className="inline-flex items-center gap-1.75 px-4.5 py-1.75 rounded-[40px] bg-(--green-lt) border-[1.5px] border-(--green-bd) text-[12.5px] font-bold text-[#065f46] [font-family:var(--fh)] shadow-[0_2px_12px_rgba(5,150,105,0.12)]">
+                            <span className="w-2 h-2 rounded-full bg-(--green) shrink-0" style={{ animation: "dotBlink 1.4s ease-in-out infinite" }} />
                             Ready for Release
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-[7px] px-4 py-[10px] border-t border-[var(--border)] bg-[var(--surf-2)] justify-end items-center flex-shrink-0 flex-nowrap rounded-b-[9px] max-[768px]:px-[11px] max-[768px]:py-[7px] max-[768px]:gap-[5px] max-[480px]:px-[9px] max-[480px]:gap-2">
+                    <div className="flex gap-1.75 px-4 py-2.5 border-t border-(--border) bg-(--surf-2) justify-end items-center shrink-0 flex-nowrap rounded-b-[9px] max-[768px]:px-2.75 max-[768px]:py-1.75 max-[768px]:gap-1.25 max-[480px]:px-2.25 max-[480px]:gap-2">
                       <button
-                        className={`${BTN_SECONDARY} flex-shrink-0 !w-auto whitespace-nowrap`}
+                        className={`${BTN_SECONDARY} shrink-0 w-auto! whitespace-nowrap`}
                         onClick={() => setStep("payment")}
                         disabled={processing}
                       >
                         ← Back
                       </button>
                       <button
-                        className={`${BTN_PRIMARY} flex-shrink-0 !w-auto whitespace-nowrap min-w-[130px] max-[480px]:min-w-[145px]`}
+                        className={`${BTN_PRIMARY} shrink-0 w-auto! whitespace-nowrap min-w-32.5 max-[480px]:min-w-36.25`}
                         onClick={async () => {
                           const saved = await handleCompleteTransaction();
                           if (saved) resetTransaction();
@@ -1995,7 +1995,7 @@ export default function UnifiedBirthRegistry() {
                         disabled={processing}
                       >
                         {processing
-                          ? <><div className="w-[13px] h-[13px] border-2 border-white/25 border-t-white rounded-full animate-spin flex-shrink-0" />&nbsp;Saving…</>
+                          ? <><div className="w-3.25 h-3.25 border-2 border-white/25 border-t-white rounded-full animate-spin shrink-0" />&nbsp;Saving…</>
                           : "Release & New Transaction"}
                       </button>
                     </div>
@@ -2009,17 +2009,17 @@ export default function UnifiedBirthRegistry() {
       )}
 
       {tab === "archive" && (
-        <div className="w-full px-4 pb-4 bg-[var(--bg)] flex flex-col max-[768px]:px-[11px] max-[768px]:pb-[11px] max-[480px]:px-[9px] max-[480px]:pb-[9px]">
+        <div className="w-full px-4 pb-4 bg-(--bg) flex flex-col max-[768px]:px-2.75 max-[768px]:pb-2.75 max-[480px]:px-2.25 max-[480px]:pb-2.25">
           {!archiveUnlocked ? (
             <>
-              <div className="sticky top-[52px] z-[80] bg-white border border-[var(--border-strong)] rounded-t-[9px] px-[14px] py-[10px] flex items-center gap-2 flex-wrap w-full min-h-[56px] shadow-[0_1px_4px_rgba(0,0,0,0.05)] max-[768px]:static max-[768px]:px-[11px] max-[768px]:py-[9px] max-[768px]:min-h-0 max-[768px]:flex-wrap max-[768px]:gap-[7px]">
-                <div className="w-7 h-7 bg-[var(--blue-lt)] border border-[1.5px] border-[var(--blue-bd)] rounded-full flex items-center justify-center flex-shrink-0 text-[var(--blue)] max-[480px]:hidden"><IconArchive /></div>
+              <div className="sticky top-13 z-80 bg-white border border-(--border-strong) rounded-t-[9px] px-3.5 py-2.5 flex items-center gap-2 flex-wrap w-full min-h-14 shadow-[0_1px_4px_rgba(0,0,0,0.05)] max-[768px]:static max-[768px]:px-2.75 max-[768px]:py-2.25 max-[768px]:min-h-0 max-[768px]:flex-wrap max-[768px]:gap-1.75">
+                <div className="w-7 h-7 bg-(--blue-lt) border-[1.5px] border-(--blue-bd) rounded-full flex items-center justify-center shrink-0 text-(--blue) max-[480px]:hidden"><IconArchive /></div>
                 <div>
-                  <h2 className="text-[clamp(12px,2.5vw,13px)] font-bold text-[var(--txt)] m-0">Archived Birth Records</h2>
-                  <p className="text-[11px] text-[var(--txt2)] mt-px mb-0">Upload, view, or permanently delete archived records.</p>
+                  <h2 className="text-[clamp(12px,2.5vw,13px)] font-bold text-(--txt) m-0">Archived Birth Records</h2>
+                  <p className="text-[11px] text-(--txt2) mt-px mb-0">Upload, view, or permanently delete archived records.</p>
                 </div>
               </div>
-              <div className="bg-white rounded-b-[9px] border border-t-0 border-[var(--border-strong)] shadow-[var(--shadow-sm)] w-full overflow-hidden">
+              <div className="bg-white rounded-b-[9px] border border-t-0 border-(--border-strong) shadow-(--shadow-sm) w-full overflow-hidden">
                 <PasswordGate
                   module="archive_birth"
                   description="The Archive section is restricted to authorized personnel. Enter the administrator password to upload, view, or delete records."
@@ -2030,19 +2030,19 @@ export default function UnifiedBirthRegistry() {
             </>
           ) : (
             <>
-              <div className="sticky top-[52px] z-[80] bg-white border border-[var(--border-strong)] rounded-t-[9px] px-[14px] py-[10px] flex items-center gap-2 flex-wrap w-full min-h-[56px] shadow-[0_1px_4px_rgba(0,0,0,0.05)] max-[768px]:static max-[768px]:px-[11px] max-[768px]:py-[9px] max-[768px]:min-h-0 max-[768px]:flex-wrap max-[768px]:gap-[7px]">
-                <div className="w-7 h-7 bg-[var(--blue-lt)] border border-[1.5px] border-[var(--blue-bd)] rounded-full flex items-center justify-center flex-shrink-0 text-[var(--blue)] max-[480px]:hidden"><IconArchive /></div>
+              <div className="sticky top-13 z-80 bg-white border border-(--border-strong) rounded-t-[9px] px-3.5 py-2.5 flex items-center gap-2 flex-wrap w-full min-h-14 shadow-[0_1px_4px_rgba(0,0,0,0.05)] max-[768px]:static max-[768px]:px-2.75 max-[768px]:py-2.25 max-[768px]:min-h-0 max-[768px]:flex-wrap max-[768px]:gap-1.75">
+                <div className="w-7 h-7 bg-(--blue-lt) border-[1.5px] border-(--blue-bd) rounded-full flex items-center justify-center shrink-0 text-(--blue) max-[480px]:hidden"><IconArchive /></div>
                 <div>
-                  <h2 className="text-[clamp(12px,2.5vw,13px)] font-bold text-[var(--txt)] m-0">Archived Records</h2>
-                  {!isMobile && <p className="text-[11px] text-[var(--txt2)] mt-px mb-0">Upload new records, or view and permanently delete archived records.</p>}
+                  <h2 className="text-[clamp(12px,2.5vw,13px)] font-bold text-(--txt) m-0">Archived Records</h2>
+                  {!isMobile && <p className="text-[11px] text-(--txt2) mt-px mb-0">Upload new records, or view and permanently delete archived records.</p>}
                 </div>
                 <div className="flex-1 min-w-0 max-[768px]:hidden" />
-                <button className="inline-flex items-center gap-1 !bg-[#2563eb] !text-white px-[11px] py-[5px] rounded-[7px] cursor-pointer text-xs font-semibold [font-family:var(--f)] border-0 flex-shrink-0 shadow-[0_2px_8px_rgba(37,99,235,0.22)] transition-all duration-150 whitespace-nowrap touch-manipulation hover:!bg-[#1d4ed8] hover:-translate-y-px max-[768px]:ml-auto max-[480px]:text-[11.5px] max-[480px]:px-[9px] max-[480px]:py-1" onClick={() => setShowUploadModal(true)}>
+                <button className="inline-flex items-center gap-1 bg-[#2563eb]! text-white! px-2.75 py-1.25 rounded-[7px] cursor-pointer text-xs font-semibold [font-family:var(--f)] border-0 shrink-0 shadow-[0_2px_8px_rgba(37,99,235,0.22)] transition-all duration-150 whitespace-nowrap touch-manipulation hover:bg-[#1d4ed8]! hover:-translate-y-px max-[768px]:ml-auto max-[480px]:text-[11.5px] max-[480px]:px-2.25 max-[480px]:py-1" onClick={() => setShowUploadModal(true)}>
                   <IconUpload />
                   {isMobile ? "Upload" : "Upload PDF"}
                 </button>
-                <div className="relative w-[210px] flex-shrink-0 min-w-0 max-[900px]:w-[180px] max-[768px]:w-full">
-                  <span className="absolute left-[7px] top-1/2 -translate-y-1/2 text-[11px] opacity-35 pointer-events-none flex items-center text-[var(--txt)]"><IconSearch /></span>
+                <div className="relative w-52.5 shrink-0 min-w-0 max-[900px]:w-45 max-[768px]:w-full">
+                  <span className="absolute left-1.75 top-1/2 -translate-y-1/2 text-[11px] opacity-35 pointer-events-none flex items-center text-(--txt)"><IconSearch /></span>
                   <input
                     id="archive-search"
                     name="archiveSearch"
@@ -2050,21 +2050,21 @@ export default function UnifiedBirthRegistry() {
                     value={archiveSearch}
                     onChange={(e) => setArchiveSearch(e.target.value)}
                     placeholder="Search archived…"
-                    className="w-full py-[5px] pl-[26px] pr-[9px] text-[12.5px] border border-[var(--border-strong)] rounded-[7px] bg-[var(--surf-2)] text-[var(--txt)] outline-none [font-family:var(--f)] transition-[border-color,background] duration-150 [-webkit-appearance:none] focus:border-[var(--blue)] focus:bg-white focus:shadow-[0_0_0_3px_rgba(37,99,235,0.10)]"
+                    className="w-full py-1.25 pl-6.5 pr-2.25 text-[12.5px] border border-(--border-strong) rounded-[7px] bg-(--surf-2) text-(--txt) outline-none [font-family:var(--f)] transition-[border-color,background] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:bg-white focus:shadow-[0_0_0_3px_rgba(37,99,235,0.10)]"
                   />
                 </div>
               </div>
-              <div className="bg-white rounded-b-[9px] border border-t-0 border-[var(--border-strong)] shadow-[var(--shadow-sm)] w-full overflow-hidden">
+              <div className="bg-white rounded-b-[9px] border border-t-0 border-(--border-strong) shadow-(--shadow-sm) w-full overflow-hidden">
                 {loadingRecords ? (
-                  <div className="p-8 text-center text-[13px] text-[var(--txt3)] flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-[var(--blue-md)] border-t-[var(--blue)] rounded-full animate-spin" />
+                  <div className="p-8 text-center text-[13px] text-(--txt3) flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-(--blue-md) border-t-(--blue) rounded-full animate-spin" />
                     <span>Loading archived records…</span>
                   </div>
                 ) : filteredArchived.length === 0 ? (
-                  <div className="py-9 px-[18px] text-center text-[var(--txt3)]">
-                    <span className="text-[30px] opacity-20 flex items-center justify-center mx-auto mb-2 text-[var(--txt3)]"><IconFolder /></span>
-                    <div className="font-semibold text-[13px] text-[var(--txt2)]">No Archived Records Found</div>
-                    <div className="text-xs mt-[3px]">
+                  <div className="py-9 px-4.5 text-center text-(--txt3)">
+                    <span className="text-[30px] opacity-20 flex items-center justify-center mx-auto mb-2 text-(--txt3)"><IconFolder /></span>
+                    <div className="font-semibold text-[13px] text-(--txt2)">No Archived Records Found</div>
+                    <div className="text-xs mt-0.75">
                       {archiveSearch
                         ? "No records match your search."
                         : "No records have been archived yet. Use the Upload button above to add new records."}
@@ -2084,32 +2084,32 @@ export default function UnifiedBirthRegistry() {
                   </div>
                 ) : (
                   <div className="w-full overflow-x-auto overflow-y-auto [-webkit-overflow-scrolling:touch] max-h-[calc(100vh-var(--home-topbar-height)-52px-56px-30px)] relative bg-white ubr-scroll max-[1024px]:max-h-[calc(100vh-var(--home-topbar-height)-180px)] max-[768px]:max-h-none max-[768px]:overflow-y-visible">
-                    <table className="w-full border-separate [border-spacing:0] text-[12.5px] min-w-[560px] bg-white">
+                    <table className="w-full border-separate [border-spacing:0] text-[12.5px] min-w-140 bg-white">
                       <thead>
-                        <tr className="bg-[var(--surf-2)]">
-                          <th className="sticky top-0 z-[20] px-[11px] py-[9px] text-left font-bold text-[9.5px] text-[var(--txt3)] tracking-[0.5px] uppercase whitespace-nowrap bg-[var(--surf-2)] border-b border-[var(--border-strong)] shadow-[0_1px_0_var(--border)] max-[768px]:static">#</th>
-                          <th className="sticky top-0 z-[20] px-[11px] py-[9px] text-left font-bold text-[9.5px] text-[var(--txt3)] tracking-[0.5px] uppercase whitespace-nowrap bg-[var(--surf-2)] border-b border-[var(--border-strong)] shadow-[0_1px_0_var(--border)] max-[768px]:static">Name</th>
-                          <th className="sticky top-0 z-[20] px-[11px] py-[9px] text-left font-bold text-[9.5px] text-[var(--txt3)] tracking-[0.5px] uppercase whitespace-nowrap bg-[var(--surf-2)] border-b border-[var(--border-strong)] shadow-[0_1px_0_var(--border)] max-[768px]:static">Father / Mother</th>
-                          <th className="sticky top-0 z-[20] px-[11px] py-[9px] text-left font-bold text-[9.5px] text-[var(--txt3)] tracking-[0.5px] uppercase whitespace-nowrap bg-[var(--surf-2)] border-b border-[var(--border-strong)] shadow-[0_1px_0_var(--border)] max-[768px]:static">Archived Date</th>
-                          <th className="sticky top-0 z-[20] px-[11px] py-[9px] text-left font-bold text-[9.5px] text-[var(--txt3)] tracking-[0.5px] uppercase whitespace-nowrap bg-[var(--surf-2)] border-b border-[var(--border-strong)] shadow-[0_1px_0_var(--border)] max-[768px]:static">Actions</th>
+                        <tr className="bg-(--surf-2)">
+                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">#</th>
+                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">Name</th>
+                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">Father / Mother</th>
+                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">Archived Date</th>
+                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredArchived.map((r, i) => (
-                          <tr key={r.id} className="border-b border-[var(--border-lt)] transition-colors duration-150 hover:bg-[var(--surf-2)]">
-                            <td className="px-[11px] py-2 align-middle bg-transparent text-[var(--txt)] text-[var(--txt3)] text-[11px] w-8">{i + 1}</td>
-                            <td className="px-[11px] py-2 align-middle bg-transparent text-[var(--txt)]">
-                              <div className="flex items-center gap-[6px]">
-                                <span className="text-[14px] flex-shrink-0 flex items-center text-[var(--txt3)]"><IconDocument /></span>
-                                <span className="font-semibold text-[var(--txt)] text-[12.5px]">{getRecordDisplayName(r)}</span>
+                          <tr key={r.id} className="border-b border-(--border-lt) transition-colors duration-150 hover:bg-(--surf-2)">
+                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt3) text-[11px] w-8">{i + 1}</td>
+                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt)">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[14px] shrink-0 flex items-center text-(--txt3)"><IconDocument /></span>
+                                <span className="font-semibold text-(--txt) text-[12.5px]">{getRecordDisplayName(r)}</span>
                               </div>
                             </td>
-                            <td className="px-[11px] py-2 align-middle bg-transparent text-[var(--txt)]"><RelativesChips record={r} /></td>
-                            <td className="px-[11px] py-2 align-middle bg-transparent text-[var(--txt2)] text-[11.5px] whitespace-nowrap">{formatDate(r.archived_at)}</td>
-                            <td className="px-[11px] py-2 align-middle bg-transparent text-[var(--txt)]">
-                              <div className="flex gap-[3px] flex-wrap items-center">
-                                <button className="inline-flex items-center gap-[3px] px-[9px] py-1 rounded-[5px] border-0 !text-white text-[11px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation !bg-[#2563eb] hover:brightness-90 hover:-translate-y-px" onClick={() => handleViewPdf(r.id, r)}>View</button>
-                                <button className="inline-flex items-center gap-[3px] px-[9px] py-1 rounded-[5px] border-0 !text-white text-[11px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation !bg-[#dc2626] hover:brightness-90 hover:-translate-y-px" onClick={() => handleDelete(r.id, r)}>Delete</button>
+                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt)"><RelativesChips record={r} /></td>
+                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt2) text-[11.5px] whitespace-nowrap">{formatDate(r.archived_at)}</td>
+                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt)">
+                            <div className="flex gap-0.75 flex-wrap items-center">
+                                <button className="inline-flex items-center gap-0.75 px-2.25 py-1 rounded-[5px] border-0 text-white! text-[11px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation bg-[#2563eb]! hover:brightness-90 hover:-translate-y-px" onClick={() => handleViewPdf(r.id, r)}>View</button>
+                                <button className="inline-flex items-center gap-0.75 px-2.25 py-1 rounded-[5px] border-0 text-white! text-[11px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation bg-[#dc2626]! hover:brightness-90 hover:-translate-y-px" onClick={() => handleDelete(r.id, r)}>Delete</button>
                               </div>
                             </td>
                           </tr>
