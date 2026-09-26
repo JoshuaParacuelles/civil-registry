@@ -3,11 +3,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
-import { PermissionProvider } from "./components/PermissionContext";
-import ProtectedRoute from "./components/ProtectedRoute";
-import Login        from "./components/auth/Login";
-import Home         from "./components/home";
-import AccessDenied from "./components/Account Settings/AccessDenied"; // ← correct path
+import { PermissionProvider } from "./context/PermissionContext";
+import ProtectedRoute from "./routes/ProtectedRoute";
+import Login from "./pages/Auth/Login";
+import Home from "./pages/Home/Home";
+import AccessDenied from "./pages/AccountSettings/AccessDenied";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

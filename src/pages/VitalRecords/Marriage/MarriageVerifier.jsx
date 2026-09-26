@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-  import ReactDOM from "react-dom/client";
-import "../style/vital.css";
-import sccLogo from "../../../assets/sidebar-icon/scc.png";
+import ReactDOM from "react-dom/client";
+import "../VitalRecords.css";
+import sccLogo from "../../../assets/images/scc.png";
 // FIX: added the same second logo import used in the Birth section so
 // the Marriage registry shows both seals side by side, identical to Birth.
-import lcrLogo from "../../../assets/lcr.jpg";
+import lcrLogo from "../../../assets/images/lcr.jpg";
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
   const FEE = 75;
   const MAX_UPLOAD = 5;

@@ -1,26 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Used ONLY for realtime subscriptions (postgres_changes) in
-// document_tracking.jsx, so the UI updates live without a manual
-// refresh. All actual reads/writes (list, detail, assign, complete,
-// flag, reject, comment, add person) still go through the existing
-// Flask API via apiFetch() — this client never calls
-// .from(...).select()/.insert()/.update() itself.
-//
-// VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are the project URL and
-// PUBLIC anon key from Supabase (Project Settings -> API). The anon
-// key is safe to ship to the browser — it has no privileges beyond
-// what your Row Level Security policies grant it.
-//
-// REQUIRED for realtime to actually deliver events:
-//   1. Realtime replication enabled for: documents, document_stages,
-//      document_comments, document_assignments, document_personnel
-//      (Supabase dashboard -> Database -> Replication).
-//   2. A SELECT policy on each of those tables for the role this key
-//      authenticates as (anon or authenticated) — RLS is enforced on
-//      realtime events exactly like it is on normal queries. Without
-//      a read policy, the subscription connects successfully but no
-//      change event will ever arrive, with no error shown anywhere.
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 

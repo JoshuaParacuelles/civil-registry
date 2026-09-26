@@ -3,8 +3,8 @@ import {
   browseExternalIndividuals,
   fetchExternalIndividuals,
   fetchExternalIndividual,
-} from "../../assets/services/externalIndividualsService";
-import "./Externalindividualslookup.css";
+} from "../../services/externalIndividualsService";
+import "./ExternalIndividualsLookup.css";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS

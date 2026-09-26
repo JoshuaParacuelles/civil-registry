@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { usePermissions } from "../PermissionContext";
+import { usePermissions } from "../../context/PermissionContext";
 import "./ChangePassword.css";
 
 // ── ICONS ──────────────────────────────────────────────────────────────────

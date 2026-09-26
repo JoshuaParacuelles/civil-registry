@@ -3,8 +3,8 @@ import ReactDOM from "react-dom";
 import axios from "axios";
 import "./Login.css";
 
-import bgImage from "../../assets/home.jpg";
-import loginLogo from "../../assets/scc.png";
+import bgImage from "../../assets/images/home.jpg";
+import loginLogo from "../../assets/images/scc.png";
 
 const API = import.meta.env.VITE_API_BASE_URL || "";
 

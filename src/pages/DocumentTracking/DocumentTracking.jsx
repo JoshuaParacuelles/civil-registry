@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { usePermissions } from "../PermissionContext";
-import { supabase } from "../supabaseClient";
-import "./document_tracking.css";
+import { usePermissions } from "../../context/PermissionContext";
+import { supabase } from "../../services/supabaseClient";
+import "./DocumentTracking.css";
 
 // Same-origin by default (goes through the Vite proxy in dev). Only set
 // VITE_API_BASE_URL if the backend truly lives on a different origin —
