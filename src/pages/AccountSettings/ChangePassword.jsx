@@ -58,16 +58,19 @@ const API_BASE = "";
 const MODULE_CONFIGS = {
   archiveBirth: {
     label: "Archive Birth",
+    archiveLabel: "Birth Archive Password",
     endpoint: `${API_BASE}/api/birth/change-module-password`,
     moduleKey: "archive_birth",
   },
   marriageArchive: {
     label: "Marriage Archive",
+    archiveLabel: "Marriage Archive Password",
     endpoint: `${API_BASE}/api/marriage/change-module-password`,
     moduleKey: "archive_marriage",
   },
   deathArchive: {
     label: "Death Archive",
+    archiveLabel: "Death Archive Password",
     endpoint: `${API_BASE}/api/death/change-module-password`,
     moduleKey: "archive_death",
   },
@@ -263,9 +266,9 @@ const PasswordField = ({ id, label, name, value, onChange, show, onToggle, place
   </div>
 );
 
-const ConfirmPasswordField = ({ id, value, newPassword, show, onToggle, onChange }) => (
+const ConfirmPasswordField = ({ id, value, newPassword, show, onToggle, onChange, label = "Confirm New Password" }) => (
   <div className="cp-field">
-    <label className="cp-label" htmlFor={id}>Confirm New Password</label>
+    <label className="cp-label" htmlFor={id}>{label}</label>
     <div className="cp-input-wrap">
       <input
         id={id}
@@ -322,7 +325,7 @@ const ModulePasswordForm = ({ config, showNotify }) => {
       let result = {};
       try { result = await res.json(); } catch { showNotify(false, "Error", "Invalid server response."); return; }
       if (res.ok && result.success) {
-        showNotify(true, `${config.label} updated!`, result.message || "Password changed successfully.");
+        showNotify(true, `Successful update: ${config.archiveLabel}`, result.message || "Password changed successfully.");
         handleReset();
       } else {
         const { title } = classifyError(res.status, result);
@@ -340,7 +343,7 @@ const ModulePasswordForm = ({ config, showNotify }) => {
       <SectionDivider label="Verify Access" />
       <PasswordField
         id={`${idPrefix}-current`}
-        label="Current Password"
+        label={`Current ${config.archiveLabel}`}
         name="currentPassword"
         value={formData.currentPassword}
         onChange={handleChange}
@@ -352,7 +355,7 @@ const ModulePasswordForm = ({ config, showNotify }) => {
       <SectionDivider label="Set New Password" />
       <PasswordField
         id={`${idPrefix}-new`}
-        label="New Password"
+        label={`New ${config.archiveLabel}`}
         name="newPassword"
         value={formData.newPassword}
         onChange={handleChange}
@@ -368,6 +371,7 @@ const ModulePasswordForm = ({ config, showNotify }) => {
         show={show.confirm}
         onToggle={() => toggle("confirm")}
         onChange={handleChange}
+        label={`Confirm New ${config.archiveLabel}`}
       />
       <div className="cp-form-actions">
         <button type="button" className="cp-btn-ghost" onClick={handleReset} disabled={loading}>
