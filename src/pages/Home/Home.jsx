@@ -1,29 +1,29 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { supabase } from "./supabaseClient";
-import ChangePassword from "./Account Settings/ChangePassword";
-import AuditLogs from "./Account Settings/AuditLogs";
-import RoleManagement from "./Account Settings/RoleManagement";
-import AccessDenied from "./Account Settings/AccessDenied";
+import { supabase } from "../../services/supabaseClient";
+import ChangePassword from "../AccountSettings/ChangePassword";
+import AuditLogs from "../AccountSettings/AuditLogs";
+import RoleManagement from "../AccountSettings/RoleManagement";
+import AccessDenied from "../AccountSettings/AccessDenied";
 
-import UnifiedBirthRegistry from "./Vital Records Management/birth/Birthverifier";
-import UnifiedMarriageRegistry from "./Vital Records Management/marriage/Marriageverifier";
-import DeathVerifier from "./Vital Records Management/death/Deathverifier";
-import PaymentInventory from "./dashboard/dashboard";
-import Heatmaps from "./Heatmaps/Heatmaps";
-import ExternalIndividualsLookup from "./External Individuals/Externalindividualslookup";
-import DocumentTracking from "./document tracking/document_tracking";
+import UnifiedBirthRegistry from "../VitalRecords/Birth/BirthVerifier";
+import UnifiedMarriageRegistry from "../VitalRecords/Marriage/MarriageVerifier";
+import DeathVerifier from "../VitalRecords/Death/DeathVerifier";
+import PaymentInventory from "../Dashboard/Dashboard";
+import Heatmaps from "../Heatmaps/Heatmaps";
+import ExternalIndividualsLookup from "../ExternalIndividuals/ExternalIndividualsLookup";
+import DocumentTracking from "../DocumentTracking/DocumentTracking";
 
-import { usePermissions } from "./PermissionContext";
+import { usePermissions } from "../../context/PermissionContext";
 
-import logoImg       from "../assets/sidebar-icon/scc.png";
-import dashboardIcon from "../assets/sidebar-icon/dashboard.png";
-import vitalIcon     from "../assets/sidebar-icon/vital.png";
-import heatmapsIcon  from "../assets/sidebar-icon/heatmap.png";
-import trackingIcon  from "../assets/sidebar-icon/tracking.png";
-import accountIcon   from "../assets/sidebar-icon/account.png";
-import logoutIcon    from "../assets/sidebar-icon/logout.png";
+import logoImg from "../../assets/icons/sidebar/scc.png";
+import dashboardIcon from "../../assets/icons/sidebar/dashboard.png";
+import vitalIcon from "../../assets/icons/sidebar/vital.png";
+import heatmapsIcon from "../../assets/icons/sidebar/heatmap.png";
+import trackingIcon from "../../assets/icons/sidebar/tracking.png";
+import accountIcon from "../../assets/icons/sidebar/account.png";
+import logoutIcon from "../../assets/icons/sidebar/logout.png";
 
-import "./home.css";
+import "./Home.css";
 
 const MENU_KEYS = {
   DASHBOARD:         "Dashboard",

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactDOM from "react-dom/client";
-import "../style/vital.css";
-import sccLogo from "../../../assets/sidebar-icon/scc.png";
-// FIX: added the same second logo import used in the Birth section so
-// the Death registry shows both seals side by side, identical to Birth.
-import lcrLogo from "../../../assets/lcr.jpg";
+import "../VitalRecords.css";
+import sccLogo from "../../../assets/images/scc.png";
+import lcrLogo from "../../../assets/images/lcr.jpg";
 
-const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/death`;
+// Relative by default — resolves against whatever origin loaded the page
+// (localhost, LAN IP, or an HTTPS devtunnel) and goes through Vite's
+// dev-server proxy to Flask on localhost:5000. Never hardcode an
+// absolute http://localhost:5000 URL here.
+const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/birth`;
 const FEE = 75;
 const MAX_UPLOAD = 5;
 
@@ -24,9 +26,12 @@ const OFFICE_CONFIG = {
   amountPaid: "₱75.00",
 };
 
+// ── Logo config ──────────────────────────────────────────────────────────
+// Uses the imported scc.png / lcr.jpg from src/assets. Leave blank ("") to
+// fall back to the placeholder seal drawn below for the primary logo.
 const LOGO_SRC = sccLogo;
-// FIX: second logo shown beside the primary logo (lcr.jpg), same as Birth.
-// Leave blank ("") to render only the primary logo, same as before.
+// FIX: second logo shown beside the primary logo (lcr.jpg). Leave blank ("")
+// to render only the primary logo, same as before.
 const LOGO_SRC_2 = lcrLogo;
 
 const STEPS = [
@@ -35,18 +40,7 @@ const STEPS = [
   { key: "releasing", label: "Releasing" },
 ];
 
-const VISUALLY_HIDDEN_STYLE = {
-  position: "absolute",
-  width: "1px",
-  height: "1px",
-  padding: 0,
-  margin: "-1px",
-  overflow: "hidden",
-  clip: "rect(0, 0, 0, 0)",
-  whiteSpace: "nowrap",
-  border: 0,
-};
-
+// ── Viewport hook ──────────────────────────────────────────────────────────
 function useViewport() {
   const [width, setWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1024,
@@ -64,6 +58,7 @@ function useViewport() {
   };
 }
 
+// ── Utilities ──────────────────────────────────────────────────────────────
 const formatDate = (d) => {
   if (!d) return "—";
   const parsed = new Date(d);
@@ -134,25 +129,35 @@ function formatParentDisplayName(first, middle, last, fullName = "") {
 
 function getRecordDisplayName(record) {
   if (!record) return "";
-  const first  = cleanNamePart(record.deceased_first_name);
-  const middle = cleanNamePart(record.deceased_middle_name);
-  const last   = cleanNamePart(record.deceased_last_name);
+  const first  = cleanNamePart(record.child_first_name);
+  const middle = cleanNamePart(record.child_middle_name);
+  const last   = cleanNamePart(record.child_last_name);
   const fromParts = formatFullName(first, middle, last);
   if (fromParts) return fromParts;
-  if (record.deceased_full_name) return toTitleCase(record.deceased_full_name);
+  if (record.child_full_name) return toTitleCase(record.child_full_name);
   return normalizeDisplayName(record.file_name || "");
 }
 
 function getFatherDisplayName(record) {
-  const v = cleanNamePart(record?.father_name);
-  return v ? toTitleCase(v) : "";
+  return formatParentDisplayName(
+    record?.father_first_name, record?.father_middle_name,
+    record?.father_last_name,  record?.father_full_name,
+  );
 }
 
 function getMotherDisplayName(record) {
-  const v = cleanNamePart(record?.mother_name);
-  return v ? toTitleCase(v) : "";
+  return formatParentDisplayName(
+    record?.mother_first_name, record?.mother_middle_name,
+    record?.mother_last_name,  record?.mother_full_name,
+  );
 }
 
+// FIX: identifies "the same person" across the active and archived
+// tables. The two tables have independent auto-increment ids, so the
+// same person can end up with a matching id purely by coincidence
+// (causing both rows to appear "selected" in the UI) or can appear
+// twice in search results if a restore left a stale archive copy
+// behind. We key on name + parents rather than id.
 function getRecordIdentityKey(record) {
   const name   = getRecordDisplayName(record).trim().toUpperCase();
   const father = getFatherDisplayName(record).trim().toUpperCase();
@@ -178,9 +183,9 @@ function matchesSearch(record, query) {
 }
 
 function getRecordLastName(record) {
-  if (record?.deceased_last_name) return record.deceased_last_name.trim().toUpperCase();
-  if (record?.deceased_full_name) {
-    const parts = record.deceased_full_name.trim().split(/\s+/);
+  if (record?.child_last_name) return record.child_last_name.trim().toUpperCase();
+  if (record?.child_full_name) {
+    const parts = record.child_full_name.trim().split(/\s+/);
     return (parts[parts.length - 1] || "").toUpperCase();
   }
   const clean = (record?.file_name || "").replace(/\.pdf$/i, "").trim();
@@ -190,36 +195,101 @@ function getRecordLastName(record) {
 }
 
 function getRecordFirstName(record) {
-  if (record?.deceased_first_name) return record.deceased_first_name.trim().toUpperCase();
-  if (record?.deceased_full_name)
-    return (record.deceased_full_name.trim().split(/\s+/)[0] || "").toUpperCase();
+  if (record?.child_first_name) return record.child_first_name.trim().toUpperCase();
+  if (record?.child_full_name)
+    return (record.child_full_name.trim().split(/\s+/)[0] || "").toUpperCase();
   return "";
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PDF DECODING — THE ACTUAL FIX
+//
+// Symptom: the in-app viewer showed Chrome's native
+// "Failed to load PDF document." error instead of the certificate.
+//
+// Root cause: `pdf_data` occasionally comes back DOUBLE base64-encoded
+// (see the matching comment in birth.py / _to_base64_pdf). Decoding it
+// only once with atob() produced garbage bytes that "looked like" a
+// valid Blob to the browser but weren't a real PDF, so the PDF.js
+// viewer choked on it.
+//
+// Fix: decode to raw bytes, check for the "%PDF" magic number before
+// trusting them. If it's not there, try peeling off one more layer of
+// base64 (self-healing old/corrupted rows). If it's still not a real
+// PDF after that, return null so the UI shows its own friendly
+// "Unable to display PDF" state instead of letting the browser's
+// built-in viewer throw a confusing native error.
+// ─────────────────────────────────────────────────────────────────────────
+
+function bytesFromBase64(b64) {
+  const cleaned     = b64.replace(/\s/g, "");
+  const byteChars   = atob(cleaned);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  return new Uint8Array(byteNumbers);
+}
+
+function looksLikePdf(bytes) {
+  return (
+    !!bytes && bytes.length >= 4 &&
+    bytes[0] === 0x25 && // %
+    bytes[1] === 0x50 && // P
+    bytes[2] === 0x44 && // D
+    bytes[3] === 0x46    // F
+  );
 }
 
 function createPdfBlobFromData(pdfData) {
   if (!pdfData) return null;
   try {
-    if (pdfData instanceof Blob)
+    if (pdfData instanceof Blob) {
       return pdfData.type === "application/pdf"
         ? pdfData : new Blob([pdfData], { type: "application/pdf" });
+    }
     if (typeof pdfData !== "string") return null;
-    if (pdfData.startsWith("data:application/pdf;base64,")) {
-      const cleaned      = pdfData.replace(/^data:application\/pdf;base64,/i, "").replace(/\s/g, "");
-      const byteChars    = atob(cleaned);
-      const byteNumbers  = new Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-      return new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
+
+    // Already a usable URL — nothing to decode.
+    if (pdfData.startsWith("blob:") || pdfData.startsWith("http://") || pdfData.startsWith("https://")) {
+      return null;
     }
-    if (pdfData.startsWith("%PDF"))
-      return new Blob([pdfData], { type: "application/pdf" });
-    if (!pdfData.startsWith("blob:") && !pdfData.startsWith("http://") && !pdfData.startsWith("https://")) {
-      const cleaned     = pdfData.replace(/\s/g, "");
-      const byteChars   = atob(cleaned);
-      const byteNumbers = new Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-      return new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
+
+    let cleaned = pdfData.startsWith("data:application/pdf;base64,")
+      ? pdfData.replace(/^data:application\/pdf;base64,/i, "")
+      : pdfData;
+    cleaned = cleaned.replace(/\s/g, "");
+
+    // Already raw PDF text (unlikely, but handle it).
+    if (cleaned.startsWith("%PDF")) {
+      return new Blob([cleaned], { type: "application/pdf" });
     }
-    return null;
+
+    let bytes;
+    try {
+      bytes = bytesFromBase64(cleaned);
+    } catch (e) {
+      console.error("Invalid base64 PDF data:", e);
+      return null;
+    }
+
+    // Self-heal double base64-encoded data: if the first decode
+    // doesn't look like a PDF, the decoded bytes might just be the
+    // ASCII text of ANOTHER base64 string — try decoding once more.
+    if (!looksLikePdf(bytes)) {
+      try {
+        const innerText  = new TextDecoder("ascii").decode(bytes).trim();
+        const innerBytes = bytesFromBase64(innerText);
+        if (looksLikePdf(innerBytes)) bytes = innerBytes;
+      } catch {
+        // fall through — the check below will catch the failure
+      }
+    }
+
+    if (!looksLikePdf(bytes)) {
+      console.error("Decoded PDF data does not start with the %PDF signature — data is invalid or corrupted.");
+      return null;
+    }
+
+    return new Blob([bytes], { type: "application/pdf" });
   } catch (error) {
     console.error("Failed to create PDF blob:", error);
     return null;
@@ -281,10 +351,12 @@ function printPdfFromData(pdfData) {
 }
 
 // ── Office Logo ─────────────────────────────────────────────────────────
+// Renders the real logo(s) if LOGO_SRC / LOGO_SRC_2 are set, otherwise a
+// placeholder seal.
 // FIX: now renders BOTH logos side by side (LOGO_SRC first, then
 // LOGO_SRC_2 next to it) when both are provided, using the same
-// className on each <img> so existing sizing CSS still applies unchanged
-// to each logo image — identical implementation to the Birth section.
+// className on each <img> so existing sizing CSS (.neg-cert-doc__logo,
+// .neg-print-logo, etc.) still applies unchanged to each logo image.
 // If only LOGO_SRC is set (LOGO_SRC_2 blank), behavior is identical to
 // before — a single logo image is rendered.
 const OfficeLogo = ({ className = "" }) => {
@@ -319,19 +391,20 @@ const OfficeLogo = ({ className = "" }) => {
   );
 };
 
+// ── Negative Certificate Document (for print) ──────────────────────────────
 function NegativeCertDocument({ certData }) {
   const {
-    subjectName, dateOfDeath, fatherName, motherName,
+    subjectName, dateOfBirth, fatherName, motherName,
     requestorName, cityMunicipality, certifyingOfficer,
     verifiedBy, amountPaid, todayDate, orNumber, datePaid,
   } = certData;
 
-  const dateStr   = dateOfDeath ? `on ${formatCertDate(dateOfDeath)} ` : "";
+  const dateStr   = dateOfBirth ? `on ${formatCertDate(dateOfBirth)} ` : "";
   const fatherStr = (fatherName  || "[Father's Name]").toUpperCase();
   const motherStr = (motherName  || "[Mother's Name]").toUpperCase();
   const city      = cityMunicipality || "this city/municipality";
   const reqName   = (requestorName || "[Requestor's Name]").toUpperCase();
-  const year      = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
+  const year      = dateOfBirth ? new Date(dateOfBirth).getFullYear() : new Date().getFullYear();
 
   return (
     <div className="neg-print-page">
@@ -341,16 +414,16 @@ function NegativeCertDocument({ certData }) {
       <p className="neg-print-date">{todayDate}</p>
       <p className="neg-print-salutation">TO WHOM IT MAY CONCERN:</p>
       <p className="neg-print-para">
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of death of&nbsp;
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of birth of&nbsp;
         <strong className="neg-cert-doc__highlight">{(subjectName || "").toUpperCase()}</strong>
-        &nbsp;who is alleged to have died {dateStr}in {city}, child of&nbsp;
+        &nbsp;who is alleged to have been born {dateStr}in {city} from parents,&nbsp;
         <strong className="neg-cert-doc__highlight">{fatherStr}</strong> and{" "}
-        <strong className="neg-cert-doc__highlight">{motherStr}</strong>, hence, we cannot issue,
-        as requested, a true copy of his/her Certificate of Death or transcription from
-        the Register of Deaths.
+        <strong className="neg-cert-doc__highlight">{motherStr}</strong> hence, we cannot issue,
+        as requested, a true copy of his/her Certificate of Live Birth or transcription from
+        the Register of Births.
       </p>
       <p className="neg-print-para">
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Death for the
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Birth for the
         year <strong>{year}</strong> are still intact in the archives of this office.
       </p>
       <p className="neg-print-para">
@@ -389,6 +462,7 @@ function NegativeCertDocument({ certData }) {
   );
 }
 
+// ── Negative Certificate Print Function ────────────────────────────────────
 function printNegativeCertificate(certData) {
   const mountPoint = document.createElement("div");
   mountPoint.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;";
@@ -436,6 +510,8 @@ function printNegativeCertificate(certData) {
   .neg-print-payment-value { flex: 1; font-size: 12pt; color: #000; }
   .neg-print-payment-blank { flex: 1; min-width: 100pt; height: 14pt; display: inline-block; }
 
+  /* FIX: father / mother / requestor names now print BOLD BLACK
+     (previously color: #1a3c6e — navy blue) */
   .neg-cert-doc__highlight { font-weight: bold; color: #000; }
 </style>
 </head>
@@ -461,6 +537,8 @@ function printNegativeCertificate(certData) {
     });
   });
 }
+
+/* ── SVG Icon Components ─────────────────────────────────────────────────── */
 
 const IconDocument = ({ className = "" }) => (
   <svg className={`icon-svg icon-svg--md ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -574,14 +652,11 @@ const FileIconSm = () => (
   </svg>
 );
 
-const IconRotateCcw = ({ className = "" }) => (
-  <svg className={`icon-svg icon-svg--sm ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="1 4 1 10 7 10"/>
-    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-  </svg>
-);
-
+// ─────────────────────────────────────────────────────────────
+// TOAST SYSTEM (ported from request.jsx)
+// ─────────────────────────────────────────────────────────────
 let _toastSetters = [];
+
 let _toastIdCounter = 0;
 
 function useToasts() {
@@ -697,6 +772,8 @@ function useShowNotif() {
   };
 }
 
+/* ── Sub-components ──────────────────────────────────────────────────────── */
+
 const ConfirmModal = ({
   title, message, confirmLabel, confirmColor = "#dc2626", onConfirm, onCancel,
 }) => (
@@ -708,7 +785,6 @@ const ConfirmModal = ({
         <button className="modal-cancel" onClick={onCancel}>Cancel</button>
         <button
           className="modal-confirm modal-confirm--red"
-          style={confirmColor ? { background: confirmColor, borderColor: confirmColor } : undefined}
           onClick={onConfirm}
         >
           {confirmLabel}
@@ -718,33 +794,33 @@ const ConfirmModal = ({
   </div>
 );
 
-const NegCertField = ({ label, required, error, htmlFor, children }) => (
+const NegCertField = ({ label, htmlFor, required, error, children }) => (
   <div className="negcert-info-modal__field">
     <label className="negcert-info-modal__label" htmlFor={htmlFor}>
       {label}
       {required && <span className="negcert-info-modal__required"> *</span>}
     </label>
     {children}
-    {error && <span className="negcert-info-modal__error" role="alert">&#9888; {error}</span>}
+    {error && <span className="negcert-info-modal__error">&#9888; {error}</span>}
   </div>
 );
 
 const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) => {
-  const [dateOfDeath, setDateOfDeath] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [fatherName,  setFatherName]  = useState("");
   const [motherName,  setMotherName]  = useState("");
-  const [dodError,    setDodError]    = useState("");
+  const [dobError,    setDobError]    = useState("");
   const [fatherError, setFatherError] = useState("");
   const [motherError, setMotherError] = useState("");
 
   const handleSubmit = () => {
     let valid = true;
-    if (!dateOfDeath)       { setDodError("Date of death is required.");    valid = false; } else setDodError("");
+    if (!dateOfBirth)       { setDobError("Date of birth is required.");    valid = false; } else setDobError("");
     if (!fatherName.trim()) { setFatherError("Father's name is required."); valid = false; } else setFatherError("");
     if (!motherName.trim()) { setMotherError("Mother's name is required."); valid = false; } else setMotherError("");
     if (!valid) return;
     onSubmit({
-      dateOfDeath,
+      dateOfBirth,
       fatherName:    fatherName.trim(),
       motherName:    motherName.trim(),
       requestorName: requestorName || subjectName || "",
@@ -764,24 +840,23 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
         </div>
 
         <div className="negcert-info-modal__fields">
-          <NegCertField label="Date of Death" required error={dodError} htmlFor="negcert-date-of-death">
+          <NegCertField label="Date of Birth" htmlFor="negcert-dob" required error={dobError}>
             <input
-              id="negcert-date-of-death"
-              name="dateOfDeath"
+              id="negcert-dob"
+              name="dateOfBirth"
               type="date"
-              className={`negcert-info-modal__input${dodError ? " negcert-info-modal__input--error" : ""}`}
-              value={dateOfDeath}
-              onChange={(e) => { setDateOfDeath(e.target.value); if (e.target.value) setDodError(""); }}
+              className={`negcert-info-modal__input${dobError ? " negcert-info-modal__input--error" : ""}`}
+              value={dateOfBirth}
+              onChange={(e) => { setDateOfBirth(e.target.value); if (e.target.value) setDobError(""); }}
               autoFocus
             />
           </NegCertField>
 
-          <NegCertField label="Father's Full Name" required error={fatherError} htmlFor="negcert-father-name">
+          <NegCertField label="Father's Full Name" htmlFor="negcert-father" required error={fatherError}>
             <input
-              id="negcert-father-name"
+              id="negcert-father"
               name="fatherName"
               type="text"
-              autoComplete="off"
               className={`negcert-info-modal__input${fatherError ? " negcert-info-modal__input--error" : ""}`}
               value={fatherName}
               onChange={(e) => { setFatherName(e.target.value); if (e.target.value.trim()) setFatherError(""); }}
@@ -789,12 +864,11 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
             />
           </NegCertField>
 
-          <NegCertField label="Mother's Full Name" required error={motherError} htmlFor="negcert-mother-name">
+          <NegCertField label="Mother's Full Name" htmlFor="negcert-mother" required error={motherError}>
             <input
-              id="negcert-mother-name"
+              id="negcert-mother"
               name="motherName"
               type="text"
-              autoComplete="off"
               className={`negcert-info-modal__input${motherError ? " negcert-info-modal__input--error" : ""}`}
               value={motherName}
               onChange={(e) => { setMotherName(e.target.value); if (e.target.value.trim()) setMotherError(""); }}
@@ -824,6 +898,9 @@ const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
   useEffect(() => {
     const url = getPdfBlobUrl(pdfData);
     setPdfUrl(url);
+    if (pdfData && !url) {
+      showNotif?.("This PDF could not be displayed — the stored file appears to be corrupted.", "error");
+    }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
   }, [pdfData]);
 
@@ -938,18 +1015,17 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
       </div>
       <p className="pw-gate__desc">{description}</p>
       <div className="pw-gate__form">
-        <label className="pw-lbl" htmlFor="archive-admin-password">Administrator Password</label>
+        <label className="pw-lbl" htmlFor="pw-gate-input">Administrator Password</label>
         <div className="pw-input-wrap">
           <input
-            id="archive-admin-password"
-            name="adminPassword"
+            id="pw-gate-input"
+            name="password"
             type={showPw ? "text" : "password"}
             value={pwInput}
             onChange={(e) => setPwInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
             placeholder="Enter password"
             className="pw-input"
-            autoComplete="current-password"
             autoFocus
           />
           <button
@@ -983,20 +1059,20 @@ const RelativesChips = ({ record }) => {
 };
 
 const NegativeCertPreview = ({
-  subjectName, fatherName, motherName, dateOfDeath, requestorName,
+  subjectName, fatherName, motherName, dateOfBirth, requestorName,
   orNumber, onOrNumberChange, onPrint,
 }) => {
   const todayDate = formatTodayLong();
   const officer   = OFFICE_CONFIG.certifyingOfficer;
   const verified  = OFFICE_CONFIG.verifiedBy;
-  const year      = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
+  const year      = dateOfBirth ? new Date(dateOfBirth).getFullYear() : new Date().getFullYear();
 
   return (
     <div className="neg-cert-preview-wrap">
       <div className="neg-cert-preview-toolbar">
         <div className="neg-cert-preview-toolbar__left">
           <span className="neg-cert-preview-toolbar__icon"><IconClipboard /></span>
-          <span className="neg-cert-preview-toolbar__name">Certificate of No Death Record</span>
+          <span className="neg-cert-preview-toolbar__name">Certificate of No Birth Record</span>
           <span className="neg-cert-preview-toolbar__badge">Negative Certificate</span>
         </div>
         <button className="pdf-inline-print-btn" onClick={onPrint}>
@@ -1012,14 +1088,14 @@ const NegativeCertPreview = ({
           <p className="neg-cert-doc__date">{todayDate}</p>
           <p className="neg-cert-doc__salutation">TO WHOM IT MAY CONCERN:</p>
           <p className="neg-cert-doc__para">
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of death of{" "}
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of birth of{" "}
             <strong className="neg-cert-doc__highlight">{(subjectName || "").toUpperCase()}</strong>{" "}
-            who is alleged to have died on{" "}
-            {dateOfDeath
-              ? <strong className="neg-cert-doc__highlight">{formatCertDate(dateOfDeath)}</strong>
-              : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[DATE OF DEATH]</strong>
+            who is alleged to have been born on{" "}
+            {dateOfBirth
+              ? <strong className="neg-cert-doc__highlight">{formatCertDate(dateOfBirth)}</strong>
+              : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[DATE OF BIRTH]</strong>
             }{" "}
-            in {OFFICE_CONFIG.cityMunicipality}, child of{" "}
+            in {OFFICE_CONFIG.cityMunicipality} from parents,{" "}
             {fatherName
               ? <strong className="neg-cert-doc__highlight">{fatherName.toUpperCase()}</strong>
               : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[FATHER'S NAME]</strong>
@@ -1027,10 +1103,10 @@ const NegativeCertPreview = ({
             {motherName
               ? <strong className="neg-cert-doc__highlight">{motherName.toUpperCase()}</strong>
               : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[MOTHER'S NAME]</strong>
-            }, hence, we cannot issue, as requested, a true copy of his/her Certificate of Death or transcription from the Register of Deaths.
+            }{" "}hence, we cannot issue, as requested, a true copy of his/her Certificate of Live Birth or transcription from the Register of Births.
           </p>
           <p className="neg-cert-doc__para">
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Death for the year <strong>{year}</strong> are still intact in the archives of this office.
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Birth for the year <strong>{year}</strong> are still intact in the archives of this office.
           </p>
           <p className="neg-cert-doc__para">
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This certification is issued to{" "}
@@ -1057,13 +1133,13 @@ const NegativeCertPreview = ({
               <span className="neg-cert-doc__payment-value">{OFFICE_CONFIG.amountPaid}</span>
             </div>
             <div className="neg-cert-doc__payment-row">
-              <label className="neg-cert-doc__payment-label" htmlFor="neg-cert-or-number">O.R. Number</label>
+              <span className="neg-cert-doc__payment-label">O.R. Number</span>
               <span className="neg-cert-doc__payment-colon">:</span>
               <input
-                id="neg-cert-or-number"
+                id="or-number"
                 name="orNumber"
                 type="text"
-                autoComplete="off"
+                aria-label="O.R. Number"
                 className="neg-cert-doc__payment-value neg-cert-doc__payment-blank neg-cert-doc__or-input"
                 style={{
                   border: "none",
@@ -1161,7 +1237,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
     if (uploaded.length > 0) {
       setUploadedRecords(uploaded);
       onUploadSuccess();
-      const uploadedLastNames = uploaded.map((r) => (r.deceased_last_name || "").trim().toUpperCase()).filter(Boolean);
+      const uploadedLastNames = uploaded.map((r) => (r.child_last_name || "").trim().toUpperCase()).filter(Boolean);
       const refreshed = [...allRecords, ...uploaded.map((r) => ({ ...r, uploaded_at: new Date().toISOString() }))];
       setMatches(refreshed.filter((r) => {
         const ln = getRecordLastName(r);
@@ -1178,14 +1254,14 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
         <div className="upl-hdr">
           <div className="upl-hdr__icon"><IconUpload /></div>
           <div className="upl-hdr__text">
-            <div className="upl-hdr__title">Upload Death Record PDFs</div>
+            <div className="upl-hdr__title">Upload Birth Record PDFs</div>
             <div className="upl-hdr__sub">
               {stage === "upload"
                 ? `Select up to ${MAX_UPLOAD} PDF files to upload`
                 : `${uploadedRecords.length} file${uploadedRecords.length > 1 ? "s" : ""} uploaded successfully`}
             </div>
           </div>
-          <button className="upl-close" onClick={onClose} aria-label="Close upload dialog">&#10005;</button>
+          <button className="upl-close" onClick={onClose}>&#10005;</button>
         </div>
 
         {stage === "upload" && (
@@ -1200,12 +1276,9 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
               className={`dropzone${limitReached ? " dropzone--disabled" : ""}`}
               onClick={() => !isUploading && !limitReached && fileRef.current?.click()}
             >
-              <label style={VISUALLY_HIDDEN_STYLE} htmlFor="death-record-pdf-upload">
-                Select PDF files to upload
-              </label>
               <input
-                id="death-record-pdf-upload"
-                name="pdfFiles"
+                id="birth-upload-file-input"
+                name="birthUploadFile"
                 ref={fileRef}
                 type="file"
                 accept="application/pdf"
@@ -1254,7 +1327,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                       {item.status === "error"     && `Error: ${item.error || "Unknown"}`}
                     </span>
                     {!isUploading && item.status !== "done" && (
-                      <button className="upl-queue__remove" onClick={() => removeFromQueue(item.id)} title="Remove" aria-label={`Remove ${ensurePdfName(item.file.name)} from queue`}>
+                      <button className="upl-queue__remove" onClick={() => removeFromQueue(item.id)} title="Remove">
                         &#10005;
                       </button>
                     )}
@@ -1329,6 +1402,9 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
     if (!pdfData) { setPdfUrl(""); return; }
     const url = getPdfBlobUrl(pdfData);
     setPdfUrl(url);
+    if (!url) {
+      showNotif?.("This PDF could not be displayed — the stored file appears to be corrupted.", "error");
+    }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
   }, [pdfData]);
 
@@ -1363,7 +1439,7 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
         <div className="pdf-inline-toolbar__left">
           <span className="pdf-inline-toolbar__icon"><IconDocument /></span>
           <span className="pdf-inline-toolbar__name">{displayName}</span>
-          <span className="pdf-inline-toolbar__badge">Death Certificate</span>
+          <span className="pdf-inline-toolbar__badge">Live Birth Certificate</span>
         </div>
         <button className="pdf-inline-print-btn" onClick={handlePrint} disabled={printing}>
           <span className="pdf-inline-print-btn__icon"><IconPrint /></span>
@@ -1377,7 +1453,7 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
   );
 };
 
-const MobileRecordCardArchive = ({ record, index, onView, onDelete, onRestore, restoring }) => {
+const MobileRecordCardArchive = ({ record, index, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
   const father      = getFatherDisplayName(record);
   const mother      = getMotherDisplayName(record);
@@ -1396,14 +1472,6 @@ const MobileRecordCardArchive = ({ record, index, onView, onDelete, onRestore, r
       <div className="mobile-record-card__date">{formatDate(record.archived_at)}</div>
       <div className="mobile-record-card__actions">
         <button className="tbl-btn tbl-btn--blue" onClick={onView}>View</button>
-        <button
-          className="tbl-btn tbl-btn--green"
-          style={{ background: "#059669", borderColor: "#059669", color: "#fff" }}
-          onClick={onRestore}
-          disabled={restoring}
-        >
-          {restoring ? "Restoring…" : "Restore"}
-        </button>
         <button className="tbl-btn tbl-btn--red"  onClick={onDelete}>Delete</button>
       </div>
     </div>
@@ -1411,13 +1479,13 @@ const MobileRecordCardArchive = ({ record, index, onView, onDelete, onRestore, r
 };
 
 /* ── Main Component ──────────────────────────────────────────────────────── */
-export default function UnifiedDeathRegistry() {
+export default function UnifiedBirthRegistry() {
   const [tab,             setTab]             = useState("transaction");
   const [confirmModal,    setConfirmModal]    = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [pdfModal,        setPdfModal]        = useState(null);
   const [negCertModal,    setNegCertModal]    = useState(null);
-  const [negCertInfo,     setNegCertInfo]     = useState({ fatherName: "", motherName: "", dateOfDeath: "", requestorName: "" });
+  const [negCertInfo,     setNegCertInfo]     = useState({ fatherName: "", motherName: "", dateOfBirth: "", requestorName: "" });
   const [orNumber,        setOrNumber]        = useState("");
 
   const showNotif = useShowNotif();
@@ -1445,9 +1513,6 @@ export default function UnifiedDeathRegistry() {
   const [archiveSearch,      setArchiveSearch]      = useState("");
   const [archiveUnlocked,    setArchiveUnlocked]    = useState(false);
 
-  const fetchRecordsAbortRef  = useRef(null);
-  const fetchArchivedAbortRef = useRef(null);
-
   const { isMobile, isTablet } = useViewport();
   const useCards = isMobile || isTablet;
 
@@ -1459,11 +1524,13 @@ export default function UnifiedDeathRegistry() {
       .filter((r) => !activeIdentityKeys.has(getRecordIdentityKey(r)))
       .map((r) => ({ ...r, _isArchived: true })),
   ];
+  const recordsAbortRef  = useRef(null);
+  const archivedAbortRef = useRef(null);
 
   const fetchRecords = useCallback(async () => {
-    if (fetchRecordsAbortRef.current) fetchRecordsAbortRef.current.abort();
+    if (recordsAbortRef.current) recordsAbortRef.current.abort();
     const controller = new AbortController();
-    fetchRecordsAbortRef.current = controller;
+    recordsAbortRef.current = controller;
 
     setLoadingRecords(true);
     try {
@@ -1472,16 +1539,19 @@ export default function UnifiedDeathRegistry() {
       const data = await res.json();
       setAllRecords(Array.isArray(data) ? data : []);
     } catch (err) {
-      if (err?.name !== "AbortError") showNotif("Failed to load records.", "error");
+      if (err?.name !== "AbortError") {
+        showNotif("Failed to load records.", "error");
+      }
     } finally {
-      if (fetchRecordsAbortRef.current === controller) setLoadingRecords(false);
+      if (recordsAbortRef.current === controller) setLoadingRecords(false);
     }
   }, []);
 
   const fetchArchived = useCallback(async () => {
-    if (fetchArchivedAbortRef.current) fetchArchivedAbortRef.current.abort();
+
+    if (archivedAbortRef.current) archivedAbortRef.current.abort();
     const controller = new AbortController();
-    fetchArchivedAbortRef.current = controller;
+    archivedAbortRef.current = controller;
 
     setLoadingRecords(true);
     try {
@@ -1491,44 +1561,29 @@ export default function UnifiedDeathRegistry() {
       const arr  = Array.isArray(data) ? data : [];
       setAllArchivedRecords(arr);
     } catch (err) {
-      if (err?.name !== "AbortError") showNotif("Failed to load archived records.", "error");
+      if (err?.name !== "AbortError") {
+        showNotif("Failed to load archived records.", "error");
+      }
     } finally {
-      if (fetchArchivedAbortRef.current === controller) setLoadingRecords(false);
+      if (archivedAbortRef.current === controller) setLoadingRecords(false);
     }
   }, []);
 
   useEffect(() => { fetchRecords(); fetchArchived(); }, [fetchRecords, fetchArchived]);
 
-  // Explicit, user-initiated restore only. This is now the ONLY place in the
-  // component that calls the restore endpoint — it's wired to a visible
-  // "Restore" button in the Archive tab (see below), never fired implicitly
-  // from search/select. Selecting a record from search results
-  // (handleSelectFromSearch) does NOT call this.
-  const restoreRecord = useCallback(async (id, record) => {
+  const restoreRecord = useCallback(async (id) => {
     setRestoringId(id);
     try {
       const res = await fetch(`${API}/records/${id}/restore`, { method: "POST" });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Restore failed"); }
       await fetchRecords();
       await fetchArchived();
-      showNotif(`"${getRecordDisplayName(record)}" restored to active records.`, "success");
       return true;
     } catch (err) {
-      showNotif(err.message || "Failed to restore record.", "error");
+      showNotif(err.message || "Failed to restore record in the background.", "error");
       return false;
     } finally { setRestoringId(null); }
   }, [fetchRecords, fetchArchived]);
-
-  const handleRestoreClick = (id, record) => setConfirmModal({
-    title: "Restore Record",
-    message: `Restore <strong>"${getRecordDisplayName(record)}"</strong> from the archive back to active records?`,
-    confirmLabel: "Restore",
-    confirmColor: "#059669",
-    onConfirm: async () => {
-      setConfirmModal(null);
-      await restoreRecord(id, record);
-    },
-  });
 
   const handleSearch = () => {
     let valid = true;
@@ -1561,12 +1616,26 @@ export default function UnifiedDeathRegistry() {
     return aFN.localeCompare(bFN);
   });
 
-  // FIX: selecting a record — whether active or archived — is purely a
-  // local/UI action. It only sets which record is chosen for this
-  // transaction; it never calls the backend and never changes the
-  // record's real is_archived status in the database. Archived records
-  // stay archived until an admin explicitly clicks "Restore" in the
-  // Archive tab (see restoreRecord/handleRestoreClick above).
+  // ─────────────────────────────────────────────────────────────────────
+  // FIX: ARCHIVE BUG — selecting a record must never change its
+  // is_archived status.
+  //
+  // Root cause: this function used to call restoreRecord(record.id)
+  // whenever an archived record was selected from search results. That
+  // fired a real POST to /records/<id>/restore, which flips is_archived
+  // from true to false in the database — so simply *selecting* an
+  // archived record (to view/process it) silently removed it from the
+  // Archive tab, even though nothing had actually been "restored" by
+  // the admin.
+  //
+  // Fix: selecting a record — archived or not — only updates local
+  // component state (selectedRecord / recordStatus / subjectName) so it
+  // can be viewed and used in the transaction flow. It no longer calls
+  // the backend (no more restoreRecord(record.id) call here) and no
+  // longer mutates the record's real is_archived value. The record
+  // therefore correctly remains in the Archive tab unless an explicit
+  // Restore action (not present in this flow) is taken.
+  // ─────────────────────────────────────────────────────────────────────
   const handleSelectFromSearch = (record) => {
     const displayName = getRecordDisplayName(record);
 
@@ -1581,10 +1650,10 @@ export default function UnifiedDeathRegistry() {
     setNegCertModal({ nameTerm: autoRequestor, requestorName: autoRequestor });
   };
 
-  const handleNegCertModalSubmit = ({ dateOfDeath, fatherName, motherName, requestorName }) => {
+  const handleNegCertModalSubmit = ({ dateOfBirth, fatherName, motherName, requestorName }) => {
     const nameTerm = negCertModal.nameTerm;
     setNegCertModal(null);
-    setNegCertInfo({ dateOfDeath, fatherName, motherName, requestorName });
+    setNegCertInfo({ dateOfBirth, fatherName, motherName, requestorName });
     setOrNumber("");
     setSelectedRecord(null);
     setRecordStatus("NOT_FOUND");
@@ -1627,8 +1696,8 @@ export default function UnifiedDeathRegistry() {
 
   const isPositive = recordStatus === "ACTIVE";
   const issuedDoc  = isPositive
-    ? "Certified True Copy of Death Certificate (Actual)"
-    : "Certificate of No Death Record (Negative Certificate)";
+    ? "Certified True Copy of Birth Certificate (Actual)"
+    : "Certificate of No Birth Record (Negative Certificate)";
 
   const handlePrintNegativeCert = () => {
     if (!orNumber.trim()) {
@@ -1637,7 +1706,7 @@ export default function UnifiedDeathRegistry() {
     }
     printNegativeCertificate({
       subjectName,
-      dateOfDeath:       negCertInfo.dateOfDeath  || null,
+      dateOfBirth:       negCertInfo.dateOfBirth  || null,
       fatherName:        negCertInfo.fatherName    || null,
       motherName:        negCertInfo.motherName    || null,
       requestorName:     negCertInfo.requestorName || null,
@@ -1658,6 +1727,25 @@ export default function UnifiedDeathRegistry() {
     showNotif("Document reviewed. Proceeding to release.", "success");
   };
 
+  // ─────────────────────────────────────────────────────────────────────
+  // FIX: THE ACTUAL PAYMENT BUG
+  //
+  // This call used to be fire-and-forget: `await fetch(...)` sat inside a
+  // `try { ... } catch {}` with nothing that ever inspected the response.
+  // fetch() only rejects on a network failure — it resolves normally even
+  // when the server returns 4xx/5xx — so a rejected/failed transaction on
+  // the backend (validation error, failed insert, etc.) was completely
+  // indistinguishable from a real success here. The code fell straight
+  // through to `showNotif("Transaction completed successfully!", ...)`
+  // and then reset the form, discarding the in-progress transaction even
+  // though nothing had been written to birth_payments.
+  //
+  // Fix: read the JSON body, check `res.ok` / `data.error`, only report
+  // success when the server actually confirms the write, and return a
+  // boolean so the caller only resets the transaction on confirmed
+  // success — otherwise the admin sees a real error and can retry without
+  // losing the selected record / entered O.R. number.
+  // ─────────────────────────────────────────────────────────────────────
   const handleCompleteTransaction = async () => {
     setProcessing(true);
     try {
@@ -1670,9 +1758,9 @@ export default function UnifiedDeathRegistry() {
           paymentMethod: "cash", paymentReference: payRef,
           paymentAmount: FEE, documentIssued: issuedDoc,
           orNumber: orNumber.trim() || null,
-          first_name:  selectedRecord?.deceased_first_name  || srchFirstName.trim(),
-          middle_name: selectedRecord?.deceased_middle_name || "",
-          last_name:   selectedRecord?.deceased_last_name   || srchLastName.trim(),
+          first_name:  selectedRecord?.child_first_name  || srchFirstName.trim(),
+          middle_name: selectedRecord?.child_middle_name || "",
+          last_name:   selectedRecord?.child_last_name   || srchLastName.trim(),
         }),
       });
 
@@ -1699,7 +1787,7 @@ export default function UnifiedDeathRegistry() {
     setFirstNameError(""); setLastNameError("");
     setSelectedRecord(null); setRecordStatus(null);
     setSubjectName(""); setPayRef(""); setStep2PdfData(null);
-    setNegCertInfo({ fatherName: "", motherName: "", dateOfDeath: "", requestorName: "" });
+    setNegCertInfo({ fatherName: "", motherName: "", dateOfBirth: "", requestorName: "" });
     setOrNumber("");
     fetchRecords(); fetchArchived();
   };
@@ -1765,7 +1853,7 @@ export default function UnifiedDeathRegistry() {
       <div className="ubr-header">
         <div className="ubr-header__brand">
           <span className="ubr-header__logo"><IconGrid /></span>
-          {!isMobile && <span className="ubr-header__title">Death Registry</span>}
+          {!isMobile && <span className="ubr-header__title">Birth Registry</span>}
         </div>
         <div className="ubr-header__tabs">
           {[
@@ -1797,7 +1885,7 @@ export default function UnifiedDeathRegistry() {
                     <div className="step-scroll">
                       <div className="step-inner">
                         <div className="page-hdr">
-                          <div className="page-hdr__title">Search &amp; Select Death Record</div>
+                          <div className="page-hdr__title">Search &amp; Select Birth Record</div>
                         </div>
                         <div className="search-form">
                           <div className="search-form__row">
@@ -1808,14 +1896,13 @@ export default function UnifiedDeathRegistry() {
                                 name="lastName"
                                 className={`field-input${lastNameError ? " field-input--error" : ""}`}
                                 type="text"
-                                autoComplete="family-name"
                                 value={srchLastName}
                                 onChange={(e) => { setSrchLastName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setLastNameError(""); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
                                 placeholder="e.g. Dela Cruz"
                                 autoFocus
                               />
-                              {lastNameError && <span className="field-error-msg" role="alert">&#9888; {lastNameError}</span>}
+                              {lastNameError && <span className="field-error-msg">&#9888; {lastNameError}</span>}
                             </div>
                             <div className="field">
                               <label className="field-label" htmlFor="search-first-name">First Name</label>
@@ -1824,13 +1911,12 @@ export default function UnifiedDeathRegistry() {
                                 name="firstName"
                                 className={`field-input${firstNameError ? " field-input--error" : ""}`}
                                 type="text"
-                                autoComplete="given-name"
                                 value={srchFirstName}
                                 onChange={(e) => { setSrchFirstName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setFirstNameError(""); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
                                 placeholder="e.g. Juan"
                               />
-                              {firstNameError && <span className="field-error-msg" role="alert">&#9888; {firstNameError}</span>}
+                              {firstNameError && <span className="field-error-msg">&#9888; {firstNameError}</span>}
                             </div>
                             <button className="search-btn" onClick={handleSearch}>Search</button>
                           </div>
@@ -1897,7 +1983,7 @@ export default function UnifiedDeathRegistry() {
                                           className="view-pdf-btn"
                                           onClick={() => handlePreviewPdf(r.id, r)}
                                           disabled={isLoadingPrev}
-                                          title="View Death PDF"
+                                          title="View Live Birth PDF"
                                         >
                                           {isLoadingPrev
                                             ? <><div className="spinner spinner--sm" />&nbsp;Loading…</>
@@ -1946,7 +2032,7 @@ export default function UnifiedDeathRegistry() {
                           <div className="page-hdr__title">Review &amp; Print Document</div>
                           <p className="page-hdr__sub">
                             {isPositive
-                              ? "Review the Death Certificate below. Print the selected PDF before proceeding to release."
+                              ? "Review the Live Birth Certificate below. Print the selected PDF before proceeding to release."
                               : "A Negative Certificate will be issued — no document on file for this record."}
                           </p>
                         </div>
@@ -1963,7 +2049,7 @@ export default function UnifiedDeathRegistry() {
                             subjectName={subjectName}
                             fatherName={negCertInfo.fatherName}
                             motherName={negCertInfo.motherName}
-                            dateOfDeath={negCertInfo.dateOfDeath}
+                            dateOfBirth={negCertInfo.dateOfBirth}
                             requestorName={negCertInfo.requestorName}
                             orNumber={orNumber}
                             onOrNumberChange={setOrNumber}
@@ -2012,6 +2098,11 @@ export default function UnifiedDeathRegistry() {
                       >
                         ← Back
                       </button>
+                      {/* FIX: only reset (i.e. clear the transaction and
+                          go back to Step 1) if the completion actually
+                          succeeded on the server — otherwise the admin
+                          would lose the selected record / negative-cert
+                          info for a payment that was never saved. */}
                       <button
                         className="btn btn-primary btn-primary--wide"
                         onClick={async () => {
@@ -2042,14 +2133,14 @@ export default function UnifiedDeathRegistry() {
               <div className="tab-hdr">
                 <div className="tab-hdr__icon"><IconArchive /></div>
                 <div className="tab-hdr__info">
-                  <h2>Archived Death Records</h2>
-                  <p>Upload, view, restore, or permanently delete archived records.</p>
+                  <h2>Archived Birth Records</h2>
+                  <p>Upload, view, or permanently delete archived records.</p>
                 </div>
               </div>
               <div className="tab-card">
                 <PasswordGate
-                  module="archive_death"
-                  description="The Archive section is restricted to authorized personnel. Enter the administrator password to upload, view, restore, or delete records."
+                  module="archive_birth"
+                  description="The Archive section is restricted to authorized personnel. Enter the administrator password to upload, view, or delete records."
                   onUnlock={() => setArchiveUnlocked(true)}
                   showNotif={showNotif}
                 />
@@ -2061,7 +2152,7 @@ export default function UnifiedDeathRegistry() {
                 <div className="tab-hdr__icon"><IconArchive /></div>
                 <div className="tab-hdr__info">
                   <h2>Archived Records</h2>
-                  {!isMobile && <p>Upload new records, or view, restore, and permanently delete archived records.</p>}
+                  {!isMobile && <p>Upload new records, or view and permanently delete archived records.</p>}
                 </div>
                 <div className="tab-hdr__space" />
                 <button className="upload-btn" onClick={() => setShowUploadModal(true)}>
@@ -2070,16 +2161,14 @@ export default function UnifiedDeathRegistry() {
                 </button>
                 <div className="srch-wrap">
                   <span className="srch-icon"><IconSearch /></span>
-                  <label style={VISUALLY_HIDDEN_STYLE} htmlFor="archive-search-input">Search archived records</label>
                   <input
-                    id="archive-search-input"
+                    id="archive-search"
                     name="archiveSearch"
+                    aria-label="Search archived records"
                     value={archiveSearch}
                     onChange={(e) => setArchiveSearch(e.target.value)}
                     placeholder="Search archived…"
                     className="srch-input"
-                    type="search"
-                    autoComplete="off"
                   />
                 </div>
               </div>
@@ -2107,8 +2196,6 @@ export default function UnifiedDeathRegistry() {
                         record={r}
                         index={i}
                         onView={() => handleViewPdf(r.id, r)}
-                        onRestore={() => handleRestoreClick(r.id, r)}
-                        restoring={restoringId === r.id}
                         onDelete={() => handleDelete(r.id, r)}
                       />
                     ))}
@@ -2140,19 +2227,6 @@ export default function UnifiedDeathRegistry() {
                             <td>
                               <div className="tbl-acts">
                                 <button className="tbl-btn tbl-btn--blue" onClick={() => handleViewPdf(r.id, r)}>View</button>
-                                <button
-                                  className="tbl-btn tbl-btn--green"
-                                  style={{ background: "#059669", borderColor: "#059669", color: "#fff" }}
-                                  onClick={() => handleRestoreClick(r.id, r)}
-                                  disabled={restoringId === r.id}
-                                  title="Restore to active records"
-                                >
-                                  {restoringId === r.id ? (
-                                    <><div className="spinner spinner--sm" />&nbsp;Restoring…</>
-                                  ) : (
-                                    <><IconRotateCcw />&nbsp;Restore</>
-                                  )}
-                                </button>
                                 <button className="tbl-btn tbl-btn--red"  onClick={() => handleDelete(r.id, r)}>Delete</button>
                               </div>
                             </td>

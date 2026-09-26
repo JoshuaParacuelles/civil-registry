@@ -1,5 +1,4 @@
-// src/components/Account Settings/AccessDenied.jsx
-import { usePermissions } from "../PermissionContext";
+import { usePermissions } from "../../context/PermissionContext";
 import "./AccessDenied.css";
 
 /**

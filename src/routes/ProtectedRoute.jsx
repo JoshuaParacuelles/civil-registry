@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
-import { usePermissions } from "./PermissionContext";
+import { usePermissions } from "../context/PermissionContext";
 
 const LoadingScreen = ({ waking }) => (
   <div style={{
