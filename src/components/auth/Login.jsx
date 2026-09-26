@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
 import axios from "axios";
 import "./Login.css";
@@ -65,6 +65,28 @@ const LockFilledIcon = () => (
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
+
+/* ── Lock countdown formatting ───────────────────────────────────
+   Backend sends lock_seconds_remaining (an integer, from
+   compute_lock_status() in login.py). Format it the way that reads
+   best at each scale:
+     < 1 hour  -> "4:59"        (mm:ss, always 2-digit seconds)
+     >= 1 hour -> "23h 59m 12s" (the 24h tier)
+   ────────────────────────────────────────────────────────────────── */
+function formatLockCountdown(totalSeconds) {
+  const s = Math.max(0, Math.floor(totalSeconds));
+
+  if (s >= 3600) {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return `${h}h ${String(m).padStart(2, "0")}m ${String(sec).padStart(2, "0")}s`;
+  }
+
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
 
 /* ── Toast System ────────────────────────────────────────────────── */
 let _toastSetters = [];
@@ -209,6 +231,14 @@ const Login = () => {
   const [loading, setLoading]           = useState(false);
   const [isLocked, setIsLocked]         = useState(false);
 
+  // Live countdown for a temporary lockout. Seeded from the backend's
+  // `lock_seconds_remaining` (see compute_lock_status() in login.py) and
+  // ticks down client-side every second purely for display — the actual
+  // unlock is always re-checked against the server on the next submit,
+  // this timer never unlocks anything by itself.
+  const [lockSecondsRemaining, setLockSecondsRemaining] = useState(0);
+  const countdownRef = useRef(null);
+
   useEffect(() => {
     // If already authenticated, route directly
     if (sessionStorage.getItem("isAuthenticated") === "true") {
@@ -216,9 +246,35 @@ const Login = () => {
     }
   }, []);
 
+  // Tick the countdown down once a lock is active.
+  useEffect(() => {
+    if (!isLocked || lockSecondsRemaining <= 0) {
+      clearInterval(countdownRef.current);
+      return;
+    }
+
+    countdownRef.current = setInterval(() => {
+      setLockSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownRef.current);
+          // Countdown hit zero — let the person try again. The next
+          // /api/login call is still the real source of truth; if the
+          // backend clock disagrees (e.g. this tab was asleep), it will
+          // just re-lock with a fresh, accurate remaining time.
+          setIsLocked(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(countdownRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocked]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (loading) return;
+    if (loading || isLocked) return;
     setLoading(true);
 
     try {
@@ -232,6 +288,7 @@ const Login = () => {
 
       if (response.data.success) {
         setIsLocked(false);
+        setLockSecondsRemaining(0);
         const userObj = response.data.user || {};
         const loggedUsername = userObj.username || username;
 
@@ -248,6 +305,7 @@ const Login = () => {
       } else {
         const locked = msg.toLowerCase().includes("locked");
         setIsLocked(locked);
+        setLockSecondsRemaining(locked ? (response.data.lock_seconds_remaining || 0) : 0);
         pushToast({
           title: locked ? "Account locked" : "Login failed",
           message: msg,
@@ -261,6 +319,7 @@ const Login = () => {
         error?.response?.data?.message || "Server error. Please try again later.";
       const locked = backendMessage.toLowerCase().includes("locked");
       setIsLocked(locked);
+      setLockSecondsRemaining(locked ? (error?.response?.data?.lock_seconds_remaining || 0) : 0);
       pushToast({
         title: locked ? "Account locked" : "Login failed",
         message: backendMessage,
@@ -302,7 +361,17 @@ const Login = () => {
             {isLocked && (
               <div className="lock-banner">
                 <LockFilledIcon />
-                <span>Account temporarily locked</span>
+                <span>
+                  Account temporarily locked
+                  {lockSecondsRemaining > 0 && (
+                    <>
+                      {" "}— try again in{" "}
+                      <span className="lock-countdown">
+                        {formatLockCountdown(lockSecondsRemaining)}
+                      </span>
+                    </>
+                  )}
+                </span>
               </div>
             )}
 
@@ -350,7 +419,7 @@ const Login = () => {
               <button
                 type="submit"
                 className={`login-btn${loading ? " btn-loading" : ""}${isLocked ? " btn-locked" : ""}`}
-                disabled={loading}
+                disabled={loading || isLocked}
               >
                {loading ? (
   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -358,7 +427,9 @@ const Login = () => {
     Logging in…
   </span>
 ) : isLocked ? (
-  "Account Locked"
+  lockSecondsRemaining > 0
+    ? `Account Locked (${formatLockCountdown(lockSecondsRemaining)})`
+    : "Account Locked"
 ) : (
   "Log in"
 )}
