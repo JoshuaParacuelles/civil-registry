@@ -2,6 +2,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import "./index.css";
 import { PermissionProvider } from "./components/PermissionContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login        from "./components/auth/Login";
