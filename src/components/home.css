@@ -30,7 +30,6 @@
   --font-mono: "DM Mono", monospace;
   --transition-sidebar: 0.26s cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* Dark navy sidebar */
   --sidebar-bg:          #1e2d4f;
   --sidebar-bg-deeper:   #172240;
   --sidebar-border:      rgba(255, 255, 255, 0.09);
@@ -38,7 +37,6 @@
   --sidebar-hover-bg:    rgba(255, 255, 255, 0.08);
   --sidebar-active-bg:   #2563eb;
 
-  /* Notification dropdown */
   --notif-dropdown-width:   340px;
   --notif-dropdown-max-h:   480px;
 }
@@ -66,9 +64,6 @@ body {
   background: var(--bg-base);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SIDEBAR
-   ═══════════════════════════════════════════════════════════ */
 .sidebar {
   width: var(--sidebar-width);
   background: var(--sidebar-bg);
@@ -93,7 +88,6 @@ body {
 
 .sidebar > * { position: relative; z-index: 1; }
 
-/* ── Header ── */
 .sidebar-header {
   display: flex;
   align-items: center;
@@ -163,7 +157,6 @@ body {
   line-height: 1.25;
 }
 
-/* ── Body ── */
 .sidebar-body {
   flex: 1;
   display: flex;
@@ -293,7 +286,6 @@ body {
 
 .sidebar.collapsed .sidebar-group-label { display: none; }
 
-/* ── Menu icons (natural colors) ── */
 .sidebar .menu-icon,
 .sidebar-menu .menu-icon,
 .sidebar-menu > li .menu-icon,
@@ -319,9 +311,6 @@ body {
   filter: none !important;
 }
 
-/* ── Arrow chevron ──
-   Scoped under `.sidebar-menu > li .arrow` so it beats the generic
-   `.sidebar-menu > li span` rule (flex: 1) and stays a small chevron. */
 .sidebar-menu > li .arrow {
   flex: 0 0 auto !important;
   margin-left: auto;
@@ -347,7 +336,6 @@ body {
 
 .sidebar.collapsed .sidebar-menu > li .arrow { display: none; }
 
-/* ── Submenu ── */
 .submenu {
   list-style: none;
   padding-left: 0;
@@ -418,7 +406,6 @@ body {
   display: block;
 }
 
-/* ── Footer ── */
 .sidebar-footer {
   margin-top: auto;
   padding: 10px 8px 12px;
@@ -469,9 +456,6 @@ body {
   padding: 10px 0;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   MAIN CONTENT WRAPPER
-   ═══════════════════════════════════════════════════════════ */
 .main-content-wrapper {
   margin-left: var(--sidebar-width);
   flex: 1;
@@ -494,9 +478,6 @@ body {
 
 .sidebar-is-collapsed .main-content-wrapper { margin-left: var(--sidebar-collapsed-width); }
 
-/* ═══════════════════════════════════════════════════════════
-   TOPBAR
-   ═══════════════════════════════════════════════════════════ */
 .topbar {
   height: var(--topbar-height);
   background: var(--bg-surface);
@@ -598,9 +579,6 @@ body {
   flex-shrink: 0;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   NOTIFICATION BELL
-   ═══════════════════════════════════════════════════════════ */
 .notif-wrapper { position: relative; }
 
 .notif-btn {
@@ -628,7 +606,6 @@ body {
 
 .notif-btn:active { transform: scale(0.97); }
 
-/* Bell stretches to the same height as the date pill. */
 .topbar-right .notif-wrapper {
   display: flex;
   align-self: stretch;
@@ -678,9 +655,6 @@ body {
   to   { transform: scale(1);   opacity: 1; }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   NOTIFICATION DROPDOWN
-   ═══════════════════════════════════════════════════════════ */
 .notif-dropdown {
   position: absolute;
   top: calc(100% + 10px);
@@ -851,39 +825,46 @@ body {
   font-weight: 500;
 }
 
-/* Mark-as-read and delete buttons on each item */
-.notif-dismiss,
-.notif-delete {
+.notif-actions {
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.notif-action-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  white-space: nowrap;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
   border-radius: 6px;
-  border: none;
-  background: transparent;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-soft);
   cursor: pointer;
-  color: var(--text-muted);
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s, color 0.15s;
-  flex-shrink: 0;
-  padding: 0;
-  margin-top: 2px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.notif-item:hover .notif-dismiss,
-.notif-item:hover .notif-delete,
-.notif-delete:focus-visible { opacity: 1; }
+.notif-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
 
-.notif-dismiss:hover,
-.notif-delete:hover {
-  background: rgba(220, 38, 38, 0.09);
+.notif-action-btn--danger {
   color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.22);
+  background: rgba(220, 38, 38, 0.07);
 }
 
-/* Touch devices have no hover, so keep delete visible */
-@media (hover: none) {
-  .notif-delete { opacity: 1; }
+.notif-action-btn--danger:hover {
+  background: rgba(220, 38, 38, 0.14);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.4);
 }
 
 .notif-empty {
@@ -908,7 +889,6 @@ body {
   color: var(--text-muted) !important;
 }
 
-/* ── Live-status dot ── */
 .notif-sse-dot {
   width: 7px;
   height: 7px;
@@ -935,7 +915,6 @@ body {
   50%       { opacity: 0.5; transform: scale(0.85); }
 }
 
-/* ── Loading skeleton ── */
 .notif-skeleton-item {
   display: flex;
   align-items: center;
@@ -977,9 +956,6 @@ body {
   100% { background-position: -200% 0; }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   MAIN CONTENT AREA
-   ═══════════════════════════════════════════════════════════ */
 .main-content {
   flex: 1;
   width: 100%;
@@ -1005,9 +981,6 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   MOBILE HAMBURGER + OVERLAY
-   ═══════════════════════════════════════════════════════════ */
 .mobile-menu-toggle {
   position: fixed;
   top: 10px;
@@ -1054,9 +1027,6 @@ body {
 
 .mobile-overlay.active { opacity: 1; visibility: visible; }
 
-/* ═══════════════════════════════════════════════════════════
-   LOGOUT MODAL
-   ═══════════════════════════════════════════════════════════ */
 .logout-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1163,9 +1133,6 @@ body {
   to   { opacity: 1; transform: scale(1)    translateY(0); }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   REQUEST DETAILS MODAL
-   ═══════════════════════════════════════════════════════════ */
 .notif-detail-overlay {
   position: fixed;
   inset: 0;
@@ -1401,7 +1368,6 @@ body {
 
 .notif-detail-open-btn:hover { background: #1d4ed8; }
 
-/* ── Signature lightbox ── */
 .sig-zoom-overlay {
   position: fixed;
   inset: 0;
@@ -1444,9 +1410,6 @@ body {
 
 .sig-zoom-close:hover { background: rgba(255, 255, 255, 0.2); }
 
-/* ═══════════════════════════════════════════════════════════
-   STATUS-UPDATE TOAST
-   ═══════════════════════════════════════════════════════════ */
 .notif-toast-wrap {
   position: fixed;
   top: 20px;
@@ -1568,11 +1531,6 @@ body {
   to   { width: 0%; }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   RESPONSIVE
-   ═══════════════════════════════════════════════════════════ */
-
-/* ── Tablet (768px – 1024px) ── */
 @media (min-width: 768px) and (max-width: 1024px) {
   .sidebar { width: var(--sidebar-collapsed-width); }
 
@@ -1604,7 +1562,6 @@ body {
   .logo-img { width: 36px; height: 36px; }
 }
 
-/* ── Mobile (≤ 767px) ── */
 @media (max-width: 767px) {
   .mobile-menu-toggle { display: flex; }
   .mobile-overlay     { display: block; }
@@ -1660,7 +1617,6 @@ body {
   }
 }
 
-/* ── Small mobile (≤ 480px) ── */
 @media (max-width: 480px) {
   .sidebar { width: 230px !important; left: calc(-230px - 20px); }
   .sidebar.mobile-open { left: 0; }
@@ -1704,7 +1660,6 @@ body {
   .notif-detail-footer button { flex: 1; min-width: 120px; }
 }
 
-/* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -1712,7 +1667,6 @@ body {
   }
 }
 
-/* ── Print ── */
 @media print {
   .sidebar,
   .mobile-menu-toggle,

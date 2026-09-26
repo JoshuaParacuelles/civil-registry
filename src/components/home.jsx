@@ -25,10 +25,6 @@ import logoutIcon    from "../assets/sidebar-icon/logout.png";
 
 import "./home.css";
 
-/* ═══════════════════════════════════════════════════════════
-   CONSTANTS
-   ═══════════════════════════════════════════════════════════ */
-
 const MENU_KEYS = {
   DASHBOARD:         "Dashboard",
   VITAL:             "Vital Records Management",
@@ -50,7 +46,6 @@ const SETTINGS_CHILDREN = [MENU_KEYS.ACCOUNT, MENU_KEYS.AUDIT, MENU_KEYS.ROLE_MA
 const BP_TABLET_MAX = 1024;
 const BP_MOBILE_MAX = 767;
 
-// Distinguishes a fresh login from a refresh within the same session.
 const SESSION_FLAG_KEY = "homeSessionActive";
 
 const NOTIF_API_BASE =
@@ -61,11 +56,8 @@ const NOTIFICATION_TABLE = "notification";
 const NOTIF_SELECT_COLUMNS =
   "id, record_type, record_id, control_no, title, message, request_snapshot, is_read, created_at, read_at, read_by";
 
-// Safety-net poll; realtime normally delivers changes instantly.
 const NOTIF_POLL_MS = 15000;
 
-// The "NEW" badge is driven by this list of clicked notifications instead of
-// is_read, so it only disappears when the notification itself is clicked.
 const NOTIF_CLICKED_KEY = "notifClickedIds";
 
 const NOTIF_TARGETS = {
@@ -82,7 +74,6 @@ const REQUEST_STATUS_LABELS = {
   REJECTED:   "Rejected",
 };
 
-// Sections shown in the request-details modal: [column_name, label].
 const TYPE_SECTIONS = {
   birth: {
     title: "Child's information",
@@ -151,10 +142,8 @@ const COMMON_SECTIONS = [
   },
 ];
 
-// The field that renders the signature image instead of plain text.
 const SIGNATURE_FIELD_KEY = "signature_printed_name";
 
-// Keys under which an embedded signature image may be stored in request_snapshot.
 const SIGNATURE_BASE64_KEYS = [
   "signature_base64",
   "signature_image",
@@ -163,13 +152,6 @@ const SIGNATURE_BASE64_KEYS = [
   "signature",
 ];
 
-/* ═══════════════════════════════════════════════════════════
-   HELPERS
-   ═══════════════════════════════════════════════════════════ */
-
-// Prefers a signature embedded in the snapshot (so it stays visible even when
-// the Request-Slip backend is offline); falls back to the signature endpoint
-// for older notifications.
 const getSignatureSrc = (snap, type, recordId) => {
   for (const key of SIGNATURE_BASE64_KEYS) {
     const val = snap?.[key];
@@ -196,8 +178,6 @@ const getStoredUsername = () => {
   catch { return ""; }
 };
 
-// Submenu open state persists only within the same session, so a fresh login
-// always starts with submenus closed.
 const getPersistedSubmenuState = (key) => {
   try {
     const sameSession = sessionStorage.getItem(SESSION_FLAG_KEY) === "true";
@@ -222,7 +202,6 @@ const timeAgo = (iso) => {
   return then.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
 };
 
-// Returns null when nothing has been stored yet (first run).
 const loadClickedIds = () => {
   try {
     const raw = localStorage.getItem(NOTIF_CLICKED_KEY);
@@ -237,10 +216,6 @@ const saveClickedIds = (set) => {
     localStorage.setItem(NOTIF_CLICKED_KEY, JSON.stringify([...set].slice(-500)));
   } catch {}
 };
-
-/* ═══════════════════════════════════════════════════════════
-   ICONS
-   ═══════════════════════════════════════════════════════════ */
 
 const CalendarIcon = () => (
   <svg className="topbar-datetime-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -290,12 +265,6 @@ const CloseIcon = () => (
   </svg>
 );
 
-const TrashIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
 const NotifTypeIcon = ({ type }) => {
   if (type === "birth")    return <BirthIcon />;
   if (type === "marriage") return <MarriageIcon />;
@@ -331,10 +300,6 @@ const StatusToastIcon = ({ type }) => {
   return <ToastSuccessIcon />;
 };
 
-/* ═══════════════════════════════════════════════════════════
-   STATUS TOAST
-   ═══════════════════════════════════════════════════════════ */
-
 const STATUS_TOAST_DURATION = 5000;
 
 const StatusToast = ({ id, title, message, type = "success", onDismiss }) => {
@@ -348,7 +313,6 @@ const StatusToast = ({ id, title, message, type = "success", onDismiss }) => {
   useEffect(() => {
     const timer = setTimeout(dismiss, STATUS_TOAST_DURATION);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -373,10 +337,6 @@ const StatusToast = ({ id, title, message, type = "success", onDismiss }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════
-   HOME
-   ═══════════════════════════════════════════════════════════ */
-
 const Home = () => {
   const { hasAccess, is_admin: isAdminUser, loading, logout } = usePermissions();
   const username = getStoredUsername();
@@ -390,7 +350,6 @@ const Home = () => {
     [isAdminUser, hasAccess]
   );
 
-  /* ── Layout state ── */
   const [activeSubMenu, setActiveSubMenu] = useState(MENU_KEYS.DASHBOARD);
   const [settingsOpen, setSettingsOpen] = useState(() => getPersistedSubmenuState("settingsOpen"));
   const [vitalRecordsOpen, setVitalRecordsOpen] = useState(() => getPersistedSubmenuState("vitalRecordsOpen"));
@@ -405,26 +364,23 @@ const Home = () => {
   const [loggingOut, setLoggingOut] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
-  /* ── Notification state ── */
   const [notifOpen, setNotifOpen]         = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount]     = useState(0);
   const [notifLoading, setNotifLoading]   = useState(true);
-  const [notifStatus, setNotifStatus]     = useState("connecting"); // connecting | live | error
+  const [notifStatus, setNotifStatus]     = useState("connecting");
   const [clickedIds, setClickedIds]       = useState(() => loadClickedIds() ?? new Set());
   const clickedSeededRef = useRef(loadClickedIds() !== null);
   const notifWrapperRef  = useRef(null);
 
-  /* ── Request-details modal state ── */
   const [selectedNotif, setSelectedNotif] = useState(null);
   const [sigFailed, setSigFailed]         = useState(false);
   const [sigZoomed, setSigZoomed]         = useState(false);
   const [statusDraft, setStatusDraft]     = useState("");
   const [statusNote, setStatusNote]       = useState("");
   const [statusSaving, setStatusSaving]   = useState(false);
-  const [notifyVia, setNotifyVia]         = useState("email"); // "email" | "none" (no email on file)
+  const [notifyVia, setNotifyVia]         = useState("email");
 
-  /* ── Toasts ── */
   const [statusToasts, setStatusToasts] = useState([]);
   const statusToastIdRef = useRef(0);
 
@@ -437,8 +393,6 @@ const Home = () => {
     setStatusToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Mirrors `notifications` so the realtime handler can read the latest list
-  // without being re-subscribed on every change.
   const notificationsRef = useRef(notifications);
   useEffect(() => { notificationsRef.current = notifications; }, [notifications]);
 
@@ -454,7 +408,6 @@ const Home = () => {
         ...(canAccess("scims_lookup")          ? [MENU_KEYS.SCIMS]    : []),
       ];
 
-  /* ── Effects ── */
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_FLAG_KEY, "true"); } catch {}
   }, []);
@@ -475,15 +428,10 @@ const Home = () => {
     return () => clearInterval(tick);
   }, []);
 
-  // Lock body scroll while the mobile drawer is open.
   useEffect(() => {
     document.body.style.overflow = viewport === "mobile" && mobileMenuOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [viewport, mobileMenuOpen]);
-
-  /* ═══════════════════════════════════════════════════════════
-     NOTIFICATIONS (read/write directly against Supabase)
-     ═══════════════════════════════════════════════════════════ */
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -505,8 +453,6 @@ const Home = () => {
       setNotifications(Array.isArray(listResult.data) ? listResult.data : []);
       setUnreadCount(typeof countResult.count === "number" ? countResult.count : 0);
 
-      // First run only: treat already-read notifications as clicked so old
-      // ones don't all suddenly show NEW.
       if (!clickedSeededRef.current && Array.isArray(listResult.data)) {
         clickedSeededRef.current = true;
         const seed = new Set(listResult.data.filter((n) => n.is_read).map((n) => n.id));
@@ -514,7 +460,6 @@ const Home = () => {
         setClickedIds(seed);
       }
 
-      // Don't downgrade an already-live realtime connection.
       setNotifStatus((prev) => (prev === "live" ? "live" : "connecting"));
     } catch (err) {
       console.error("[Home] Could not load notifications:", err);
@@ -524,7 +469,6 @@ const Home = () => {
     }
   }, []);
 
-  // Initial load + realtime subscription + reconciliation poll.
   useEffect(() => {
     fetchNotifications();
 
@@ -576,7 +520,6 @@ const Home = () => {
     };
   }, [fetchNotifications]);
 
-  // Close the dropdown on outside click or Escape.
   useEffect(() => {
     if (!notifOpen) return undefined;
 
@@ -604,7 +547,6 @@ const Home = () => {
     });
   };
 
-  // Optimistic; re-syncs from the server if the call fails.
   const markNotificationRead = useCallback(
     async (notif) => {
       if (!notif || notif.is_read) return;
@@ -624,6 +566,27 @@ const Home = () => {
       }
     },
     [username, fetchNotifications]
+  );
+
+  const markNotificationUnread = useCallback(
+    async (notif) => {
+      if (!notif || !notif.is_read) return;
+
+      setNotifications((prev) => prev.map((n) => (n.id === notif.id ? { ...n, is_read: false } : n)));
+      setUnreadCount((c) => c + 1);
+
+      try {
+        const { error } = await supabase
+          .from(NOTIFICATION_TABLE)
+          .update({ is_read: false, read_at: null, read_by: null })
+          .eq("id", notif.id);
+        if (error) throw error;
+      } catch (err) {
+        console.error("[Home] Could not mark notification as unread:", err);
+        fetchNotifications();
+      }
+    },
+    [fetchNotifications]
   );
 
   const markAllNotificationsRead = useCallback(async () => {
@@ -654,8 +617,6 @@ const Home = () => {
     });
   }, []);
 
-  // Requires a DELETE policy on the notification table; without one Supabase
-  // returns no error but deletes nothing, which is detected below.
   const deleteNotification = useCallback(
     async (notif) => {
       if (!notif) return;
@@ -681,10 +642,6 @@ const Home = () => {
     [fetchNotifications]
   );
 
-  /* ── Request-details modal ── */
-
-  // Opens the modal, then loads the request's authoritative status from the
-  // backend. The cached snapshot status is only a placeholder until it arrives.
   const handleNotifClick = async (notif) => {
     markNotificationClicked(notif.id);
     markNotificationRead(notif);
@@ -733,9 +690,6 @@ const Home = () => {
     setNotifyVia("email");
   }, []);
 
-  // Saves the new status via the backend, then mirrors it into the open modal,
-  // the notifications list, and the notification's own snapshot in Supabase so
-  // reopening the notification always shows the saved status.
   const updateRequestStatus = async () => {
     if (!selectedNotif?.record_id) return;
     setStatusSaving(true);
@@ -797,7 +751,6 @@ const Home = () => {
     setSelectedNotif(null);
   };
 
-  // Escape closes the details modal (or just the zoomed image first, if open).
   useEffect(() => {
     if (!selectedNotif) return undefined;
     const onKeyDown = (e) => {
@@ -809,7 +762,6 @@ const Home = () => {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [selectedNotif, sigZoomed, closeNotifDetails]);
 
-  /* ── Sidebar / menu handlers ── */
   const toggleSidebar = useCallback(() => {
     if (viewport === "mobile") {
       setMobileMenuOpen((p) => !p);
@@ -862,8 +814,6 @@ const Home = () => {
     closeMobileMenu();
   };
 
-  // If the context's logout() throws, retry once with a direct call so the
-  // server-side "is_online = false" update still gets a chance to commit.
   const handleConfirmLogout = async () => {
     setLoggingOut(true);
     try {
@@ -882,7 +832,6 @@ const Home = () => {
     window.location.replace("/");
   };
 
-  /* ── Derived values ── */
   const showLabels =
     viewport === "mobile" ||
     (viewport === "tablet"  && tabletExpanded) ||
@@ -945,19 +894,14 @@ const Home = () => {
     }
   };
 
-  /* ═══════════════════════════════════════════════════════════
-     RENDER
-     ═══════════════════════════════════════════════════════════ */
   return (
     <div className={containerClasses}>
-      {/* Status-update toasts */}
       <div className="notif-toast-wrap">
         {statusToasts.map((t) => (
           <StatusToast key={t.id} {...t} onDismiss={dismissStatusToast} />
         ))}
       </div>
 
-      {/* Mobile hamburger */}
       <button
         type="button"
         className={`mobile-menu-toggle${mobileMenuOpen ? " active" : ""}`}
@@ -971,14 +915,12 @@ const Home = () => {
         <span />
       </button>
 
-      {/* Overlay behind the mobile drawer */}
       <div
         className={`mobile-overlay${mobileMenuOpen ? " active" : ""}`}
         onClick={closeMobileMenu}
         aria-hidden="true"
       />
 
-      {/* ── Sidebar ── */}
       <aside id="main-sidebar" className={sidebarClasses} aria-label="Main navigation">
         <div className="sidebar-header">
           <img src={logoImg} alt="Local Civil Registry" className="logo-img" />
@@ -1155,7 +1097,6 @@ const Home = () => {
         </div>
       </aside>
 
-      {/* ── Main content ── */}
       <div className="main-content-wrapper">
         <header className="topbar">
           <div className="topbar-left">
@@ -1173,7 +1114,6 @@ const Home = () => {
               </span>
             </div>
 
-            {/* Notification bell + dropdown */}
             <div className="notif-wrapper" ref={notifWrapperRef}>
               <button
                 type="button"
@@ -1246,33 +1186,42 @@ const Home = () => {
                               {!clickedIds.has(n.id) && <span className="notif-new-badge">NEW</span>}
                             </div>
                             <span className="notif-time">{timeAgo(n.created_at)}</span>
+                            <div className="notif-actions">
+                              {n.is_read ? (
+                                <button
+                                  type="button"
+                                  className="notif-action-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    markNotificationUnread(n);
+                                  }}
+                                >
+                                  Mark as Unread
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="notif-action-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    markNotificationRead(n);
+                                  }}
+                                >
+                                  Mark as read
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="notif-action-btn notif-action-btn--danger"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteNotification(n);
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
-                          {!n.is_read && (
-                            <button
-                              type="button"
-                              className="notif-dismiss"
-                              title="Mark as read"
-                              aria-label="Mark as read"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                markNotificationRead(n);
-                              }}
-                            >
-                              <CloseIcon />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="notif-delete"
-                            title="Delete notification"
-                            aria-label="Delete notification"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteNotification(n);
-                            }}
-                          >
-                            <TrashIcon />
-                          </button>
                         </li>
                       ))
                     )}
@@ -1286,7 +1235,6 @@ const Home = () => {
         <main className="main-content">{renderContent()}</main>
       </div>
 
-      {/* ── Request details (opens when a notification is clicked) ── */}
       {selectedNotif && (() => {
         const snap = selectedNotif.request_snapshot || {};
         const type = selectedNotif.record_type;
@@ -1422,7 +1370,6 @@ const Home = () => {
               </div>
             </div>
 
-            {/* Full-size signature lightbox */}
             {sigZoomed && (
               <div
                 className="sig-zoom-overlay"
@@ -1454,7 +1401,6 @@ const Home = () => {
         );
       })()}
 
-      {/* ── Logout confirmation ── */}
       {showLogoutModal && (
         <div className="logout-modal-overlay" onClick={() => !loggingOut && setShowLogoutModal(false)}>
           <div className="logout-modal" onClick={(e) => e.stopPropagation()}>
