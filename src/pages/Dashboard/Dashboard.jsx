@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import "./dashboard.css";
+import "./Dashboard.css";
 
 /* ══ CONSTANTS ═══════════════════════════════════════════════════════════════ */
 // Relative path — resolves against whatever origin loaded the page
