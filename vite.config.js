@@ -1,16 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
-    host: true,               // listen on 0.0.0.0 — reachable from LAN devices, not just this machine
+    host: true,
     port: 5173,
-    strictPort: false,        // falls back to 5174, etc. if 5173 is taken
-    allowedHosts: ['.devtunnels.ms'],  // Vite blocks unrecognized Host headers by default; this allows any devtunnel subdomain
+    strictPort: false,
+    allowedHosts: ['.devtunnels.ms'],
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',  // stays localhost — runs in Node, not the browser
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
       }
