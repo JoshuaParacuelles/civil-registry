@@ -4,10 +4,15 @@ import "../style/vital.css";
 import sccLogo from "../../../assets/sidebar-icon/scc.png";
 import lcrLogo from "../../../assets/lcr.jpg";
 
+// Relative by default — resolves against whatever origin loaded the page
+// (localhost, LAN IP, or an HTTPS devtunnel) and goes through Vite's
+// dev-server proxy to Flask on localhost:5000. Never hardcode an
+// absolute http://localhost:5000 URL here.
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/birth`;
 const FEE = 75;
 const MAX_UPLOAD = 5;
 
+// ── Office details ─────────────────────────────────────────────────────────
 const OFFICE_CONFIG = {
   cityMunicipality: "this city/municipality",
   certifyingOfficer: {
@@ -21,19 +26,21 @@ const OFFICE_CONFIG = {
   amountPaid: "₱75.00",
 };
 
+// ── Logo config ──────────────────────────────────────────────────────────
+// Uses the imported scc.png / lcr.jpg from src/assets. Leave blank ("") to
+// fall back to the placeholder seal drawn below for the primary logo.
 const LOGO_SRC = sccLogo;
+// FIX: second logo shown beside the primary logo (lcr.jpg). Leave blank ("")
+// to render only the primary logo, same as before.
 const LOGO_SRC_2 = lcrLogo;
 
 const STEPS = [
-  { key: "select", label: "Select Record" },
-  { key: "payment", label: "Review & Print" },
+  { key: "select",    label: "Select Record" },
+  { key: "payment",  label: "Review & Print" },
   { key: "releasing", label: "Releasing" },
 ];
 
-const BTN = "h-8.5 px-3.5 border-0 rounded-full text-[12.5px] font-semibold cursor-pointer whitespace-nowrap inline-flex items-center gap-1.25 [font-family:var(--f)] transition-all duration-150 touch-manipulation [-webkit-tap-highlight-color:transparent] shrink-0";
-const BTN_PRIMARY = `${BTN} bg-[#2563eb]! text-white! shadow-[0_2px_8px_rgba(37,99,235,0.25)] min-w-27.5 justify-center hover:enabled:bg-[#1d4ed8]! hover:enabled:-translate-y-px hover:enabled:shadow-[0_4px_16px_rgba(37,99,235,0.35)] disabled:bg-[rgba(37,99,235,0.35)]! disabled:cursor-not-allowed disabled:shadow-none`;
-const BTN_SECONDARY = `${BTN} bg-white! text-(--txt2)! border-[1.5px] border-(--border-strong) shadow-none hover:enabled:bg-(--surf-2)! hover:enabled:text-(--txt)! hover:enabled:border-(--txt3) hover:enabled:-translate-y-px disabled:bg-white! disabled:text-(--txt3)! disabled:border-(--border-lt) disabled:cursor-not-allowed`;
-
+// ── Viewport hook ──────────────────────────────────────────────────────────
 function useViewport() {
   const [width, setWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1024,
@@ -44,13 +51,14 @@ function useViewport() {
     return () => window.removeEventListener("resize", handler);
   }, []);
   return {
-    isMobile: width < 480,
-    isTablet: width >= 480 && width < 768,
+    isMobile:  width < 480,
+    isTablet:  width >= 480 && width < 768,
     isDesktop: width >= 768,
     width,
   };
 }
 
+// ── Utilities ──────────────────────────────────────────────────────────────
 const formatDate = (d) => {
   if (!d) return "—";
   const parsed = new Date(d);
@@ -121,9 +129,9 @@ function formatParentDisplayName(first, middle, last, fullName = "") {
 
 function getRecordDisplayName(record) {
   if (!record) return "";
-  const first = cleanNamePart(record.child_first_name);
+  const first  = cleanNamePart(record.child_first_name);
   const middle = cleanNamePart(record.child_middle_name);
-  const last = cleanNamePart(record.child_last_name);
+  const last   = cleanNamePart(record.child_last_name);
   const fromParts = formatFullName(first, middle, last);
   if (fromParts) return fromParts;
   if (record.child_full_name) return toTitleCase(record.child_full_name);
@@ -133,26 +141,32 @@ function getRecordDisplayName(record) {
 function getFatherDisplayName(record) {
   return formatParentDisplayName(
     record?.father_first_name, record?.father_middle_name,
-    record?.father_last_name, record?.father_full_name,
+    record?.father_last_name,  record?.father_full_name,
   );
 }
 
 function getMotherDisplayName(record) {
   return formatParentDisplayName(
     record?.mother_first_name, record?.mother_middle_name,
-    record?.mother_last_name, record?.mother_full_name,
+    record?.mother_last_name,  record?.mother_full_name,
   );
 }
 
+// FIX: identifies "the same person" across the active and archived
+// tables. The two tables have independent auto-increment ids, so the
+// same person can end up with a matching id purely by coincidence
+// (causing both rows to appear "selected" in the UI) or can appear
+// twice in search results if a restore left a stale archive copy
+// behind. We key on name + parents rather than id.
 function getRecordIdentityKey(record) {
-  const name = getRecordDisplayName(record).trim().toUpperCase();
+  const name   = getRecordDisplayName(record).trim().toUpperCase();
   const father = getFatherDisplayName(record).trim().toUpperCase();
   const mother = getMotherDisplayName(record).trim().toUpperCase();
   return `${name}|${father}|${mother}`;
 }
 
 function normalizeForSearch(record) {
-  const name = getRecordDisplayName(record);
+  const name     = getRecordDisplayName(record);
   const fileName = (record.file_name || "").replace(/\.pdf$/i, "")
     .replace(/[_,]+/g, " ").replace(/-+/g, " ").trim();
   const father = getFatherDisplayName(record);
@@ -162,9 +176,9 @@ function normalizeForSearch(record) {
 
 function matchesSearch(record, query) {
   if (!query || !query.trim()) return true;
-  const haystack = normalizeForSearch(record);
+  const haystack      = normalizeForSearch(record);
   const haystackWords = haystack.split(/\s+/).filter(Boolean);
-  const queryWords = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  const queryWords    = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
   return queryWords.every((qw) => haystackWords.some((hw) => hw === qw));
 }
 
@@ -187,9 +201,29 @@ function getRecordFirstName(record) {
   return "";
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// PDF DECODING — THE ACTUAL FIX
+//
+// Symptom: the in-app viewer showed Chrome's native
+// "Failed to load PDF document." error instead of the certificate.
+//
+// Root cause: `pdf_data` occasionally comes back DOUBLE base64-encoded
+// (see the matching comment in birth.py / _to_base64_pdf). Decoding it
+// only once with atob() produced garbage bytes that "looked like" a
+// valid Blob to the browser but weren't a real PDF, so the PDF.js
+// viewer choked on it.
+//
+// Fix: decode to raw bytes, check for the "%PDF" magic number before
+// trusting them. If it's not there, try peeling off one more layer of
+// base64 (self-healing old/corrupted rows). If it's still not a real
+// PDF after that, return null so the UI shows its own friendly
+// "Unable to display PDF" state instead of letting the browser's
+// built-in viewer throw a confusing native error.
+// ─────────────────────────────────────────────────────────────────────────
+
 function bytesFromBase64(b64) {
-  const cleaned = b64.replace(/\s/g, "");
-  const byteChars = atob(cleaned);
+  const cleaned     = b64.replace(/\s/g, "");
+  const byteChars   = atob(cleaned);
   const byteNumbers = new Array(byteChars.length);
   for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
   return new Uint8Array(byteNumbers);
@@ -198,10 +232,10 @@ function bytesFromBase64(b64) {
 function looksLikePdf(bytes) {
   return (
     !!bytes && bytes.length >= 4 &&
-    bytes[0] === 0x25 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x44 &&
-    bytes[3] === 0x46
+    bytes[0] === 0x25 && // %
+    bytes[1] === 0x50 && // P
+    bytes[2] === 0x44 && // D
+    bytes[3] === 0x46    // F
   );
 }
 
@@ -214,6 +248,7 @@ function createPdfBlobFromData(pdfData) {
     }
     if (typeof pdfData !== "string") return null;
 
+    // Already a usable URL — nothing to decode.
     if (pdfData.startsWith("blob:") || pdfData.startsWith("http://") || pdfData.startsWith("https://")) {
       return null;
     }
@@ -223,6 +258,7 @@ function createPdfBlobFromData(pdfData) {
       : pdfData;
     cleaned = cleaned.replace(/\s/g, "");
 
+    // Already raw PDF text (unlikely, but handle it).
     if (cleaned.startsWith("%PDF")) {
       return new Blob([cleaned], { type: "application/pdf" });
     }
@@ -235,12 +271,16 @@ function createPdfBlobFromData(pdfData) {
       return null;
     }
 
+    // Self-heal double base64-encoded data: if the first decode
+    // doesn't look like a PDF, the decoded bytes might just be the
+    // ASCII text of ANOTHER base64 string — try decoding once more.
     if (!looksLikePdf(bytes)) {
       try {
-        const innerText = new TextDecoder("ascii").decode(bytes).trim();
+        const innerText  = new TextDecoder("ascii").decode(bytes).trim();
         const innerBytes = bytesFromBase64(innerText);
         if (looksLikePdf(innerBytes)) bytes = innerBytes;
       } catch {
+        // fall through — the check below will catch the failure
       }
     }
 
@@ -260,7 +300,7 @@ function getPdfBlobUrl(pdfData) {
   if (!pdfData) return "";
   try {
     if (typeof pdfData === "string") {
-      if (pdfData.startsWith("blob:")) return pdfData;
+      if (pdfData.startsWith("blob:"))   return pdfData;
       if (pdfData.startsWith("http://") || pdfData.startsWith("https://")) return pdfData;
     }
     const blob = createPdfBlobFromData(pdfData);
@@ -278,8 +318,8 @@ function printPdfFromData(pdfData) {
       const blob = createPdfBlobFromData(pdfData);
       if (!blob) { reject(new Error("Invalid PDF data.")); return; }
       const blobUrl = URL.createObjectURL(blob);
-      const iframe = document.createElement("iframe");
-      iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+      const iframe  = document.createElement("iframe");
+      iframe.className = "print-iframe";
       iframe.setAttribute("aria-hidden", "true");
       let cleaned = false;
       const cleanup = () => {
@@ -310,10 +350,19 @@ function printPdfFromData(pdfData) {
   });
 }
 
+// ── Office Logo ─────────────────────────────────────────────────────────
+// Renders the real logo(s) if LOGO_SRC / LOGO_SRC_2 are set, otherwise a
+// placeholder seal.
+// FIX: now renders BOTH logos side by side (LOGO_SRC first, then
+// LOGO_SRC_2 next to it) when both are provided, using the same
+// className on each <img> so existing sizing CSS (.neg-cert-doc__logo,
+// .neg-print-logo, etc.) still applies unchanged to each logo image.
+// If only LOGO_SRC is set (LOGO_SRC_2 blank), behavior is identical to
+// before — a single logo image is rendered.
 const OfficeLogo = ({ className = "" }) => {
   if (LOGO_SRC || LOGO_SRC_2) {
     return (
-      <div className="flex items-center gap-1.5">
+      <div className="office-logo-group">
         {LOGO_SRC && <img src={LOGO_SRC} alt="Office Seal" className={className} />}
         {LOGO_SRC_2 && <img src={LOGO_SRC_2} alt="LCR Seal" className={className} />}
       </div>
@@ -342,6 +391,7 @@ const OfficeLogo = ({ className = "" }) => {
   );
 };
 
+// ── Negative Certificate Document (for print) ──────────────────────────────
 function NegativeCertDocument({ certData }) {
   const {
     subjectName, dateOfBirth, fatherName, motherName,
@@ -349,69 +399,70 @@ function NegativeCertDocument({ certData }) {
     verifiedBy, amountPaid, todayDate, orNumber, datePaid,
   } = certData;
 
-  const dateStr = dateOfBirth ? `on ${formatCertDate(dateOfBirth)} ` : "";
-  const fatherStr = (fatherName || "[Father's Name]").toUpperCase();
-  const motherStr = (motherName || "[Mother's Name]").toUpperCase();
-  const city = cityMunicipality || "this city/municipality";
-  const reqName = (requestorName || "[Requestor's Name]").toUpperCase();
-  const year = dateOfBirth ? new Date(dateOfBirth).getFullYear() : new Date().getFullYear();
+  const dateStr   = dateOfBirth ? `on ${formatCertDate(dateOfBirth)} ` : "";
+  const fatherStr = (fatherName  || "[Father's Name]").toUpperCase();
+  const motherStr = (motherName  || "[Mother's Name]").toUpperCase();
+  const city      = cityMunicipality || "this city/municipality";
+  const reqName   = (requestorName || "[Requestor's Name]").toUpperCase();
+  const year      = dateOfBirth ? new Date(dateOfBirth).getFullYear() : new Date().getFullYear();
 
   return (
-    <div className="w-full">
-      <div className="absolute -top-16 left-[-46pt]">
-        <OfficeLogo className="w-[62pt] h-[62pt] block" />
+    <div className="neg-print-page">
+      <div className="neg-print-logo-wrap">
+        <OfficeLogo className="neg-print-logo" />
       </div>
-      <p className="text-right mb-[28pt] text-[12pt]">{todayDate}</p>
-      <p className="text-[12pt] mb-[16pt] font-normal">TO WHOM IT MAY CONCERN:</p>
-      <p className="indent-12 text-justify mb-4 text-[12pt]">
+      <p className="neg-print-date">{todayDate}</p>
+      <p className="neg-print-salutation">TO WHOM IT MAY CONCERN:</p>
+      <p className="neg-print-para">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of birth of&nbsp;
-        <strong className="font-bold text-black">{(subjectName || "").toUpperCase()}</strong>
+        <strong className="neg-cert-doc__highlight">{(subjectName || "").toUpperCase()}</strong>
         &nbsp;who is alleged to have been born {dateStr}in {city} from parents,&nbsp;
-        <strong className="font-bold text-black">{fatherStr}</strong> and{" "}
-        <strong className="font-bold text-black">{motherStr}</strong> hence, we cannot issue,
+        <strong className="neg-cert-doc__highlight">{fatherStr}</strong> and{" "}
+        <strong className="neg-cert-doc__highlight">{motherStr}</strong> hence, we cannot issue,
         as requested, a true copy of his/her Certificate of Live Birth or transcription from
         the Register of Births.
       </p>
-      <p className="indent-12 text-justify mb-4 text-[12pt]">
+      <p className="neg-print-para">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Birth for the
         year <strong>{year}</strong> are still intact in the archives of this office.
       </p>
-      <p className="indent-12 text-justify mb-4 text-[12pt]">
+      <p className="neg-print-para">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This certification is issued to&nbsp;
-        <strong className="font-bold text-black">{reqName}</strong> upon his/her request.
+        <strong className="neg-cert-doc__highlight">{reqName}</strong> upon his/her request.
       </p>
-      <div className="mt-12 flex justify-end">
-        <div className="text-center min-w-[200pt]">
-          <div className="font-bold text-[12pt] text-black">{certifyingOfficer.name}</div>
-          <div className="italic text-[12pt] font-bold text-black">{certifyingOfficer.title}</div>
+      <div className="neg-print-sig-block">
+        <div className="neg-print-sig-right">
+          <div className="neg-print-sig-name">{certifyingOfficer.name}</div>
+          <div className="neg-print-sig-title"><strong>{certifyingOfficer.title}</strong></div>
         </div>
       </div>
-      <div className="mt-[28pt]">
-        <div className="text-[12pt] mb-6">Verified by:</div>
-        <span className="font-bold text-[12pt] text-center block">{verifiedBy.name}</span>
-        <span className="italic text-[12pt] font-bold text-center block">{verifiedBy.title}</span>
+      <div className="neg-print-verified">
+        <div className="neg-print-verified-label">Verified by:</div>
+        <span className="neg-print-verified-name">{verifiedBy.name}</span>
+        <span className="neg-print-verified-title"><strong>{verifiedBy.title}</strong></span>
       </div>
-      <div className="mt-[32pt] text-[12pt]">
-        <div className="mb-2 flex gap-1 items-end">
-          <span className="min-w-30 shrink-0">Amount Paid</span>
-          <span className="min-w-[8pt] shrink-0 mr-1">:</span>
-          <span className="flex-1 text-[12pt] text-black">{amountPaid || "₱75.00"}</span>
+      <div className="neg-print-payment">
+        <div className="neg-print-payment-row">
+          <span className="neg-print-payment-label">Amount Paid</span>
+          <span className="neg-print-payment-colon">:</span>
+          <span className="neg-print-payment-value">{amountPaid || "₱75.00"}</span>
         </div>
-        <div className="mb-2 flex gap-1 items-end">
-          <span className="min-w-30 shrink-0">O.R. Number</span>
-          <span className="min-w-[8pt] shrink-0 mr-1">:</span>
-          <span className="flex-1 text-[12pt] text-black">{orNumber || ""}</span>
+        <div className="neg-print-payment-row">
+          <span className="neg-print-payment-label">O.R. Number</span>
+          <span className="neg-print-payment-colon">:</span>
+          <span className="neg-print-payment-value">{orNumber || ""}</span>
         </div>
-        <div className="mb-2 flex gap-1 items-end">
-          <span className="min-w-30 shrink-0">Date Paid</span>
-          <span className="min-w-[8pt] shrink-0 mr-1">:</span>
-          <span className="flex-1 text-[12pt] text-black">{datePaid || todayDate}</span>
+        <div className="neg-print-payment-row">
+          <span className="neg-print-payment-label">Date Paid</span>
+          <span className="neg-print-payment-colon">:</span>
+          <span className="neg-print-payment-value">{datePaid || todayDate}</span>
         </div>
       </div>
     </div>
   );
 }
 
+// ── Negative Certificate Print Function ────────────────────────────────────
 function printNegativeCertificate(certData) {
   const mountPoint = document.createElement("div");
   mountPoint.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;";
@@ -437,13 +488,37 @@ function printNegativeCertificate(certData) {
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
     line-height: 1.6;
   }
-  .highlight { font-weight: bold; color: #000; }
+  .neg-print-page { width: 100%; position: relative; }
+  .neg-print-logo-wrap { position: absolute; top: -48pt; left: -46pt; }
+  .office-logo-group { display: flex; align-items: center; gap: 6pt; }
+  .neg-print-logo { width: 62pt; height: 62pt; display: block; }
+  .neg-print-date { text-align: right; margin-bottom: 28pt; font-size: 12pt; }
+  .neg-print-salutation { font-size: 12pt; margin-bottom: 16pt; font-weight: normal; }
+  .neg-print-para { text-indent: 36pt; text-align: justify; margin-bottom: 12pt; font-size: 12pt; }
+  .neg-print-sig-block { margin-top: 36pt; display: flex; justify-content: flex-end; }
+  .neg-print-sig-right { text-align: center; min-width: 200pt; }
+  .neg-print-sig-name { font-weight: bold; font-size: 12pt; margin-bottom: 0; color: #000; }
+  .neg-print-sig-title { font-style: italic; font-size: 12pt; font-weight: bold; color: #000; }
+  .neg-print-verified { margin-top: 28pt; }
+  .neg-print-verified-label { font-size: 12pt; margin-bottom: 18pt; }
+  .neg-print-verified-name { font-weight: bold; font-size: 12pt; text-align: center; display: block; }
+  .neg-print-verified-title { font-style: italic; font-size: 12pt; font-weight: bold; text-align: center; display: block; }
+  .neg-print-payment { margin-top: 32pt; font-size: 12pt; }
+  .neg-print-payment-row { margin-bottom: 6pt; display: flex; gap: 4pt; align-items: flex-end; }
+  .neg-print-payment-label { min-width: 90pt; flex-shrink: 0; }
+  .neg-print-payment-colon { min-width: 8pt; flex-shrink: 0; margin-right: 4pt; }
+  .neg-print-payment-value { flex: 1; font-size: 12pt; color: #000; }
+  .neg-print-payment-blank { flex: 1; min-width: 100pt; height: 14pt; display: inline-block; }
+
+  /* FIX: father / mother / requestor names now print BOLD BLACK
+     (previously color: #1a3c6e — navy blue) */
+  .neg-cert-doc__highlight { font-weight: bold; color: #000; }
 </style>
 </head>
 <body>${renderedHtml}</body>
 </html>`;
       const iframe = document.createElement("iframe");
-      iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+      iframe.className = "print-iframe";
       iframe.setAttribute("aria-hidden", "true");
       document.body.appendChild(iframe);
       iframe.onload = () => {
@@ -463,15 +538,17 @@ function printNegativeCertificate(certData) {
   });
 }
 
+/* ── SVG Icon Components ─────────────────────────────────────────────────── */
+
 const IconDocument = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--md ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
     <polyline points="14 2 14 8 20 8"/>
   </svg>
 );
 
 const IconClipboard = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--md ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="9" y="2" width="6" height="4" rx="1" ry="1"/>
     <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
     <line x1="12" y1="11" x2="12" y2="17"/>
@@ -480,7 +557,7 @@ const IconClipboard = ({ className = "" }) => (
 );
 
 const IconGrid = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--md ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
     <line x1="9" y1="9" x2="15" y2="9"/>
     <line x1="9" y1="13" x2="15" y2="13"/>
@@ -489,7 +566,7 @@ const IconGrid = ({ className = "" }) => (
 );
 
 const IconArchive = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--sm ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="21 8 21 21 3 21 3 8"/>
     <rect x="1" y="3" width="22" height="5"/>
     <line x1="10" y1="12" x2="14" y2="12"/>
@@ -497,14 +574,14 @@ const IconArchive = ({ className = "" }) => (
 );
 
 const IconLock = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-5.5 h-5.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--xl ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
     <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
   </svg>
 );
 
 const IconUpload = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--md ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
     <polyline points="17 8 12 3 7 8"/>
     <line x1="12" y1="3" x2="12" y2="15"/>
@@ -512,14 +589,14 @@ const IconUpload = ({ className = "" }) => (
 );
 
 const IconSearch = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75 ${className}`} viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--sm ${className}`} viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="11" cy="11" r="8"/>
     <line x1="21" y1="21" x2="16.65" y2="16.65"/>
   </svg>
 );
 
 const IconPrint = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--sm ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="6 9 6 2 18 2 18 9"/>
     <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
     <rect x="6" y="14" width="12" height="8"/>
@@ -527,7 +604,7 @@ const IconPrint = ({ className = "" }) => (
 );
 
 const IconInfo = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--sm ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10"/>
     <line x1="12" y1="8" x2="12" y2="12"/>
     <line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -535,20 +612,20 @@ const IconInfo = ({ className = "" }) => (
 );
 
 const IconCheck = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-3.5 h-3.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--md ${className}`} viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="20 6 9 17 4 12"/>
   </svg>
 );
 
 const IconEye = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-4.5 h-4.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--lg ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
     <circle cx="12" cy="12" r="3"/>
   </svg>
 );
 
 const IconEyeOff = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-4.5 h-4.5 ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--lg ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
     <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
     <line x1="1" y1="1" x2="23" y2="23"/>
@@ -556,26 +633,30 @@ const IconEyeOff = ({ className = "" }) => (
 );
 
 const IconFolder = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-7.5 h-7.5 ${className}`} viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--xxxl ${className}`} viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
   </svg>
 );
 
 const IconDocumentLg = ({ className = "" }) => (
-  <svg className={`inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-6.5 h-6.5 ${className}`} viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg className={`icon-svg icon-svg--xxl ${className}`} viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
     <polyline points="14 2 14 8 20 8"/>
   </svg>
 );
 
 const FileIconSm = () => (
-  <svg className="inline-flex items-center justify-center shrink-0 align-middle stroke-current fill-none w-2.75 h-2.75" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg className="icon-svg icon-svg--sm" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
     <polyline points="14 2 14 8 20 8"/>
   </svg>
 );
 
+// ─────────────────────────────────────────────────────────────
+// TOAST SYSTEM (ported from request.jsx)
+// ─────────────────────────────────────────────────────────────
 let _toastSetters = [];
+
 let _toastIdCounter = 0;
 
 function useToasts() {
@@ -604,7 +685,7 @@ function removeToast(id) {
 function ToastContainer() {
   const toasts = useToasts();
   return (
-    <div className="fixed top-5 right-5 z-99999 flex flex-col gap-2.5 pointer-events-none">
+    <div className="bv-toast-wrap">
       {toasts.map((t) => (
         <Toast key={t.id} {...t} />
       ))}
@@ -628,17 +709,14 @@ function Toast({ id, title, message, duration = 5000, type = "success" }) {
   const TOAST_COLORS = {
     success: "#059669",
     warning: "#d97706",
-    error: "#dc2626",
+    error:   "#dc2626",
   };
   const color = TOAST_COLORS[type] || TOAST_COLORS.success;
 
   return (
-    <div
-      className="bg-white border border-[#e5e7eb] rounded-[10px] shadow-[0_4px_20px_rgba(0,0,0,0.10),0_1px_6px_rgba(0,0,0,0.06)] pt-3.25 px-3.5 pb-4 min-w-70 max-w-90 flex items-start gap-2.75 pointer-events-auto relative overflow-hidden"
-      style={{ animation: hiding ? "bvToastSlideOut 0.28s ease forwards" : "bvToastSlideIn 0.35s cubic-bezier(0.22,1,0.36,1) both" }}
-    >
+    <div className={`bv-toast${hiding ? " bv-toast--hiding" : ""}`}>
       <svg
-        className="w-5 h-5 shrink-0 mt-px"
+        className="bv-toast__icon"
         viewBox="0 0 24 24"
         fill="none"
         stroke={color}
@@ -667,19 +745,19 @@ function Toast({ id, title, message, duration = 5000, type = "success" }) {
         )}
       </svg>
 
-      <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-bold text-[#1a2332] mb-0.5 [font-family:var(--f)] leading-[1.3]">{title}</div>
-        {message && <div className="text-xs text-[#4a5568] leading-normal [font-family:var(--f)] wrap-break-word">{message}</div>}
+      <div className="bv-toast__body">
+        <div className="bv-toast__title">{title}</div>
+        {message && <div className="bv-toast__msg">{message}</div>}
       </div>
 
-      <button className="bg-transparent border-0 cursor-pointer text-[#9ca3af] text-[17px] leading-none p-0 shrink-0 -mt-px [font-family:var(--f)] transition-colors duration-150 hover:text-[#1a2332]" onClick={dismiss} aria-label="Dismiss">
+      <button className="bv-toast__close" onClick={dismiss} aria-label="Dismiss">
         ×
       </button>
 
-      <div className="h-0.75 bg-[#f3f4f6] absolute bottom-0 left-0 right-0 overflow-hidden rounded-b-[10px]">
+      <div className="bv-toast__progress">
         <div
-          className="h-full w-full rounded-b-[10px]"
-          style={{ animation: `bvToastShrink ${duration}ms linear forwards`, background: color }}
+          className="bv-toast__progress-bar"
+          style={{ animationDuration: `${duration}ms`, background: color }}
         />
       </div>
     </div>
@@ -694,17 +772,19 @@ function useShowNotif() {
   };
 }
 
+/* ── Sub-components ──────────────────────────────────────────────────────── */
+
 const ConfirmModal = ({
   title, message, confirmLabel, confirmColor = "#dc2626", onConfirm, onCancel,
 }) => (
-  <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] [backdrop-filter:blur(4px)] z-9998 flex items-center justify-center p-4" style={{ animation: "fadeIn 0.15s ease" }} onClick={onCancel}>
-    <div className="modal-box-glow bg-white rounded-[14px] px-4.5 py-5 max-w-90 w-full shadow-[0_16px_48px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] border border-(--border-strong) relative overflow-hidden" style={{ animation: "slideUp 0.2s ease" }} onClick={(e) => e.stopPropagation()}>
-      <h3 className="m-0 mb-1.75 text-[15px] font-bold text-(--txt) [font-family:var(--fh)]">{title}</h3>
-      <p className="m-0 mb-4 text-[12.5px] text-(--txt2) leading-[1.6]" dangerouslySetInnerHTML={{ __html: message }} />
-      <div className="flex gap-1.75 justify-end items-center flex-wrap">
-        <button className="px-3.5 py-1.75 rounded-[7px] border border-(--border-strong) bg-white! text-(--txt2)! text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 touch-manipulation shrink-0 hover:bg-(--surf-2)! hover:text-(--txt)! hover:border-(--txt3)" onClick={onCancel}>Cancel</button>
+  <div className="overlay" onClick={onCancel}>
+    <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+      <h3>{title}</h3>
+      <p dangerouslySetInnerHTML={{ __html: message }} />
+      <div className="modal-acts">
+        <button className="modal-cancel" onClick={onCancel}>Cancel</button>
         <button
-          className="px-3.5 py-1.75 rounded-[7px] border-0 text-white! text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 touch-manipulation shrink-0 bg-[#dc2626]! hover:brightness-90 hover:-translate-y-px"
+          className="modal-confirm modal-confirm--red"
           onClick={onConfirm}
         >
           {confirmLabel}
@@ -715,59 +795,57 @@ const ConfirmModal = ({
 );
 
 const NegCertField = ({ label, htmlFor, required, error, children }) => (
-  <div className="flex flex-col gap-1">
-    <label className="flex items-center gap-1.25 text-[10px] font-bold uppercase tracking-[0.5px] text-(--txt3) leading-none" htmlFor={htmlFor}>
+  <div className="negcert-info-modal__field">
+    <label className="negcert-info-modal__label" htmlFor={htmlFor}>
       {label}
-      {required && <span className="text-[#dc2626] ml-px text-[11px]"> *</span>}
+      {required && <span className="negcert-info-modal__required"> *</span>}
     </label>
     {children}
-    {error && <span className="text-[10.5px] font-semibold text-(--red) flex items-center gap-0.75">&#9888; {error}</span>}
+    {error && <span className="negcert-info-modal__error">&#9888; {error}</span>}
   </div>
 );
 
 const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) => {
   const [dateOfBirth, setDateOfBirth] = useState("");
-  const [fatherName, setFatherName] = useState("");
-  const [motherName, setMotherName] = useState("");
-  const [dobError, setDobError] = useState("");
+  const [fatherName,  setFatherName]  = useState("");
+  const [motherName,  setMotherName]  = useState("");
+  const [dobError,    setDobError]    = useState("");
   const [fatherError, setFatherError] = useState("");
   const [motherError, setMotherError] = useState("");
 
   const handleSubmit = () => {
     let valid = true;
-    if (!dateOfBirth) { setDobError("Date of birth is required."); valid = false; } else setDobError("");
+    if (!dateOfBirth)       { setDobError("Date of birth is required.");    valid = false; } else setDobError("");
     if (!fatherName.trim()) { setFatherError("Father's name is required."); valid = false; } else setFatherError("");
     if (!motherName.trim()) { setMotherError("Mother's name is required."); valid = false; } else setMotherError("");
     if (!valid) return;
     onSubmit({
       dateOfBirth,
-      fatherName: fatherName.trim(),
-      motherName: motherName.trim(),
+      fatherName:    fatherName.trim(),
+      motherName:    motherName.trim(),
       requestorName: requestorName || subjectName || "",
     });
   };
 
-  const inputCls = (err) => `h-9 px-2.75 border-[1.5px] border-(--border-strong) rounded-[7px] text-[13px] [font-family:var(--f)] text-(--txt) bg-white outline-none w-full transition-[border-color,box-shadow,background] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] focus:bg-white${err ? " border-(--red)! shadow-[0_0_0_3px_rgba(220,38,38,0.10)]!" : ""}`;
-
   return (
-    <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] [backdrop-filter:blur(4px)] z-9998 flex items-center justify-center p-4" style={{ animation: "fadeIn 0.15s ease" }} onClick={onCancel}>
-      <div className="modal-box-glow bg-white rounded-[14px] max-w-105 w-full shadow-[0_16px_48px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] border border-(--border-strong) relative overflow-hidden p-0" style={{ animation: "slideUp 0.2s ease" }} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2.75 px-4 pt-3.5 pb-3 bg-(--surf-2) border-b border-(--border)">
-          <div className="min-w-0">
-            <h3 className="mb-0.5 [font-family:var(--fh)] text-[14px] font-extrabold text-(--txt) tracking-[-0.2px]">Negative Certificate Details</h3>
-            <p className="m-0 text-[11.5px] text-(--txt2) leading-[1.4]">
-              For&nbsp;<strong className="text-(--blue)">{subjectName || "this person"}</strong>
+    <div className="overlay" onClick={onCancel}>
+      <div className="modal-box negcert-info-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="negcert-info-modal__hdr">
+          <div className="negcert-info-modal__hdr-text">
+            <h3 className="negcert-info-modal__title">Negative Certificate Details</h3>
+            <p className="negcert-info-modal__sub">
+              For&nbsp;<strong className="negcert-info-modal__name">{subjectName || "this person"}</strong>
             </p>
           </div>
         </div>
 
-        <div className="flex flex-col gap-2.5 px-4 pt-3.5">
+        <div className="negcert-info-modal__fields">
           <NegCertField label="Date of Birth" htmlFor="negcert-dob" required error={dobError}>
             <input
               id="negcert-dob"
               name="dateOfBirth"
               type="date"
-              className={inputCls(dobError)}
+              className={`negcert-info-modal__input${dobError ? " negcert-info-modal__input--error" : ""}`}
               value={dateOfBirth}
               onChange={(e) => { setDateOfBirth(e.target.value); if (e.target.value) setDobError(""); }}
               autoFocus
@@ -779,7 +857,7 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
               id="negcert-father"
               name="fatherName"
               type="text"
-              className={inputCls(fatherError)}
+              className={`negcert-info-modal__input${fatherError ? " negcert-info-modal__input--error" : ""}`}
               value={fatherName}
               onChange={(e) => { setFatherName(e.target.value); if (e.target.value.trim()) setFatherError(""); }}
               onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
@@ -791,7 +869,7 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
               id="negcert-mother"
               name="motherName"
               type="text"
-              className={inputCls(motherError)}
+              className={`negcert-info-modal__input${motherError ? " negcert-info-modal__input--error" : ""}`}
               value={motherName}
               onChange={(e) => { setMotherName(e.target.value); if (e.target.value.trim()) setMotherError(""); }}
               onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
@@ -799,10 +877,10 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
           </NegCertField>
         </div>
 
-        <div className="flex gap-1.75 justify-end items-center flex-wrap px-4 pt-3 pb-3.5 border-t border-(--border) mt-3">
-          <button className="px-3.5 py-1.75 rounded-[7px] border border-(--border-strong) bg-white! text-(--txt2)! text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 touch-manipulation shrink-0 hover:bg-(--surf-2)! hover:text-(--txt)! hover:border-(--txt3)" onClick={onCancel}>Cancel</button>
+        <div className="modal-acts negcert-info-modal__acts">
+          <button className="modal-cancel" onClick={onCancel}>Cancel</button>
           <button
-            className="px-3.5 py-1.75 rounded-[7px] border-0 text-white! text-[12.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 touch-manipulation shrink-0 whitespace-nowrap bg-[#d97706]! hover:bg-[#b45309]!"
+            className="modal-confirm negcert-info-modal__submit"
             onClick={handleSubmit}
           >
             Issue Negative Certificate &rarr;
@@ -814,7 +892,7 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
 };
 
 const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
-  const [pdfUrl, setPdfUrl] = useState("");
+  const [pdfUrl,   setPdfUrl]   = useState("");
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
@@ -839,30 +917,30 @@ const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-[rgba(15,23,42,0.55)] [backdrop-filter:blur(6px)] z-9999 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-[14px] w-full max-w-225 h-[88vh] flex flex-col overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] border border-(--border-strong)" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-3 py-2.5 bg-(--surf-2) text-(--txt) shrink-0 gap-2.5 flex-wrap border-b border-(--border)">
-          <span className="font-semibold text-[12.5px] flex-1 wrap-break-word text-(--txt) flex items-center gap-1.25">
-            <span className="inline-flex items-center shrink-0 text-(--txt3)"><IconDocument /></span>
+    <div className="pdf-overlay" onClick={onClose}>
+      <div className="pdf-box" onClick={(e) => e.stopPropagation()}>
+        <div className="pdf-hdr">
+          <span className="pdf-hdr__label">
+            <span className="pdf-hdr__label-icon"><IconDocument /></span>
             {fileName}
           </span>
-          <div className="flex gap-1.25 shrink-0 items-center">
+          <div className="pdf-hdr-btns">
             {pdfUrl && (
-              <button className="px-2.5 py-1 rounded-[5px] border-0 text-white! text-[11.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 whitespace-nowrap touch-manipulation shrink-0 bg-[#2563eb]! hover:brightness-90 hover:-translate-y-px" onClick={handlePrint} disabled={printing}>
+              <button className="hdr-btn hdr-btn--print" onClick={handlePrint} disabled={printing}>
                 {printing ? "Printing…" : "Print"}
               </button>
             )}
-            <button className="px-2.5 py-1 rounded-[5px] border-0 text-white! text-[11.5px] font-semibold cursor-pointer [font-family:var(--f)] transition-[filter,transform] duration-150 whitespace-nowrap touch-manipulation shrink-0 bg-[#64748b]! hover:brightness-90 hover:-translate-y-px" onClick={onClose}>&#10005; Close</button>
+            <button className="hdr-btn hdr-btn--close" onClick={onClose}>&#10005; Close</button>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden bg-(--bg)">
+        <div className="pdf-body">
           {pdfUrl ? (
-            <iframe key={pdfUrl} src={`${pdfUrl}#toolbar=1&navpanes=0`} title={fileName} className="w-full h-full border-0 block" />
+            <iframe key={pdfUrl} src={`${pdfUrl}#toolbar=1&navpanes=0`} title={fileName} className="pdf-body__iframe" />
           ) : (
-            <div className="flex flex-col items-center justify-center gap-1.75 py-11 px-4.5 border-[1.5px] border-dashed border-(--border-strong) rounded-[9px] bg-(--surf-2) text-center">
-              <span className="flex items-center justify-center text-(--txt3)"><IconDocumentLg /></span>
-              <div className="text-[13px] font-bold text-(--txt2)">Unable to display PDF</div>
-              <div className="text-[11.5px] text-(--txt3) max-w-65 leading-[1.6]">The selected PDF is empty or invalid.</div>
+            <div className="pdf-inline-empty">
+              <span className="pdf-inline-empty__icon"><IconDocumentLg /></span>
+              <div className="pdf-inline-empty__title">Unable to display PDF</div>
+              <div className="pdf-inline-empty__sub">The selected PDF is empty or invalid.</div>
             </div>
           )}
         </div>
@@ -875,38 +953,29 @@ const StepBar = ({ current }) => {
   const idx = STEPS.findIndex((s) => s.key === current);
   const { isMobile } = useViewport();
   return (
-    <div className="bg-white border-b border-(--border) pt-2.5 px-4.5 pb-0 shrink-0 w-full shadow-[inset_0_1px_0_rgba(255,255,255,0.80)] print:hidden">
-      <div className="pb-2.5">
-        <div className="flex items-start relative">
+    <div className="ubr-stepbar-wrap">
+      <div className="ubr-stepbar">
+        <div className="ubr-stepbar__inner">
           {STEPS.map((s, i) => {
-            const done = i < idx;
+            const done   = i < idx;
             const active = i === idx;
+            const mod    = done ? "done" : active ? "active" : "pending";
             const isLast = i === STEPS.length - 1;
             const segDone = i < idx;
-            const circleCls = done
-              ? "bg-[rgba(5,150,105,0.10)]! text-[#059669]! border-[rgba(5,150,105,0.30)]!"
-              : active
-              ? "bg-[#2563eb]! text-white! border-[#2563eb]! shadow-[0_0_0_3px_rgba(37,99,235,0.18)]"
-              : "bg-[#f1f5f9]! text-(--txt3)! border-(--border-strong)!";
-            const labelCls = done
-              ? "font-medium text-[#059669]!"
-              : active
-              ? "font-bold text-[#2563eb]!"
-              : "font-normal text-(--txt3)";
             return (
               <React.Fragment key={s.key}>
-                <div className="flex flex-col items-center gap-1.25 shrink-0 z-2 relative">
-                  <div className={`w-6.5 h-6.5 rounded-full flex items-center justify-center font-bold text-[11px] transition-all duration-300 [font-family:var(--f)] shrink-0 border-2 ${circleCls}`}>
+                <div className="ubr-stepbar__step">
+                  <div className={`ubr-stepbar__circle ubr-stepbar__circle--${mod}`}>
                     {done ? "✓" : i + 1}
                   </div>
                   {(!isMobile || active) && (
-                    <span className={`text-[10px] whitespace-nowrap [font-family:var(--f)] ${labelCls}`}>{s.label}</span>
+                    <span className={`ubr-stepbar__label ubr-stepbar__label--${mod}`}>{s.label}</span>
                   )}
                 </div>
                 {!isLast && (
-                  <div className="flex-1 relative h-6.5 flex items-center min-w-5">
-                    <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-(--border-strong) rounded-sm" />
-                    {segDone && <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 rounded-sm transition-all duration-500 bg-[linear-gradient(90deg,#059669,#2563eb)]" />}
+                  <div className="ubr-stepbar__seg">
+                    <div className="ubr-stepbar__seg-rail" />
+                    {segDone && <div className="ubr-stepbar__seg-fill" />}
                   </div>
                 )}
               </React.Fragment>
@@ -920,14 +989,14 @@ const StepBar = ({ current }) => {
 
 const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
   const [pwInput, setPwInput] = useState("");
-  const [showPw, setShowPw] = useState(false);
+  const [showPw,  setShowPw]  = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     if (!pwInput.trim()) { showNotif("Password is required.", "error"); return; }
     setLoading(true);
     try {
-      const res = await fetch(`${API}/auth/verify`, {
+      const res  = await fetch(`${API}/auth/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ module, password: pwInput }),
@@ -940,14 +1009,14 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center py-9 px-4.5 gap-3.5">
-      <div className="w-13 h-13 bg-(--blue-lt) border-[1.5px] border-(--blue-bd) rounded-full flex items-center justify-center text-(--blue) shrink-0">
+    <div className="pw-gate">
+      <div className="pw-gate__icon">
         <IconLock />
       </div>
-      <p className="text-[12.5px] text-(--txt2) text-center max-w-85 leading-[1.65]">{description}</p>
-      <div className="w-full max-w-75 flex flex-col gap-1.75">
-        <label className="text-[10px] font-bold text-(--blue) uppercase tracking-[0.4px]" htmlFor="pw-gate-input">Administrator Password</label>
-        <div className="relative">
+      <p className="pw-gate__desc">{description}</p>
+      <div className="pw-gate__form">
+        <label className="pw-lbl" htmlFor="pw-gate-input">Administrator Password</label>
+        <div className="pw-input-wrap">
           <input
             id="pw-gate-input"
             name="password"
@@ -956,11 +1025,11 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
             onChange={(e) => setPwInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
             placeholder="Enter password"
-            className="w-full h-9.5 pl-3 pr-8.5 border-[1.5px] border-(--border-strong) rounded-[7px] text-sm [font-family:var(--f)] text-(--txt) bg-white outline-none tracking-[2px] transition-[border-color,box-shadow] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] focus:bg-white placeholder:tracking-normal"
+            className="pw-input"
             autoFocus
           />
           <button
-            className="absolute right-2.25 top-1/2 -translate-y-1/2 bg-transparent border-0 cursor-pointer opacity-40 touch-manipulation flex items-center text-(--txt) p-0 hover:opacity-75"
+            className="pw-toggle"
             type="button"
             onClick={() => setShowPw((v) => !v)}
             title={showPw ? "Hide password" : "Show password"}
@@ -969,8 +1038,8 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
             {showPw ? <IconEyeOff /> : <IconEye />}
           </button>
         </div>
-        <button className={`${BTN_PRIMARY} w-full justify-center h-9 text-[12.5px]`} onClick={handleSubmit} disabled={loading}>
-          {loading ? (<><div className="w-3.25 h-3.25 border-2 border-(--blue-md) border-t-(--blue) rounded-full animate-spin shrink-0" />&nbsp;Verifying…</>) : "Unlock & View Records →"}
+        <button className="btn btn-primary pw-gate__submit-btn" onClick={handleSubmit} disabled={loading}>
+          {loading ? (<><div className="spinner spinner--sm" />&nbsp;Verifying…</>) : "Unlock & View Records →"}
         </button>
       </div>
     </div>
@@ -980,11 +1049,11 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
 const RelativesChips = ({ record }) => {
   const father = getFatherDisplayName(record);
   const mother = getMotherDisplayName(record);
-  if (!father && !mother) return <span className="text-[10.5px] text-(--txt3) italic">—</span>;
+  if (!father && !mother) return <span className="tbl-relative-empty">—</span>;
   return (
-    <div className="flex flex-col gap-0.5 min-w-27.5">
-      {father && <span className="inline-flex items-center gap-0.75 text-[10.5px] font-semibold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap bg-[#dbeafe] text-[#1d4ed8] border border-[rgba(37,99,235,0.22)]">{father}</span>}
-      {mother && <span className="inline-flex items-center gap-0.75 text-[10.5px] font-semibold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap bg-[#fce7f3] text-[#9d174d] border border-[rgba(219,39,119,0.22)]">{mother}</span>}
+    <div className="tbl-relatives">
+      {father && <span className="tbl-relative-chip tbl-relative-chip--father">{father}</span>}
+      {mother && <span className="tbl-relative-chip tbl-relative-chip--mother">{mother}</span>}
     </div>
   );
 };
@@ -994,99 +1063,111 @@ const NegativeCertPreview = ({
   orNumber, onOrNumberChange, onPrint,
 }) => {
   const todayDate = formatTodayLong();
-  const officer = OFFICE_CONFIG.certifyingOfficer;
-  const verified = OFFICE_CONFIG.verifiedBy;
-  const year = dateOfBirth ? new Date(dateOfBirth).getFullYear() : new Date().getFullYear();
+  const officer   = OFFICE_CONFIG.certifyingOfficer;
+  const verified  = OFFICE_CONFIG.verifiedBy;
+  const year      = dateOfBirth ? new Date(dateOfBirth).getFullYear() : new Date().getFullYear();
 
   return (
-    <div className="flex flex-col border-[1.5px] border-[rgba(220,38,38,0.28)] rounded-[9px] overflow-hidden shadow-(--shadow-sm)">
-      <div className="flex items-center justify-between px-3 py-2 bg-(--surf-2) gap-2 shrink-0 flex-wrap border-b border-(--border)">
-        <div className="flex items-center gap-1.75 min-w-0 flex-1">
-          <span className="inline-flex items-center shrink-0 text-(--txt3)"><IconClipboard /></span>
-          <span className="text-[12.5px] font-semibold text-(--txt) whitespace-nowrap overflow-hidden text-ellipsis">Certificate of No Birth Record</span>
-          <span className="inline-flex items-center px-1.75 py-0.5 rounded-[20px] bg-(--blue-lt) border border-(--blue-bd) text-[9.5px] font-bold text-(--blue) whitespace-nowrap tracking-[0.3px] shrink-0">Negative Certificate</span>
+    <div className="neg-cert-preview-wrap">
+      <div className="neg-cert-preview-toolbar">
+        <div className="neg-cert-preview-toolbar__left">
+          <span className="neg-cert-preview-toolbar__icon"><IconClipboard /></span>
+          <span className="neg-cert-preview-toolbar__name">Certificate of No Birth Record</span>
+          <span className="neg-cert-preview-toolbar__badge">Negative Certificate</span>
         </div>
-        <button className="inline-flex items-center gap-1.25 px-3 py-1.5 rounded-[7px] border-0 bg-[#2563eb]! text-white! text-xs font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap shrink-0 transition-all duration-150 shadow-[0_2px_8px_rgba(37,99,235,0.25)] touch-manipulation hover:enabled:bg-[#1d4ed8]! hover:enabled:-translate-y-px" onClick={onPrint}>
-          <span className="flex items-center shrink-0"><IconPrint /></span>
+        <button className="pdf-inline-print-btn" onClick={onPrint}>
+          <span className="pdf-inline-print-btn__icon"><IconPrint /></span>
           Print Certificate
         </button>
       </div>
-      <div className="bg-white overflow-y-auto max-h-[calc(100vh-var(--home-topbar-height)-52px-240px)] min-h-75 [-webkit-overflow-scrolling:touch] max-[640px]:max-h-[44vh] max-[640px]:min-h-55 max-[480px]:max-h-[38vh] max-[480px]:min-h-45">
-        <div className="pt-10 px-13 pb-9 font-['Times_New_Roman',Times,serif] text-black text-[13px] leading-[1.7] relative max-[640px]:pt-6 max-[640px]:px-5 max-[640px]:pb-5 max-[640px]:text-xs max-[480px]:pt-4.5 max-[480px]:px-3.5 max-[480px]:pb-4 max-[480px]:text-[11.5px]">
-          <div className="absolute top-4.5 left-5 max-[640px]:top-3 max-[640px]:left-3.5 max-[480px]:top-2 max-[480px]:left-2.5">
-            <OfficeLogo className="w-14 h-14 block max-[640px]:w-10.5 max-[640px]:h-10.5 max-[480px]:w-8.5 max-[480px]:h-8.5" />
+      <div className="neg-cert-doc">
+        <div className="neg-cert-doc__inner">
+          <div className="neg-cert-doc__logo-wrap">
+            <OfficeLogo className="neg-cert-doc__logo" />
           </div>
-          <p className="text-right mb-6 text-[13px] text-black">{todayDate}</p>
-          <p className="text-[13px] mb-4 font-normal text-black">TO WHOM IT MAY CONCERN:</p>
-          <p className="text-justify mb-3 text-[13px] text-black leading-[1.75]">
+          <p className="neg-cert-doc__date">{todayDate}</p>
+          <p className="neg-cert-doc__salutation">TO WHOM IT MAY CONCERN:</p>
+          <p className="neg-cert-doc__para">
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of birth of{" "}
-            <strong className="font-bold text-black">{(subjectName || "").toUpperCase()}</strong>{" "}
+            <strong className="neg-cert-doc__highlight">{(subjectName || "").toUpperCase()}</strong>{" "}
             who is alleged to have been born on{" "}
             {dateOfBirth
-              ? <strong className="font-bold text-black">{formatCertDate(dateOfBirth)}</strong>
-              : <strong className="text-[#94a3b8]! italic font-normal!">[DATE OF BIRTH]</strong>
+              ? <strong className="neg-cert-doc__highlight">{formatCertDate(dateOfBirth)}</strong>
+              : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[DATE OF BIRTH]</strong>
             }{" "}
             in {OFFICE_CONFIG.cityMunicipality} from parents,{" "}
             {fatherName
-              ? <strong className="font-bold text-black">{fatherName.toUpperCase()}</strong>
-              : <strong className="text-[#94a3b8]! italic font-normal!">[FATHER'S NAME]</strong>
+              ? <strong className="neg-cert-doc__highlight">{fatherName.toUpperCase()}</strong>
+              : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[FATHER'S NAME]</strong>
             }{" "}and{" "}
             {motherName
-              ? <strong className="font-bold text-black">{motherName.toUpperCase()}</strong>
-              : <strong className="text-[#94a3b8]! italic font-normal!">[MOTHER'S NAME]</strong>
+              ? <strong className="neg-cert-doc__highlight">{motherName.toUpperCase()}</strong>
+              : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[MOTHER'S NAME]</strong>
             }{" "}hence, we cannot issue, as requested, a true copy of his/her Certificate of Live Birth or transcription from the Register of Births.
           </p>
-          <p className="text-justify mb-3 text-[13px] text-black leading-[1.75]">
+          <p className="neg-cert-doc__para">
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Birth for the year <strong>{year}</strong> are still intact in the archives of this office.
           </p>
-          <p className="text-justify mb-3 text-[13px] text-black leading-[1.75]">
+          <p className="neg-cert-doc__para">
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This certification is issued to{" "}
             {requestorName
-              ? <strong className="font-bold text-black">{requestorName.toUpperCase()}</strong>
-              : <strong className="text-[#94a3b8]! italic font-normal!">[REQUESTOR'S NAME]</strong>
+              ? <strong className="neg-cert-doc__highlight">{requestorName.toUpperCase()}</strong>
+              : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[REQUESTOR'S NAME]</strong>
             }{" "}upon his/her request.
           </p>
-          <div className="mt-8 flex justify-end">
-            <div className="text-center min-w-50 max-[640px]:min-w-37.5">
-              <div className="font-bold text-[13px] text-black">{officer.name}</div>
-              <div className="italic text-[12.5px] text-black"><strong>{officer.title}</strong></div>
+          <div className="neg-cert-doc__sig-block">
+            <div className="neg-cert-doc__sig-right">
+              <div className="neg-cert-doc__sig-name">{officer.name}</div>
+              <div className="neg-cert-doc__sig-title"><strong>{officer.title}</strong></div>
             </div>
           </div>
-          <div className="mt-6">
-            <div className="text-[13px] text-black mb-3.5">Verified by:</div>
-            <div className="block font-bold text-[13px] text-black text-center">{verified.name}</div>
-            <div className="block italic text-[12.5px] text-black text-center"><strong>{verified.title}</strong></div>
+          <div className="neg-cert-doc__verified">
+            <div className="neg-cert-doc__verified-label">Verified by:</div>
+            <div className="neg-cert-doc__verified-name">{verified.name}</div>
+            <div className="neg-cert-doc__verified-title"><strong>{verified.title}</strong></div>
           </div>
-          <div className="mt-7">
-            <div className="flex items-end gap-1 mb-1.5 text-[13px] text-black">
-              <span className="min-w-22.5 shrink-0">Amount Paid</span>
-              <span className="shrink-0 mr-1">:</span>
-              <span className="flex-1 text-[13px] text-black">{OFFICE_CONFIG.amountPaid}</span>
+          <div className="neg-cert-doc__payment">
+            <div className="neg-cert-doc__payment-row">
+              <span className="neg-cert-doc__payment-label">Amount Paid</span>
+              <span className="neg-cert-doc__payment-colon">:</span>
+              <span className="neg-cert-doc__payment-value">{OFFICE_CONFIG.amountPaid}</span>
             </div>
-            <div className="flex items-end gap-1 mb-1.5 text-[13px] text-black">
-              <span className="min-w-22.5 shrink-0">O.R. Number</span>
-              <span className="shrink-0 mr-1">:</span>
+            <div className="neg-cert-doc__payment-row">
+              <span className="neg-cert-doc__payment-label">O.R. Number</span>
+              <span className="neg-cert-doc__payment-colon">:</span>
               <input
                 id="or-number"
                 name="orNumber"
                 type="text"
                 aria-label="O.R. Number"
-                className="flex-1 min-w-[100pt] text-[13px] text-[#1a3c6e] font-bold px-1 border-0 border-b border-[#94a3b8] bg-transparent outline-none [font:inherit]"
+                className="neg-cert-doc__payment-value neg-cert-doc__payment-blank neg-cert-doc__or-input"
+                style={{
+                  border: "none",
+                  borderBottom: "1px solid #94a3b8",
+                  background: "transparent",
+                  outline: "none",
+                  font: "inherit",
+                  color: "#1a3c6e",
+                  fontWeight: 700,
+                  padding: "0 4px",
+                  flex: 1,
+                  minWidth: "100pt",
+                }}
                 value={orNumber || ""}
                 onChange={(e) => onOrNumberChange && onOrNumberChange(e.target.value)}
                 placeholder="Enter O.R. Number"
               />
             </div>
-            <div className="flex items-end gap-1 mb-1.5 text-[13px] text-black">
-              <span className="min-w-22.5 shrink-0">Date Paid</span>
-              <span className="shrink-0 mr-1">:</span>
-              <span className="flex-1 text-[13px] text-black">{todayDate}</span>
+            <div className="neg-cert-doc__payment-row">
+              <span className="neg-cert-doc__payment-label">Date Paid</span>
+              <span className="neg-cert-doc__payment-colon">:</span>
+              <span className="neg-cert-doc__payment-value">{todayDate}</span>
             </div>
           </div>
         </div>
       </div>
-      <div className="flex items-start gap-1.75 px-3 py-2 bg-[rgba(217,119,6,0.06)] border-t border-[rgba(217,119,6,0.18)] text-[11px] text-[#92400e] leading-[1.55]">
-        <span className="shrink-0 flex items-center mt-px"><IconInfo /></span>
+      <div className="neg-cert-note">
+        <span className="neg-cert-note__icon"><IconInfo /></span>
         <span>Preview reflects the data you entered. Enter the O.R. Number, then click "Print Certificate" to print the completed document.</span>
       </div>
     </div>
@@ -1094,20 +1175,20 @@ const NegativeCertPreview = ({
 };
 
 const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
-  const [stage, setStage] = useState("upload");
-  const [queue, setQueue] = useState([]);
+  const [stage,           setStage]           = useState("upload");
+  const [queue,           setQueue]           = useState([]);
   const [uploadedRecords, setUploadedRecords] = useState([]);
-  const [matches, setMatches] = useState([]);
-  const [isUploading, setIsUploading] = useState(false);
+  const [matches,         setMatches]         = useState([]);
+  const [isUploading,     setIsUploading]     = useState(false);
   const fileRef = useRef(null);
 
-  const slotsLeft = MAX_UPLOAD - queue.length;
+  const slotsLeft    = MAX_UPLOAD - queue.length;
   const limitReached = queue.length >= MAX_UPLOAD;
 
   const getLimitClass = () => {
-    if (limitReached) return "bg-(--red-lt) text-(--red) border border-(--red-bd)";
-    if (queue.length >= MAX_UPLOAD - 1) return "bg-(--amber-lt) text-(--amber) border border-[rgba(217,119,6,0.30)]";
-    return "bg-(--green-lt) text-(--green) border border-(--green-bd)";
+    if (limitReached)                   return "upl-limit-badge--reached";
+    if (queue.length >= MAX_UPLOAD - 1) return "upl-limit-badge--warn";
+    return "upl-limit-badge--ok";
   };
 
   const existingFileKeys = new Set(
@@ -1168,31 +1249,31 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] [backdrop-filter:blur(4px)] z-9998 flex items-center justify-center p-4 max-[480px]:items-end max-[480px]:p-0" style={{ animation: "fadeIn 0.15s ease" }} onClick={onClose}>
-      <div className="bg-white rounded-[14px] w-full max-w-125 max-h-[90vh] flex flex-col overflow-hidden shadow-(--shadow-lg) border border-(--border-strong) max-[640px]:max-w-full max-[480px]:rounded-t-[14px] max-[480px]:rounded-b-none max-[480px]:fixed max-[480px]:bottom-0 max-[480px]:left-0 max-[480px]:right-0 max-[480px]:max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2.25 px-3.25 py-2.75 bg-(--surf-2) text-(--txt) shrink-0 border-b border-(--border)">
-          <div className="w-7 h-7 bg-(--blue-lt) rounded-md flex items-center justify-center shrink-0 border border-(--blue-bd) text-(--blue)"><IconUpload /></div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-bold text-(--txt)">Upload Birth Record PDFs</div>
-            <div className="text-[10px] text-(--txt3) mt-px">
+    <div className="overlay" onClick={onClose}>
+      <div className="upl-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="upl-hdr">
+          <div className="upl-hdr__icon"><IconUpload /></div>
+          <div className="upl-hdr__text">
+            <div className="upl-hdr__title">Upload Birth Record PDFs</div>
+            <div className="upl-hdr__sub">
               {stage === "upload"
                 ? `Select up to ${MAX_UPLOAD} PDF files to upload`
                 : `${uploadedRecords.length} file${uploadedRecords.length > 1 ? "s" : ""} uploaded successfully`}
             </div>
           </div>
-          <button className="w-6.5 h-6.5 border border-(--border-strong) bg-white! rounded-[5px] cursor-pointer flex items-center justify-center text-xs text-(--txt2) shrink-0 ml-auto touch-manipulation transition-all duration-150 hover:bg-(--red-lt)! hover:border-(--red-bd) hover:text-(--red)!" onClick={onClose}>&#10005;</button>
+          <button className="upl-close" onClick={onClose}>&#10005;</button>
         </div>
 
         {stage === "upload" && (
-          <div className="flex-1 overflow-y-auto p-3.5 flex flex-col gap-2.5 [-webkit-overflow-scrolling:touch] bg-white">
-            <div className="flex items-center justify-between gap-1.75 flex-wrap">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.75 rounded-[20px] text-[10.5px] font-bold ${getLimitClass()}`}>
+          <div className="upl-body">
+            <div className="upl-limit-row">
+              <span className={`upl-limit-badge ${getLimitClass()}`}>
                 {queue.length} / {MAX_UPLOAD} files
               </span>
-              {limitReached && <span className="text-[11px] text-(--red) font-semibold">Maximum limit reached</span>}
+              {limitReached && <span className="upl-limit-reached-msg">Maximum limit reached</span>}
             </div>
             <div
-              className={`border-2 border-dashed border-(--blue-bd) rounded-[9px] bg-(--blue-lt) py-5 px-3.5 flex flex-col items-center gap-1.75 cursor-pointer text-center transition-all duration-150 touch-manipulation hover:border-(--blue) hover:bg-(--blue-md)${limitReached ? " opacity-45 cursor-not-allowed! pointer-events-none" : ""}`}
+              className={`dropzone${limitReached ? " dropzone--disabled" : ""}`}
               onClick={() => !isUploading && !limitReached && fileRef.current?.click()}
             >
               <input
@@ -1203,24 +1284,24 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                 accept="application/pdf"
                 multiple
                 onChange={handleFileChange}
-                className="hidden"
+                style={{ display: "none" }}
               />
               {isUploading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-(--blue-md) border-t-(--blue) rounded-full animate-spin shrink-0" />
-                  <span className="text-[12.5px] text-(--blue)">Uploading…</span>
+                <div className="dropzone__uploading">
+                  <div className="spinner" />
+                  <span className="dropzone__uploading-text">Uploading…</span>
                 </div>
               ) : limitReached ? (
                 <>
-                  <div className="text-[26px] opacity-20">&#128683;</div>
-                  <div className="text-[13px] font-bold text-(--txt)">Upload limit reached</div>
-                  <div className="text-[11.5px] text-(--txt2) leading-normal">Remove a file to add another</div>
+                  <div className="dropzone__icon-wrap dropzone__icon-wrap--blocked">&#128683;</div>
+                  <div className="dropzone__title">Upload limit reached</div>
+                  <div className="dropzone__sub">Remove a file to add another</div>
                 </>
               ) : (
                 <>
-                  <div className="flex items-center justify-center text-(--txt3) opacity-40"><IconDocumentLg /></div>
-                  <div className="text-[13px] font-bold text-(--txt)">Click to select PDF files</div>
-                  <div className="text-[11.5px] text-(--txt2) leading-normal">
+                  <div className="dropzone__icon-wrap"><IconDocumentLg /></div>
+                  <div className="dropzone__title">Click to select PDF files</div>
+                  <div className="dropzone__sub">
                     PDF only · Max {MAX_UPLOAD} files · Max 20 MB each
                     {slotsLeft < MAX_UPLOAD ? ` · ${slotsLeft} slot${slotsLeft !== 1 ? "s" : ""} remaining` : ""}
                   </div>
@@ -1228,30 +1309,25 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
               )}
             </div>
             {queue.length > 0 && (
-              <div className="border border-(--border-strong) rounded-[7px] overflow-hidden">
-                <div className="flex items-center justify-between px-2.5 py-1.5 bg-(--surf-2) border-b border-(--border) text-[11px] font-bold text-(--blue) gap-1.75">
+              <div className="upl-queue">
+                <div className="upl-queue__hdr">
                   <span>Upload Queue ({queue.length})</span>
                   {!isUploading && (
-                    <button className="bg-transparent border-0 text-[11px] text-(--red) font-bold cursor-pointer" onClick={() => setQueue([])}>Clear All</button>
+                    <button className="upl-queue__clear-btn" onClick={() => setQueue([])}>Clear All</button>
                   )}
                 </div>
                 {queue.map((item) => (
-                  <div key={item.id} className="flex items-center gap-1.75 px-2.5 py-1.75 border-b border-(--border-lt) bg-white last:border-b-0">
-                    <span className="shrink-0 flex items-center opacity-50 text-(--txt3)"><FileIconSm /></span>
-                    <span className="flex-1 text-xs font-semibold text-(--txt) overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={item.file.name}>{ensurePdfName(item.file.name)}</span>
-                    <span className={`text-[10.5px] font-bold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap shrink-0 ${
-                      item.status === "pending" ? "bg-(--amber-lt) text-(--amber) border border-[rgba(217,119,6,0.30)]" :
-                      item.status === "uploading" ? "bg-(--blue-lt) text-(--blue) border border-(--blue-bd)" :
-                      item.status === "done" ? "bg-(--green-lt) text-(--green) border border-(--green-bd)" :
-                      "bg-(--red-lt) text-(--red) border border-(--red-bd)"
-                    }`}>
-                      {item.status === "pending" && "Pending"}
+                  <div key={item.id} className="upl-queue__item">
+                    <span className="upl-queue__item-icon"><FileIconSm /></span>
+                    <span className="upl-queue__name" title={item.file.name}>{ensurePdfName(item.file.name)}</span>
+                    <span className={`upl-queue__status upl-queue__status--${item.status}`}>
+                      {item.status === "pending"   && "Pending"}
                       {item.status === "uploading" && "Uploading…"}
-                      {item.status === "done" && "Done"}
-                      {item.status === "error" && `Error: ${item.error || "Unknown"}`}
+                      {item.status === "done"      && "Done"}
+                      {item.status === "error"     && `Error: ${item.error || "Unknown"}`}
                     </span>
                     {!isUploading && item.status !== "done" && (
-                      <button className="bg-transparent border-0 cursor-pointer text-xs text-(--red) px-0.75 py-0.5 rounded-[3px] transition-colors duration-150 shrink-0 touch-manipulation hover:text-[#b91c1c] hover:bg-(--red-lt)" onClick={() => removeFromQueue(item.id)} title="Remove">
+                      <button className="upl-queue__remove" onClick={() => removeFromQueue(item.id)} title="Remove">
                         &#10005;
                       </button>
                     )}
@@ -1259,15 +1335,15 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                 ))}
               </div>
             )}
-            <div className="flex justify-end items-center gap-1.75 pt-1.5 flex-wrap">
-              <button className={BTN_SECONDARY} onClick={onClose} disabled={isUploading}>Cancel</button>
+            <div className="upl-foot">
+              <button className="btn btn-secondary" onClick={onClose} disabled={isUploading}>Cancel</button>
               <button
-                className={BTN_PRIMARY}
+                className="btn btn-primary"
                 onClick={handleUploadAll}
                 disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done")}
               >
                 {isUploading
-                  ? <><div className="w-3.25 h-3.25 border-2 border-white/25 border-t-white rounded-full animate-spin shrink-0" />&nbsp;Uploading…</>
+                  ? <><div className="spinner spinner--sm" />&nbsp;Uploading…</>
                   : `Upload ${queue.filter((q) => q.status === "pending").length} File${queue.filter((q) => q.status === "pending").length !== 1 ? "s" : ""}`}
               </button>
             </div>
@@ -1275,40 +1351,40 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
         )}
 
         {stage === "results" && (
-          <div className="flex-1 overflow-y-auto p-3.5 flex flex-col gap-2.5 [-webkit-overflow-scrolling:touch] bg-white">
-            <div className="flex items-start gap-2.25 bg-(--green-lt) border border-(--green-bd) rounded-[7px] px-3 py-2.5">
-              <div className="text-xl shrink-0 flex items-center text-(--green)"><IconCheck /></div>
+          <div className="upl-body">
+            <div className="upl-ok">
+              <div className="upl-ok__emoji"><IconCheck /></div>
               <div>
-                <div className="text-[12.5px] font-bold text-[#065f46]">
+                <div className="upl-ok__title">
                   {uploadedRecords.length} file{uploadedRecords.length > 1 ? "s" : ""} uploaded successfully
                 </div>
-                <div className="text-[11px] text-[#047857] mt-0.5 break-all">
+                <div className="upl-ok__sub">
                   {uploadedRecords.map((r) => getRecordDisplayName(r)).join(", ")}
                 </div>
               </div>
             </div>
             <div>
-              <div className="flex items-center justify-between px-2.5 py-1.5 bg-(--surf-2) border border-(--border-strong) rounded-t-[7px]">
-                <span className="text-[11px] font-bold text-(--blue)">Matching surname records: {matches.length}</span>
+              <div className="upl-matches-hdr">
+                <span className="upl-matches-hdr__text">Matching surname records: {matches.length}</span>
               </div>
               {matches.length === 0 ? (
-                <div className="p-2.5 border border-(--border-lt) text-xs text-(--txt3) text-center bg-white">No other records share the same surname.</div>
+                <div className="upl-matches-empty">No other records share the same surname.</div>
               ) : matches.map((r, i) => {
                 const isNew = uploadedRecords.some((u) => normalizeFileKey(u.file_name) === normalizeFileKey(r.file_name));
                 return (
-                  <div key={r.id || i} className={`flex items-center justify-between px-2.5 py-1.5 border border-t-0 border-(--border-lt) bg-white flex-wrap gap-1.25${isNew ? " bg-[rgba(217,119,6,0.04)]! border-l-[3px] border-l-(--amber)" : ""}`}>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="shrink-0 flex items-center opacity-50 text-(--txt3)"><FileIconSm /></span>
-                      <span className="text-[12.5px] font-semibold text-(--txt) wrap-break-word">{getRecordDisplayName(r)}</span>
-                      {isNew && <span className="bg-[rgba(217,119,6,0.10)] text-(--amber) text-[9.5px] font-bold px-1.5 py-px rounded-[20px] border border-[rgba(217,119,6,0.28)]">Just Uploaded</span>}
+                  <div key={r.id || i} className={`upl-match-row${isNew ? " upl-match-row--new" : ""}`}>
+                    <div className="upl-match-row__left">
+                      <span className="upl-match-row__left-icon"><FileIconSm /></span>
+                      <span className="upl-match-row__name">{getRecordDisplayName(r)}</span>
+                      {isNew && <span className="upl-match-row__badge">Just Uploaded</span>}
                     </div>
-                    <span className="text-[11px] text-(--txt3) whitespace-nowrap">{formatDate(r.uploaded_at || new Date())}</span>
+                    <span className="upl-match-row__date">{formatDate(r.uploaded_at || new Date())}</span>
                   </div>
                 );
               })}
             </div>
-            <div className="flex justify-end items-center gap-1.75 pt-1.5 flex-wrap">
-              <button className={BTN_PRIMARY} onClick={onClose}>Done</button>
+            <div className="upl-foot">
+              <button className="btn btn-primary" onClick={onClose}>Done</button>
             </div>
           </div>
         )}
@@ -1318,8 +1394,8 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
 };
 
 const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) => {
-  const displayName = record ? getRecordDisplayName(record) : "";
-  const [pdfUrl, setPdfUrl] = useState("");
+  const displayName             = record ? getRecordDisplayName(record) : "";
+  const [pdfUrl,   setPdfUrl]   = useState("");
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
@@ -1346,34 +1422,32 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
   };
 
   if (loadingPdf) return (
-    <div className="flex items-center justify-center gap-2.5 py-11 px-4.5 border-[1.5px] border-dashed border-(--blue-bd) rounded-[9px] bg-(--blue-lt) text-[12.5px] text-(--blue) font-semibold">
-      <div className="w-4 h-4 border-2 border-(--blue-md) border-t-(--blue) rounded-full animate-spin shrink-0" /><span>Loading document…</span>
-    </div>
+    <div className="pdf-inline-loading"><div className="spinner" /><span>Loading document…</span></div>
   );
 
   if (!pdfUrl) return (
-    <div className="flex flex-col items-center justify-center gap-1.75 py-11 px-4.5 border-[1.5px] border-dashed border-(--border-strong) rounded-[9px] bg-(--surf-2) text-center">
-      <span className="flex items-center justify-center text-(--txt3)"><IconDocumentLg /></span>
-      <div className="text-[13px] font-bold text-(--txt2)">No document to display</div>
-      <div className="text-[11.5px] text-(--txt3) max-w-65 leading-[1.6]">Select a record to preview it here.</div>
+    <div className="pdf-inline-empty">
+      <span className="pdf-inline-empty__icon"><IconDocumentLg /></span>
+      <div className="pdf-inline-empty__title">No document to display</div>
+      <div className="pdf-inline-empty__sub">Select a record to preview it here.</div>
     </div>
   );
 
   return (
-    <div className="flex flex-col border-[1.5px] border-(--blue-bd) rounded-[9px] overflow-hidden shadow-(--shadow-sm)">
-      <div className="flex items-center justify-between px-3 py-2 bg-(--surf-2) gap-2 shrink-0 flex-wrap border-b border-(--border)">
-        <div className="flex items-center gap-1.75 min-w-0 flex-1">
-          <span className="flex items-center shrink-0 text-(--txt3)"><IconDocument /></span>
-          <span className="text-[12.5px] font-semibold text-(--txt) whitespace-nowrap overflow-hidden text-ellipsis max-w-[min(280px,38vw)]">{displayName}</span>
-          <span className="inline-flex items-center px-1.75 py-0.5 rounded-[20px] bg-[rgba(0,0,0,0.05)] border border-(--border-strong) text-[9.5px] font-bold text-(--txt2) whitespace-nowrap tracking-[0.3px] shrink-0">Live Birth Certificate</span>
+    <div className="pdf-inline-wrap">
+      <div className="pdf-inline-toolbar">
+        <div className="pdf-inline-toolbar__left">
+          <span className="pdf-inline-toolbar__icon"><IconDocument /></span>
+          <span className="pdf-inline-toolbar__name">{displayName}</span>
+          <span className="pdf-inline-toolbar__badge">Live Birth Certificate</span>
         </div>
-        <button className="inline-flex items-center gap-1.25 px-3 py-1.5 rounded-[7px] border-0 bg-[#2563eb]! text-white! text-xs font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap shrink-0 transition-all duration-150 shadow-[0_2px_8px_rgba(37,99,235,0.25)] touch-manipulation disabled:opacity-60 disabled:cursor-not-allowed hover:enabled:bg-[#1d4ed8]! hover:enabled:-translate-y-px" onClick={handlePrint} disabled={printing}>
-          <span className="flex items-center shrink-0"><IconPrint /></span>
+        <button className="pdf-inline-print-btn" onClick={handlePrint} disabled={printing}>
+          <span className="pdf-inline-print-btn__icon"><IconPrint /></span>
           {printing ? "Printing…" : "Print"}
         </button>
       </div>
-      <div className="h-[calc(100vh-var(--home-topbar-height)-52px-200px)] min-h-70 bg-(--bg) overflow-hidden max-[768px]:h-[46vh] max-[768px]:min-h-65 max-[640px]:h-[42vh] max-[640px]:min-h-55 max-[480px]:h-[38vh] max-[480px]:min-h-46.25">
-        <iframe key={pdfUrl} src={`${pdfUrl}#toolbar=1&navpanes=0`} title={displayName} className="w-full h-full border-0 block" />
+      <div className="pdf-inline-viewer">
+        <iframe key={pdfUrl} src={`${pdfUrl}#toolbar=1&navpanes=0`} title={displayName} className="pdf-inline-iframe" />
       </div>
     </div>
   );
@@ -1381,62 +1455,63 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
 
 const MobileRecordCardArchive = ({ record, index, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
-  const father = getFatherDisplayName(record);
-  const mother = getMotherDisplayName(record);
+  const father      = getFatherDisplayName(record);
+  const mother      = getMotherDisplayName(record);
   return (
-    <div className="px-4 py-3.5 border-b border-(--border-lt) flex flex-col gap-2 bg-white transition-colors duration-150 last:border-b-0 hover:bg-(--surf-2)">
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] text-(--txt3) font-bold bg-(--surf-2) px-1.5 py-0.5 rounded shrink-0 leading-[1.4]">#{index + 1}</span>
-        <span className="text-[13.5px] font-bold text-(--txt) flex-1 min-w-0 wrap-break-word leading-[1.4]">{displayName}</span>
+    <div className="mobile-record-card">
+      <div className="mobile-record-card__top">
+        <span className="mobile-record-card__num">#{index + 1}</span>
+        <span className="mobile-record-card__name">{displayName}</span>
       </div>
       {(father || mother) && (
-        <div className="flex gap-1.5 flex-wrap gap-y-1.5">
-          {father && <span className="inline-flex items-center gap-0.75 text-[10.5px] font-semibold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap bg-[#dbeafe] text-[#1d4ed8] border border-[rgba(37,99,235,0.22)]">{father}</span>}
-          {mother && <span className="inline-flex items-center gap-0.75 text-[10.5px] font-semibold px-1.75 py-0.5 rounded-[10px] whitespace-nowrap bg-[#fce7f3] text-[#9d174d] border border-[rgba(219,39,119,0.22)]">{mother}</span>}
+        <div className="mobile-record-card__parents">
+          {father && <span className="tbl-relative-chip tbl-relative-chip--father">{father}</span>}
+          {mother && <span className="tbl-relative-chip tbl-relative-chip--mother">{mother}</span>}
         </div>
       )}
-      <div className="text-[11px] text-(--txt3) font-medium leading-[1.4]">{formatDate(record.archived_at)}</div>
-      <div className="flex items-center gap-2 flex-wrap pt-0.5">
-        <button className="inline-flex items-center gap-0.75 px-3.5 py-1.5 rounded-md border-0 text-white! text-xs font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation bg-[#2563eb]! hover:brightness-90 hover:-translate-y-px" onClick={onView}>View</button>
-        <button className="inline-flex items-center gap-0.75 px-3.5 py-1.5 rounded-md border-0 text-white! text-xs font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation bg-[#dc2626]! hover:brightness-90 hover:-translate-y-px" onClick={onDelete}>Delete</button>
+      <div className="mobile-record-card__date">{formatDate(record.archived_at)}</div>
+      <div className="mobile-record-card__actions">
+        <button className="tbl-btn tbl-btn--blue" onClick={onView}>View</button>
+        <button className="tbl-btn tbl-btn--red"  onClick={onDelete}>Delete</button>
       </div>
     </div>
   );
 };
 
+/* ── Main Component ──────────────────────────────────────────────────────── */
 export default function UnifiedBirthRegistry() {
-  const [tab, setTab] = useState("transaction");
-  const [confirmModal, setConfirmModal] = useState(null);
+  const [tab,             setTab]             = useState("transaction");
+  const [confirmModal,    setConfirmModal]    = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [pdfModal, setPdfModal] = useState(null);
-  const [negCertModal, setNegCertModal] = useState(null);
-  const [negCertInfo, setNegCertInfo] = useState({ fatherName: "", motherName: "", dateOfBirth: "", requestorName: "" });
-  const [orNumber, setOrNumber] = useState("");
+  const [pdfModal,        setPdfModal]        = useState(null);
+  const [negCertModal,    setNegCertModal]    = useState(null);
+  const [negCertInfo,     setNegCertInfo]     = useState({ fatherName: "", motherName: "", dateOfBirth: "", requestorName: "" });
+  const [orNumber,        setOrNumber]        = useState("");
 
   const showNotif = useShowNotif();
 
-  const [step, setStep] = useState("select");
-  const [srchFirstName, setSrchFirstName] = useState("");
-  const [srchLastName, setSrchLastName] = useState("");
-  const [hasSearched, setHasSearched] = useState(false);
+  const [step,           setStep]           = useState("select");
+  const [srchFirstName,  setSrchFirstName]  = useState("");
+  const [srchLastName,   setSrchLastName]   = useState("");
+  const [hasSearched,    setHasSearched]    = useState(false);
   const [firstNameError, setFirstNameError] = useState("");
-  const [lastNameError, setLastNameError] = useState("");
+  const [lastNameError,  setLastNameError]  = useState("");
   const [selectedRecord, setSelectedRecord] = useState(null);
-  const [recordStatus, setRecordStatus] = useState(null);
-  const [subjectName, setSubjectName] = useState("");
-  const [payRef, setPayRef] = useState("");
-  const [processing, setProcessing] = useState(false);
-  const [restoringId, setRestoringId] = useState(null);
+  const [recordStatus,   setRecordStatus]   = useState(null);
+  const [subjectName,    setSubjectName]    = useState("");
+  const [payRef,         setPayRef]         = useState("");
+  const [processing,     setProcessing]     = useState(false);
+  const [restoringId,    setRestoringId]    = useState(null);
 
-  const [step2PdfData, setStep2PdfData] = useState(null);
-  const [step2PdfLoading, setStep2PdfLoading] = useState(false);
+  const [step2PdfData,     setStep2PdfData]     = useState(null);
+  const [step2PdfLoading,  setStep2PdfLoading]  = useState(false);
   const [previewLoadingId, setPreviewLoadingId] = useState(null);
 
-  const [allRecords, setAllRecords] = useState([]);
+  const [allRecords,         setAllRecords]         = useState([]);
   const [allArchivedRecords, setAllArchivedRecords] = useState([]);
-  const [loadingRecords, setLoadingRecords] = useState(false);
-  const [archiveSearch, setArchiveSearch] = useState("");
-  const [archiveUnlocked, setArchiveUnlocked] = useState(false);
+  const [loadingRecords,     setLoadingRecords]     = useState(false);
+  const [archiveSearch,      setArchiveSearch]      = useState("");
+  const [archiveUnlocked,    setArchiveUnlocked]    = useState(false);
 
   const { isMobile, isTablet } = useViewport();
   const useCards = isMobile || isTablet;
@@ -1449,7 +1524,7 @@ export default function UnifiedBirthRegistry() {
       .filter((r) => !activeIdentityKeys.has(getRecordIdentityKey(r)))
       .map((r) => ({ ...r, _isArchived: true })),
   ];
-  const recordsAbortRef = useRef(null);
+  const recordsAbortRef  = useRef(null);
   const archivedAbortRef = useRef(null);
 
   const fetchRecords = useCallback(async () => {
@@ -1459,7 +1534,7 @@ export default function UnifiedBirthRegistry() {
 
     setLoadingRecords(true);
     try {
-      const res = await fetch(`${API}/records`, { signal: controller.signal });
+      const res  = await fetch(`${API}/records`, { signal: controller.signal });
       if (!res.ok) throw new Error();
       const data = await res.json();
       setAllRecords(Array.isArray(data) ? data : []);
@@ -1480,10 +1555,10 @@ export default function UnifiedBirthRegistry() {
 
     setLoadingRecords(true);
     try {
-      const res = await fetch(`${API}/archived`, { signal: controller.signal });
+      const res  = await fetch(`${API}/archived`, { signal: controller.signal });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      const arr = Array.isArray(data) ? data : [];
+      const arr  = Array.isArray(data) ? data : [];
       setAllArchivedRecords(arr);
     } catch (err) {
       if (err?.name !== "AbortError") {
@@ -1513,7 +1588,7 @@ export default function UnifiedBirthRegistry() {
   const handleSearch = () => {
     let valid = true;
     if (!srchFirstName.trim()) { setFirstNameError("First name is required."); valid = false; } else setFirstNameError("");
-    if (!srchLastName.trim()) { setLastNameError("Last name is required."); valid = false; } else setLastNameError("");
+    if (!srchLastName.trim())  { setLastNameError("Last name is required.");   valid = false; } else setLastNameError("");
     if (!valid) return;
     setHasSearched(true);
   };
@@ -1523,9 +1598,9 @@ export default function UnifiedBirthRegistry() {
 
   const searchResults = hasSearched && searchLN
     ? allRecordsForSearch.filter((r) => {
-        const ln = getRecordLastName(r);
+        const ln      = getRecordLastName(r);
         const lnWords = ln.split(/\s+/).filter(Boolean);
-        const qWords = searchLN.split(/\s+/).filter(Boolean);
+        const qWords  = searchLN.split(/\s+/).filter(Boolean);
         return qWords.every((qw) => lnWords.some((lw) => lw === qw));
       })
     : [];
@@ -1533,7 +1608,7 @@ export default function UnifiedBirthRegistry() {
   const sortedResults = [...searchResults].sort((a, b) => {
     const aFN = getRecordFirstName(a); const bFN = getRecordFirstName(b);
     if (!a._isArchived && b._isArchived) return -1;
-    if (a._isArchived && !b._isArchived) return 1;
+    if (a._isArchived  && !b._isArchived) return 1;
     const aExact = searchFN && aFN === searchFN;
     const bExact = searchFN && bFN === searchFN;
     if (aExact && !bExact) return -1;
@@ -1541,6 +1616,26 @@ export default function UnifiedBirthRegistry() {
     return aFN.localeCompare(bFN);
   });
 
+  // ─────────────────────────────────────────────────────────────────────
+  // FIX: ARCHIVE BUG — selecting a record must never change its
+  // is_archived status.
+  //
+  // Root cause: this function used to call restoreRecord(record.id)
+  // whenever an archived record was selected from search results. That
+  // fired a real POST to /records/<id>/restore, which flips is_archived
+  // from true to false in the database — so simply *selecting* an
+  // archived record (to view/process it) silently removed it from the
+  // Archive tab, even though nothing had actually been "restored" by
+  // the admin.
+  //
+  // Fix: selecting a record — archived or not — only updates local
+  // component state (selectedRecord / recordStatus / subjectName) so it
+  // can be viewed and used in the transaction flow. It no longer calls
+  // the backend (no more restoreRecord(record.id) call here) and no
+  // longer mutates the record's real is_archived value. The record
+  // therefore correctly remains in the Archive tab unless an explicit
+  // Restore action (not present in this flow) is taken.
+  // ─────────────────────────────────────────────────────────────────────
   const handleSelectFromSearch = (record) => {
     const displayName = getRecordDisplayName(record);
 
@@ -1571,7 +1666,7 @@ export default function UnifiedBirthRegistry() {
   const handlePreviewPdf = async (id, record) => {
     setPreviewLoadingId(id);
     try {
-      const res = await fetch(`${API}/records/${id}`);
+      const res  = await fetch(`${API}/records/${id}`);
       if (!res.ok) throw new Error("Failed to load PDF.");
       const data = await res.json();
       if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
@@ -1584,7 +1679,7 @@ export default function UnifiedBirthRegistry() {
     if (!record) { setStep2PdfData(null); return; }
     setStep2PdfLoading(true);
     try {
-      const res = await fetch(`${API}/records/${record.id}`);
+      const res  = await fetch(`${API}/records/${record.id}`);
       if (!res.ok) throw new Error("Failed to load PDF.");
       const data = await res.json();
       if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
@@ -1600,7 +1695,7 @@ export default function UnifiedBirthRegistry() {
   };
 
   const isPositive = recordStatus === "ACTIVE";
-  const issuedDoc = isPositive
+  const issuedDoc  = isPositive
     ? "Certified True Copy of Birth Certificate (Actual)"
     : "Certificate of No Birth Record (Negative Certificate)";
 
@@ -1611,14 +1706,14 @@ export default function UnifiedBirthRegistry() {
     }
     printNegativeCertificate({
       subjectName,
-      dateOfBirth: negCertInfo.dateOfBirth || null,
-      fatherName: negCertInfo.fatherName || null,
-      motherName: negCertInfo.motherName || null,
-      requestorName: negCertInfo.requestorName || null,
-      cityMunicipality: OFFICE_CONFIG.cityMunicipality,
+      dateOfBirth:       negCertInfo.dateOfBirth  || null,
+      fatherName:        negCertInfo.fatherName    || null,
+      motherName:        negCertInfo.motherName    || null,
+      requestorName:     negCertInfo.requestorName || null,
+      cityMunicipality:  OFFICE_CONFIG.cityMunicipality,
       certifyingOfficer: OFFICE_CONFIG.certifyingOfficer,
-      verifiedBy: OFFICE_CONFIG.verifiedBy,
-      amountPaid: OFFICE_CONFIG.amountPaid,
+      verifiedBy:        OFFICE_CONFIG.verifiedBy,
+      amountPaid:        OFFICE_CONFIG.amountPaid,
       orNumber: orNumber.trim(),
       datePaid: formatTodayLong(),
       todayDate: formatTodayLong(),
@@ -1632,6 +1727,25 @@ export default function UnifiedBirthRegistry() {
     showNotif("Document reviewed. Proceeding to release.", "success");
   };
 
+  // ─────────────────────────────────────────────────────────────────────
+  // FIX: THE ACTUAL PAYMENT BUG
+  //
+  // This call used to be fire-and-forget: `await fetch(...)` sat inside a
+  // `try { ... } catch {}` with nothing that ever inspected the response.
+  // fetch() only rejects on a network failure — it resolves normally even
+  // when the server returns 4xx/5xx — so a rejected/failed transaction on
+  // the backend (validation error, failed insert, etc.) was completely
+  // indistinguishable from a real success here. The code fell straight
+  // through to `showNotif("Transaction completed successfully!", ...)`
+  // and then reset the form, discarding the in-progress transaction even
+  // though nothing had been written to birth_payments.
+  //
+  // Fix: read the JSON body, check `res.ok` / `data.error`, only report
+  // success when the server actually confirms the write, and return a
+  // boolean so the caller only resets the transaction on confirmed
+  // success — otherwise the admin sees a real error and can retry without
+  // losing the selected record / entered O.R. number.
+  // ─────────────────────────────────────────────────────────────────────
   const handleCompleteTransaction = async () => {
     setProcessing(true);
     try {
@@ -1644,14 +1758,14 @@ export default function UnifiedBirthRegistry() {
           paymentMethod: "cash", paymentReference: payRef,
           paymentAmount: FEE, documentIssued: issuedDoc,
           orNumber: orNumber.trim() || null,
-          first_name: selectedRecord?.child_first_name || srchFirstName.trim(),
+          first_name:  selectedRecord?.child_first_name  || srchFirstName.trim(),
           middle_name: selectedRecord?.child_middle_name || "",
-          last_name: selectedRecord?.child_last_name || srchLastName.trim(),
+          last_name:   selectedRecord?.child_last_name   || srchLastName.trim(),
         }),
       });
 
       let data = {};
-      try { data = await res.json(); } catch { }
+      try { data = await res.json(); } catch { /* non-JSON body — data stays {} */ }
 
       if (!res.ok || data?.error) {
         throw new Error(data?.error || "Failed to save the transaction. Please try again.");
@@ -1680,7 +1794,7 @@ export default function UnifiedBirthRegistry() {
 
   const handleViewPdf = async (id, record) => {
     try {
-      const res = await fetch(`${API}/records/${id}`);
+      const res  = await fetch(`${API}/records/${id}`);
       if (!res.ok) throw new Error("Failed to load PDF.");
       const data = await res.json();
       if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
@@ -1708,8 +1822,9 @@ export default function UnifiedBirthRegistry() {
     ? allArchivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
     : allArchivedRecords;
 
+  /* ── Render ────────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col [font-family:var(--f)] bg-(--bg) antialiased w-full min-h-[calc(100vh-var(--home-topbar-height))] m-0 p-0 overflow-x-hidden text-(--txt)">
+    <div className="ubr-root">
       <ToastContainer />
 
       {confirmModal && <ConfirmModal {...confirmModal} onCancel={() => setConfirmModal(null)} />}
@@ -1734,53 +1849,52 @@ export default function UnifiedBirthRegistry() {
         />
       )}
 
-      <div className="sticky top-0 z-90 bg-white border-b border-(--border) flex items-center justify-between px-4 shrink-0 w-full min-h-13 gap-2 shadow-[0_1px_4px_rgba(0,0,0,0.06)] max-[768px]:px-2.75 max-[768px]:py-1.75 max-[480px]:min-h-11 max-[480px]:px-2.25 max-[480px]:py-1.75 max-[480px]:gap-1.5 print:hidden">
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-lg leading-none flex items-center text-(--blue)"><IconGrid /></span>
-          {!isMobile && <span className="[font-family:var(--fh)] text-[13px] font-bold text-(--txt) whitespace-nowrap">Birth Registry</span>}
+      {/* ── Header / Tab bar ──────────────────────────────────────────── */}
+      <div className="ubr-header">
+        <div className="ubr-header__brand">
+          <span className="ubr-header__logo"><IconGrid /></span>
+          {!isMobile && <span className="ubr-header__title">Birth Registry</span>}
         </div>
-        <div className="flex gap-1.25 items-center flex-nowrap max-[480px]:gap-0.75">
+        <div className="ubr-header__tabs">
           {[
             { key: "transaction", label: isMobile ? "Transaction" : "New Transaction" },
-            { key: "archive", label: "Archive" },
+            { key: "archive",     label: "Archive" },
           ].map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`px-3.25 py-1.5 rounded-lg border border-transparent cursor-pointer text-xs font-semibold inline-flex items-center gap-1.25 [font-family:var(--f)] transition-all duration-150 leading-none whitespace-nowrap touch-manipulation shrink-0 max-[480px]:px-1.75 max-[480px]:py-1.25 max-[480px]:text-[11px] max-[480px]:rounded-[7px] max-[480px]:gap-0.75 ${
-                tab === t.key
-                  ? "bg-[#2563eb]! text-white! border-[#2563eb]! shadow-[0_0_0_3px_rgba(37,99,235,0.15),0_2px_8px_rgba(37,99,235,0.25)] hover:bg-[#1d4ed8]! hover:-translate-y-px"
-                  : "bg-[rgba(37,99,235,0.07)]! text-[#2563eb]! border-[rgba(37,99,235,0.30)]! hover:bg-[rgba(37,99,235,0.14)]! hover:border-[#2563eb]! hover:text-[#1d4ed8]! hover:-translate-y-px"
-              }`}
+              className={`ubr-tab-btn ubr-tab-btn--${tab === t.key ? "active" : "inactive"}`}
             >
-              <span className="leading-none max-[360px]:hidden">{t.label}</span>
+              <span className="ubr-tab-btn__label">{t.label}</span>
             </button>
           ))}
         </div>
       </div>
 
+      {/* ── Transaction Tab ───────────────────────────────────────────── */}
       {tab === "transaction" && (
-        <div className="w-full p-3.5 bg-(--bg) max-[768px]:p-2.25 max-[480px]:p-1.75">
-          <div className="flex flex-col bg-transparent">
+        <div className="ubr-body">
+          <div className="ubr-tx">
             <StepBar current={step} />
-            <div className="pt-3 flex flex-col bg-transparent max-[900px]:pt-2.25 max-[768px]:pt-1.75 max-[480px]:pt-1.25">
-              <div className="bg-white rounded-[9px] border border-(--border) shadow-(--shadow-sm) flex flex-col">
+            <div className="ubr-tx__scroll">
+              <div className="ubr-card">
 
+                {/* Step 1 — Select */}
                 {step === "select" && (
                   <>
-                    <div className="flex flex-col">
-                      <div className="px-4.5 pt-4 pb-3 flex flex-col gap-3.5 max-[900px]:px-3 max-[900px]:pt-3 max-[900px]:pb-2.25 max-[768px]:px-2.75 max-[768px]:pt-2.75 max-[768px]:pb-2.25 max-[768px]:gap-2.5 max-[480px]:px-2.25 max-[480px]:pt-2.25 max-[480px]:pb-1.75 max-[480px]:gap-2.25">
-                        <div className="pb-2.5 border-b border-(--border)">
-                          <div className="[font-family:var(--fh)] text-[clamp(13px,3vw,15px)] font-extrabold text-(--txt) mb-0.75 tracking-[-0.3px]">Search &amp; Select Birth Record</div>
+                    <div className="step-scroll">
+                      <div className="step-inner">
+                        <div className="page-hdr">
+                          <div className="page-hdr__title">Search &amp; Select Birth Record</div>
                         </div>
-                        <div className="bg-(--blue-lt) border-[1.5px] border-(--blue-bd) rounded-[9px] px-3.5 py-3 max-[480px]:p-2.5">
-                          <div className="flex gap-2 items-end flex-wrap max-[480px]:flex-col max-[480px]:gap-1.75">
-                            <div className="flex flex-col gap-1 flex-1 min-w-32.5 max-[480px]:min-w-0 max-[480px]:w-full">
-                              <label className="text-[10px] font-bold uppercase tracking-[0.5px] text-(--txt3)" htmlFor="search-last-name">Last Name</label>
+                        <div className="search-form">
+                          <div className="search-form__row">
+                            <div className="field">
+                              <label className="field-label" htmlFor="search-last-name">Last Name</label>
                               <input
                                 id="search-last-name"
                                 name="lastName"
-                                className={`h-9 px-2.75 border-[1.5px] border-(--border-strong) rounded-[7px] text-[13px] [font-family:var(--f)] text-(--txt) bg-white outline-none w-full transition-[border-color,box-shadow] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] max-[480px]:h-10 max-[480px]:text-base${lastNameError ? " border-(--red)! shadow-[0_0_0_3px_rgba(220,38,38,0.10)]!" : ""}`}
+                                className={`field-input${lastNameError ? " field-input--error" : ""}`}
                                 type="text"
                                 value={srchLastName}
                                 onChange={(e) => { setSrchLastName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setLastNameError(""); }}
@@ -1788,34 +1902,34 @@ export default function UnifiedBirthRegistry() {
                                 placeholder="e.g. Dela Cruz"
                                 autoFocus
                               />
-                              {lastNameError && <span className="text-[10.5px] font-semibold text-(--red) flex items-center gap-0.75 mt-0.5">&#9888; {lastNameError}</span>}
+                              {lastNameError && <span className="field-error-msg">&#9888; {lastNameError}</span>}
                             </div>
-                            <div className="flex flex-col gap-1 flex-1 min-w-32.5 max-[480px]:min-w-0 max-[480px]:w-full">
-                              <label className="text-[10px] font-bold uppercase tracking-[0.5px] text-(--txt3)" htmlFor="search-first-name">First Name</label>
+                            <div className="field">
+                              <label className="field-label" htmlFor="search-first-name">First Name</label>
                               <input
                                 id="search-first-name"
                                 name="firstName"
-                                className={`h-9 px-2.75 border-[1.5px] border-(--border-strong) rounded-[7px] text-[13px] [font-family:var(--f)] text-(--txt) bg-white outline-none w-full transition-[border-color,box-shadow] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] max-[480px]:h-10 max-[480px]:text-base${firstNameError ? " border-(--red)! shadow-[0_0_0_3px_rgba(220,38,38,0.10)]!" : ""}`}
+                                className={`field-input${firstNameError ? " field-input--error" : ""}`}
                                 type="text"
                                 value={srchFirstName}
                                 onChange={(e) => { setSrchFirstName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setFirstNameError(""); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
                                 placeholder="e.g. Juan"
                               />
-                              {firstNameError && <span className="text-[10.5px] font-semibold text-(--red) flex items-center gap-0.75 mt-0.5">&#9888; {firstNameError}</span>}
+                              {firstNameError && <span className="field-error-msg">&#9888; {firstNameError}</span>}
                             </div>
-                            <button className="h-9 px-4.5 border-0 rounded-full bg-[#2563eb]! text-white! text-[12.5px] font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap shrink-0 inline-flex items-center justify-center transition-all duration-150 touch-manipulation self-end shadow-[0_2px_8px_rgba(37,99,235,0.25)] hover:enabled:bg-[#1d4ed8]! hover:enabled:-translate-y-px max-[480px]:w-full max-[480px]:justify-center max-[480px]:h-10 max-[480px]:text-[13px]" onClick={handleSearch}>Search</button>
+                            <button className="search-btn" onClick={handleSearch}>Search</button>
                           </div>
                         </div>
 
                         {hasSearched && (
-                          <div className="border border-(--border-strong) rounded-[9px] overflow-hidden bg-white">
-                            <div className="flex items-center justify-between px-3 py-1.75 bg-(--surf-2) border-b border-(--border) flex-wrap gap-1.25">
-                              <div className="flex flex-col gap-px">
-                                <div className="text-[11px] text-(--txt3) font-medium">
+                          <div className="results-box">
+                            <div className="results-hdr">
+                              <div className="results-hdr__left">
+                                <div className="results-hdr__count">
                                   {sortedResults.length} record{sortedResults.length !== 1 ? "s" : ""} found
                                   {sortedResults.filter((r) => r._isArchived).length > 0 && (
-                                    <span className="text-(--amber) font-bold">
+                                    <span className="results-hdr__archived-count">
                                       &nbsp;&middot;&nbsp;{sortedResults.filter((r) => r._isArchived).length} from archive
                                     </span>
                                   )}
@@ -1824,20 +1938,20 @@ export default function UnifiedBirthRegistry() {
                             </div>
 
                             {sortedResults.length === 0 ? (
-                              <div className="py-7 px-4 text-center flex flex-col items-center gap-2">
-                                <p className="text-[14px] font-bold text-(--txt) m-0">No records found for "{searchLN}"</p>
-                                <button className="px-3.5 py-1.75 rounded-full border-[1.5px] border-[rgba(217,119,6,0.35)] bg-[#d97706]! text-white! text-xs font-bold cursor-pointer [font-family:var(--f)] inline-flex items-center justify-center shrink-0 transition-all duration-150 touch-manipulation hover:bg-[#b45309]!" onClick={openNegCertModal}>
+                              <div className="no-results">
+                                <p className="no-results__title">No records found for "{searchLN}"</p>
+                                <button className="neg-btn" onClick={openNegCertModal}>
                                   Issue Negative Certificate
                                 </button>
                               </div>
                             ) : (
                               <>
                                 {sortedResults.map((r) => {
-                                  const display = getRecordDisplayName(r);
-                                  const father = getFatherDisplayName(r);
-                                  const mother = getMotherDisplayName(r);
+                                  const display       = getRecordDisplayName(r);
+                                  const father        = getFatherDisplayName(r);
+                                  const mother        = getMotherDisplayName(r);
                                   const isLoadingPrev = previewLoadingId === r.id;
-                                  const isSelected =
+                                  const isSelected    =
                                     selectedRecord?.id === r.id &&
                                     !!selectedRecord?._isArchived === !!r._isArchived;
 
@@ -1845,42 +1959,38 @@ export default function UnifiedBirthRegistry() {
                                     <div
                                       key={`${r._isArchived ? "arc" : "act"}-${r.id}`}
                                       className={[
-                                        "flex items-center px-3.5 py-2.75 gap-2.5 border-b border-(--border-lt) bg-white transition-colors duration-150 flex-wrap last:border-b-0 hover:bg-(--surf-2) max-[640px]:px-2.75 max-[640px]:py-2.25 max-[640px]:gap-2",
-                                        isSelected ? "bg-[rgba(37,99,235,0.05)]! border-l-[3px] border-l-(--blue) hover:bg-[rgba(37,99,235,0.08)]!" : "",
-                                        r._isArchived ? "opacity-80" : "",
+                                        "result-row",
+                                        isSelected ? "result-row--selected" : "",
+                                        r._isArchived ? "result-row--archived" : "",
                                       ].filter(Boolean).join(" ")}
                                     >
-                                      <div className="flex-1 min-w-0 flex flex-col gap-1.25">
-                                        <div className="flex items-center gap-1.5 flex-wrap leading-[1.3]">
-                                          <span className="text-[13.5px] font-bold text-(--txt) tracking-[-0.15px]">{display}</span>
-                                          {r._isArchived && <span className="text-[9px] font-bold px-1.75 py-px rounded-[20px] bg-(--amber-lt) text-(--amber) border border-[rgba(217,119,6,0.30)] tracking-[0.2px] shrink-0">Archived</span>}
+                                      <div className="result-row__info">
+                                        <div className="result-row__card-title">
+                                          <span className="result-row__card-name">{display}</span>
+                                          {r._isArchived && <span className="archived-badge">Archived</span>}
                                         </div>
-                                        <div className="flex gap-1.25 flex-wrap items-center">
-                                          {father && <span className="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.75 rounded-[20px] whitespace-nowrap tracking-[0.1px] bg-[#dbeafe] text-[#1d4ed8] border border-[rgba(37,99,235,0.25)]">{father}</span>}
-                                          {mother && <span className="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.75 rounded-[20px] whitespace-nowrap tracking-[0.1px] bg-[#fce7f3] text-[#9d174d] border border-[rgba(219,39,119,0.25)]">{mother}</span>}
+                                        <div className="result-row__chips">
+                                          {father && <span className="result-chip result-chip--father">{father}</span>}
+                                          {mother && <span className="result-chip result-chip--mother">{mother}</span>}
                                           {!father && !mother && (
-                                            <span className="text-[11px] text-(--txt3)">No parent info recorded</span>
+                                            <span className="result-row__no-parent">No parent info recorded</span>
                                           )}
                                         </div>
                                       </div>
 
-                                      <div className="flex items-center gap-1.25 shrink-0 max-[640px]:w-full max-[640px]:justify-start">
+                                      <div className="result-row__actions">
                                         <button
-                                          className="inline-flex items-center justify-center align-middle gap-1 min-w-20 px-3 py-1.25 rounded-full border-[1.5px] border-[#2563eb] bg-[#2563eb]! text-white! text-[11.5px] font-bold cursor-pointer [font-family:var(--f)] whitespace-nowrap transition-all duration-150 leading-none touch-manipulation shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 hover:enabled:bg-[#1d4ed8]! hover:enabled:border-[#1d4ed8] hover:enabled:-translate-y-px hover:enabled:shadow-[0_3px_10px_rgba(37,99,235,0.25)]"
+                                          className="view-pdf-btn"
                                           onClick={() => handlePreviewPdf(r.id, r)}
                                           disabled={isLoadingPrev}
                                           title="View Live Birth PDF"
                                         >
                                           {isLoadingPrev
-                                            ? <><div className="w-3.25 h-3.25 border-2 border-white/25 border-t-white rounded-full animate-spin shrink-0" />&nbsp;Loading…</>
+                                            ? <><div className="spinner spinner--sm" />&nbsp;Loading…</>
                                             : "View"}
                                         </button>
                                         <button
-                                          className={`min-w-20 px-3 py-1.25 rounded-full border-[1.5px] text-white! text-[11.5px] font-bold [font-family:var(--f)] whitespace-nowrap inline-flex items-center justify-center shrink-0 transition-all duration-150 touch-manipulation ${
-                                            isSelected
-                                              ? "bg-[#047857]! border-[#047857] cursor-default"
-                                              : "bg-[#059669]! border-[#059669] cursor-pointer hover:bg-[#047857]! hover:border-[#047857]"
-                                          }`}
+                                          className={`select-btn${isSelected ? " select-btn--selected" : ""}`}
                                           onClick={() => !isSelected && handleSelectFromSearch(r)}
                                         >
                                           {isSelected ? "Selected" : "Select →"}
@@ -1889,9 +1999,9 @@ export default function UnifiedBirthRegistry() {
                                     </div>
                                   );
                                 })}
-                                <div className="flex items-center justify-center gap-2 px-3.5 py-2.25 bg-(--surf-2) border-t border-(--border-lt) flex-wrap">
-                                  <span className="text-[11.5px] text-(--txt3)">Not the right person?</span>
-                                  <button className="px-2.5 py-1 rounded-full border-[1.5px] border-[rgba(217,119,6,0.35)] bg-[#d97706]! text-white! text-[11px] font-bold cursor-pointer [font-family:var(--f)] inline-flex items-center justify-center shrink-0 transition-all duration-150 touch-manipulation hover:bg-[#b45309]!" onClick={openNegCertModal}>
+                                <div className="no-match-alt">
+                                  <span className="no-match-alt__text">Not the right person?</span>
+                                  <button className="neg-btn neg-btn--inline" onClick={openNegCertModal}>
                                     Issue Negative Certificate
                                   </button>
                                 </div>
@@ -1901,9 +2011,9 @@ export default function UnifiedBirthRegistry() {
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-1.75 px-4 py-2.5 border-t border-(--border) bg-(--surf-2) justify-end items-center shrink-0 flex-nowrap rounded-b-[9px] max-[768px]:px-2.75 max-[768px]:py-1.75 max-[768px]:gap-1.25 max-[480px]:px-2.25 max-[480px]:gap-2">
+                    <div className="ubr-action-bar">
                       <button
-                        className={`${BTN_PRIMARY} shrink-0 w-auto! whitespace-nowrap`}
+                        className="btn btn-primary"
                         onClick={handleProceedToPayment}
                         disabled={!selectedRecord && recordStatus !== "NOT_FOUND"}
                       >
@@ -1913,13 +2023,14 @@ export default function UnifiedBirthRegistry() {
                   </>
                 )}
 
+                {/* Step 2 — Review & Print */}
                 {step === "payment" && (
                   <>
-                    <div className="flex flex-col">
-                      <div className="px-3.5 pt-4 pb-3 flex flex-col gap-3.5 max-[900px]:px-3 max-[900px]:pt-3 max-[900px]:pb-2.25 max-[768px]:px-2.25 max-[768px]:pt-2.75 max-[768px]:pb-2.25 max-[480px]:px-2.25 max-[480px]:pt-2.25 max-[480px]:pb-1.75 max-[480px]:gap-2.25">
-                        <div className="pb-2.5 border-b border-(--border)">
-                          <div className="[font-family:var(--fh)] text-[clamp(13px,3vw,15px)] font-extrabold text-(--txt) mb-0.75 tracking-[-0.3px]">Review &amp; Print Document</div>
-                          <p className="text-[clamp(11px,2vw,12px)] text-(--txt2) m-0 leading-[1.6]">
+                    <div className="step-scroll">
+                      <div className="step-inner step-inner--pdf">
+                        <div className="page-hdr">
+                          <div className="page-hdr__title">Review &amp; Print Document</div>
+                          <p className="page-hdr__sub">
                             {isPositive
                               ? "Review the Live Birth Certificate below. Print the selected PDF before proceeding to release."
                               : "A Negative Certificate will be issued — no document on file for this record."}
@@ -1947,47 +2058,53 @@ export default function UnifiedBirthRegistry() {
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-1.75 px-4 py-2.5 border-t border-(--border) bg-(--surf-2) justify-end items-center shrink-0 flex-nowrap rounded-b-[9px] max-[768px]:px-2.75 max-[768px]:py-1.75 max-[768px]:gap-1.25 max-[480px]:px-2.25 max-[480px]:gap-2">
-                      <button className={`${BTN_SECONDARY} shrink-0 w-auto! whitespace-nowrap`} onClick={() => setStep("select")}>← Back</button>
-                      <button className={`${BTN_PRIMARY} shrink-0 w-auto! whitespace-nowrap`} onClick={handleConfirmPayment}>
+                    <div className="ubr-action-bar">
+                      <button className="btn btn-secondary" onClick={() => setStep("select")}>← Back</button>
+                      <button className="btn btn-primary" onClick={handleConfirmPayment}>
                         Proceed to Release →
                       </button>
                     </div>
                   </>
                 )}
 
+                {/* Step 3 — Release */}
                 {step === "releasing" && (
                   <>
-                    <div className="flex flex-col">
-                      <div className="px-2.25 pt-2.25 pb-1.75 flex flex-col gap-2.25 items-center max-[768px]:px-2.75 max-[768px]:pt-2.75 max-[768px]:pb-2.25 max-[900px]:px-3 max-[900px]:pt-3 max-[900px]:pb-2.25">
-                        <div className="flex flex-col items-center justify-center gap-3.5 py-9 px-5 text-center w-full max-[640px]:gap-2.75 max-[640px]:py-7 max-[640px]:px-3.5" style={{ animation: "releaseIn 0.45s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-                          <div className="release-ring relative w-21.5 h-21.5 flex items-center justify-center max-[640px]:w-18.5 max-[640px]:h-18.5">
-                            <div className="w-21.5 h-21.5 rounded-full flex items-center justify-center shadow-[0_8px_32px_rgba(5,150,105,0.30),0_2px_8px_rgba(5,150,105,0.18),inset_0_1px_0_rgba(255,255,255,0.20)] max-[640px]:w-18.5 max-[640px]:h-18.5" style={{ background: "linear-gradient(135deg,#059669 0%,#047857 60%,#065f46 100%)" }}>
-                              <span className="text-[34px] text-white leading-none font-black max-[640px]:text-[28px]">&#10003;</span>
+                    <div className="step-scroll">
+                      <div className="step-inner step-inner--centered">
+                        <div className="release-complete-wrap">
+                          <div className="release-complete__ring">
+                            <div className="release-complete__ring-inner">
+                              <span className="release-complete__check">&#10003;</span>
                             </div>
                           </div>
-                          <div className="[font-family:var(--fh)] text-[clamp(32px,7vw,48px)] font-extrabold leading-none tracking-[-2px] bg-clip-text text-transparent" style={{ backgroundImage: "linear-gradient(135deg,var(--green),#34d399)" }}>100%</div>
-                          <div className="[font-family:var(--fh)] text-[clamp(16px,3.5vw,20px)] font-extrabold text-(--txt) tracking-[-0.4px] m-0">Request Complete</div>
-                          <div className="text-[13px] text-(--txt2) max-w-70 leading-[1.65] m-0">
+                          <div className="release-complete__pct">100%</div>
+                          <div className="release-complete__title">Request Complete</div>
+                          <div className="release-complete__sub">
                             The document is ready for release to the requester.
                           </div>
-                          <div className="inline-flex items-center gap-1.75 px-4.5 py-1.75 rounded-[40px] bg-(--green-lt) border-[1.5px] border-(--green-bd) text-[12.5px] font-bold text-[#065f46] [font-family:var(--fh)] shadow-[0_2px_12px_rgba(5,150,105,0.12)]">
-                            <span className="w-2 h-2 rounded-full bg-(--green) shrink-0" style={{ animation: "dotBlink 1.4s ease-in-out infinite" }} />
+                          <div className="release-complete__badge">
+                            <span className="release-complete__badge-dot" />
                             Ready for Release
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-1.75 px-4 py-2.5 border-t border-(--border) bg-(--surf-2) justify-end items-center shrink-0 flex-nowrap rounded-b-[9px] max-[768px]:px-2.75 max-[768px]:py-1.75 max-[768px]:gap-1.25 max-[480px]:px-2.25 max-[480px]:gap-2">
+                    <div className="ubr-action-bar">
                       <button
-                        className={`${BTN_SECONDARY} shrink-0 w-auto! whitespace-nowrap`}
+                        className="btn btn-secondary"
                         onClick={() => setStep("payment")}
                         disabled={processing}
                       >
                         ← Back
                       </button>
+                      {/* FIX: only reset (i.e. clear the transaction and
+                          go back to Step 1) if the completion actually
+                          succeeded on the server — otherwise the admin
+                          would lose the selected record / negative-cert
+                          info for a payment that was never saved. */}
                       <button
-                        className={`${BTN_PRIMARY} shrink-0 w-auto! whitespace-nowrap min-w-32.5 max-[480px]:min-w-36.25`}
+                        className="btn btn-primary btn-primary--wide"
                         onClick={async () => {
                           const saved = await handleCompleteTransaction();
                           if (saved) resetTransaction();
@@ -1995,7 +2112,7 @@ export default function UnifiedBirthRegistry() {
                         disabled={processing}
                       >
                         {processing
-                          ? <><div className="w-3.25 h-3.25 border-2 border-white/25 border-t-white rounded-full animate-spin shrink-0" />&nbsp;Saving…</>
+                          ? <><div className="spinner spinner--sm" />&nbsp;Saving…</>
                           : "Release & New Transaction"}
                       </button>
                     </div>
@@ -2008,18 +2125,19 @@ export default function UnifiedBirthRegistry() {
         </div>
       )}
 
+      {/* ── Archive Tab ───────────────────────────────────────────────── */}
       {tab === "archive" && (
-        <div className="w-full px-4 pb-4 bg-(--bg) flex flex-col max-[768px]:px-2.75 max-[768px]:pb-2.75 max-[480px]:px-2.25 max-[480px]:pb-2.25">
+        <div className="tab-wrap">
           {!archiveUnlocked ? (
             <>
-              <div className="sticky top-13 z-80 bg-white border border-(--border-strong) rounded-t-[9px] px-3.5 py-2.5 flex items-center gap-2 flex-wrap w-full min-h-14 shadow-[0_1px_4px_rgba(0,0,0,0.05)] max-[768px]:static max-[768px]:px-2.75 max-[768px]:py-2.25 max-[768px]:min-h-0 max-[768px]:flex-wrap max-[768px]:gap-1.75">
-                <div className="w-7 h-7 bg-(--blue-lt) border-[1.5px] border-(--blue-bd) rounded-full flex items-center justify-center shrink-0 text-(--blue) max-[480px]:hidden"><IconArchive /></div>
-                <div>
-                  <h2 className="text-[clamp(12px,2.5vw,13px)] font-bold text-(--txt) m-0">Archived Birth Records</h2>
-                  <p className="text-[11px] text-(--txt2) mt-px mb-0">Upload, view, or permanently delete archived records.</p>
+              <div className="tab-hdr">
+                <div className="tab-hdr__icon"><IconArchive /></div>
+                <div className="tab-hdr__info">
+                  <h2>Archived Birth Records</h2>
+                  <p>Upload, view, or permanently delete archived records.</p>
                 </div>
               </div>
-              <div className="bg-white rounded-b-[9px] border border-t-0 border-(--border-strong) shadow-(--shadow-sm) w-full overflow-hidden">
+              <div className="tab-card">
                 <PasswordGate
                   module="archive_birth"
                   description="The Archive section is restricted to authorized personnel. Enter the administrator password to upload, view, or delete records."
@@ -2030,19 +2148,19 @@ export default function UnifiedBirthRegistry() {
             </>
           ) : (
             <>
-              <div className="sticky top-13 z-80 bg-white border border-(--border-strong) rounded-t-[9px] px-3.5 py-2.5 flex items-center gap-2 flex-wrap w-full min-h-14 shadow-[0_1px_4px_rgba(0,0,0,0.05)] max-[768px]:static max-[768px]:px-2.75 max-[768px]:py-2.25 max-[768px]:min-h-0 max-[768px]:flex-wrap max-[768px]:gap-1.75">
-                <div className="w-7 h-7 bg-(--blue-lt) border-[1.5px] border-(--blue-bd) rounded-full flex items-center justify-center shrink-0 text-(--blue) max-[480px]:hidden"><IconArchive /></div>
-                <div>
-                  <h2 className="text-[clamp(12px,2.5vw,13px)] font-bold text-(--txt) m-0">Archived Records</h2>
-                  {!isMobile && <p className="text-[11px] text-(--txt2) mt-px mb-0">Upload new records, or view and permanently delete archived records.</p>}
+              <div className="tab-hdr">
+                <div className="tab-hdr__icon"><IconArchive /></div>
+                <div className="tab-hdr__info">
+                  <h2>Archived Records</h2>
+                  {!isMobile && <p>Upload new records, or view and permanently delete archived records.</p>}
                 </div>
-                <div className="flex-1 min-w-0 max-[768px]:hidden" />
-                <button className="inline-flex items-center gap-1 bg-[#2563eb]! text-white! px-2.75 py-1.25 rounded-[7px] cursor-pointer text-xs font-semibold [font-family:var(--f)] border-0 shrink-0 shadow-[0_2px_8px_rgba(37,99,235,0.22)] transition-all duration-150 whitespace-nowrap touch-manipulation hover:bg-[#1d4ed8]! hover:-translate-y-px max-[768px]:ml-auto max-[480px]:text-[11.5px] max-[480px]:px-2.25 max-[480px]:py-1" onClick={() => setShowUploadModal(true)}>
+                <div className="tab-hdr__space" />
+                <button className="upload-btn" onClick={() => setShowUploadModal(true)}>
                   <IconUpload />
                   {isMobile ? "Upload" : "Upload PDF"}
                 </button>
-                <div className="relative w-52.5 shrink-0 min-w-0 max-[900px]:w-45 max-[768px]:w-full">
-                  <span className="absolute left-1.75 top-1/2 -translate-y-1/2 text-[11px] opacity-35 pointer-events-none flex items-center text-(--txt)"><IconSearch /></span>
+                <div className="srch-wrap">
+                  <span className="srch-icon"><IconSearch /></span>
                   <input
                     id="archive-search"
                     name="archiveSearch"
@@ -2050,28 +2168,28 @@ export default function UnifiedBirthRegistry() {
                     value={archiveSearch}
                     onChange={(e) => setArchiveSearch(e.target.value)}
                     placeholder="Search archived…"
-                    className="w-full py-1.25 pl-6.5 pr-2.25 text-[12.5px] border border-(--border-strong) rounded-[7px] bg-(--surf-2) text-(--txt) outline-none [font-family:var(--f)] transition-[border-color,background] duration-150 [-webkit-appearance:none] focus:border-(--blue) focus:bg-white focus:shadow-[0_0_0_3px_rgba(37,99,235,0.10)]"
+                    className="srch-input"
                   />
                 </div>
               </div>
-              <div className="bg-white rounded-b-[9px] border border-t-0 border-(--border-strong) shadow-(--shadow-sm) w-full overflow-hidden">
+              <div className="tab-card">
                 {loadingRecords ? (
-                  <div className="p-8 text-center text-[13px] text-(--txt3) flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-(--blue-md) border-t-(--blue) rounded-full animate-spin" />
+                  <div className="tbl-loading">
+                    <div className="spinner" />
                     <span>Loading archived records…</span>
                   </div>
                 ) : filteredArchived.length === 0 ? (
-                  <div className="py-9 px-4.5 text-center text-(--txt3)">
-                    <span className="text-[30px] opacity-20 flex items-center justify-center mx-auto mb-2 text-(--txt3)"><IconFolder /></span>
-                    <div className="font-semibold text-[13px] text-(--txt2)">No Archived Records Found</div>
-                    <div className="text-xs mt-0.75">
+                  <div className="tbl-empty">
+                    <span className="tbl-empty__icon"><IconFolder /></span>
+                    <div className="tbl-empty__title">No Archived Records Found</div>
+                    <div className="tbl-empty__sub">
                       {archiveSearch
                         ? "No records match your search."
                         : "No records have been archived yet. Use the Upload button above to add new records."}
                     </div>
                   </div>
                 ) : useCards ? (
-                  <div className="flex flex-col">
+                  <div className="mobile-records-list">
                     {filteredArchived.map((r, i) => (
                       <MobileRecordCardArchive
                         key={r.id}
@@ -2083,33 +2201,33 @@ export default function UnifiedBirthRegistry() {
                     ))}
                   </div>
                 ) : (
-                  <div className="w-full overflow-x-auto overflow-y-auto [-webkit-overflow-scrolling:touch] max-h-[calc(100vh-var(--home-topbar-height)-52px-56px-30px)] relative bg-white ubr-scroll max-[1024px]:max-h-[calc(100vh-var(--home-topbar-height)-180px)] max-[768px]:max-h-none max-[768px]:overflow-y-visible">
-                    <table className="w-full border-separate [border-spacing:0] text-[12.5px] min-w-140 bg-white">
+                  <div className="tbl-wrap">
+                    <table className="tbl">
                       <thead>
-                        <tr className="bg-(--surf-2)">
-                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">#</th>
-                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">Name</th>
-                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">Father / Mother</th>
-                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">Archived Date</th>
-                          <th className="sticky top-0 z-20 px-2.75 py-2.25 text-left font-bold text-[9.5px] text-(--txt3) tracking-[0.5px] uppercase whitespace-nowrap bg-(--surf-2) border-b border-(--border-strong) shadow-[0_1px_0_var(--border)] max-[768px]:static">Actions</th>
+                        <tr>
+                          <th>#</th>
+                          <th>Name</th>
+                          <th>Father / Mother</th>
+                          <th>Archived Date</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredArchived.map((r, i) => (
-                          <tr key={r.id} className="border-b border-(--border-lt) transition-colors duration-150 hover:bg-(--surf-2)">
-                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt3) text-[11px] w-8">{i + 1}</td>
-                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt)">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[14px] shrink-0 flex items-center text-(--txt3)"><IconDocument /></span>
-                                <span className="font-semibold text-(--txt) text-[12.5px]">{getRecordDisplayName(r)}</span>
+                          <tr key={r.id}>
+                            <td className="tbl-num">{i + 1}</td>
+                            <td>
+                              <div className="tbl-file">
+                                <span className="tbl-file__icon"><IconDocument /></span>
+                                <span className="tbl-file-name">{getRecordDisplayName(r)}</span>
                               </div>
                             </td>
-                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt)"><RelativesChips record={r} /></td>
-                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt2) text-[11.5px] whitespace-nowrap">{formatDate(r.archived_at)}</td>
-                            <td className="px-2.75 py-2 align-middle bg-transparent text-(--txt)">
-                            <div className="flex gap-0.75 flex-wrap items-center">
-                                <button className="inline-flex items-center gap-0.75 px-2.25 py-1 rounded-[5px] border-0 text-white! text-[11px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation bg-[#2563eb]! hover:brightness-90 hover:-translate-y-px" onClick={() => handleViewPdf(r.id, r)}>View</button>
-                                <button className="inline-flex items-center gap-0.75 px-2.25 py-1 rounded-[5px] border-0 text-white! text-[11px] font-semibold cursor-pointer [font-family:var(--f)] transition-all duration-150 whitespace-nowrap touch-manipulation bg-[#dc2626]! hover:brightness-90 hover:-translate-y-px" onClick={() => handleDelete(r.id, r)}>Delete</button>
+                            <td><RelativesChips record={r} /></td>
+                            <td className="tbl-date">{formatDate(r.archived_at)}</td>
+                            <td>
+                              <div className="tbl-acts">
+                                <button className="tbl-btn tbl-btn--blue" onClick={() => handleViewPdf(r.id, r)}>View</button>
+                                <button className="tbl-btn tbl-btn--red"  onClick={() => handleDelete(r.id, r)}>Delete</button>
                               </div>
                             </td>
                           </tr>
