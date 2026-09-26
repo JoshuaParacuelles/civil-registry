@@ -58,17 +58,17 @@ const API_BASE = "";
 const MODULE_CONFIGS = {
   archiveBirth: {
     label: "Archive Birth",
-    endpoint: `${API_BASE}/api/change-module-password`,
+    endpoint: `${API_BASE}/api/birth/change-module-password`,
     moduleKey: "archive_birth",
   },
   marriageArchive: {
     label: "Marriage Archive",
-    endpoint: `${API_BASE}/api/change-module-password`,
+    endpoint: `${API_BASE}/api/marriage/change-module-password`,
     moduleKey: "archive_marriage",
   },
   deathArchive: {
     label: "Death Archive",
-    endpoint: `${API_BASE}/api/change-module-password`,
+    endpoint: `${API_BASE}/api/death/change-module-password`,
     moduleKey: "archive_death",
   },
 };
