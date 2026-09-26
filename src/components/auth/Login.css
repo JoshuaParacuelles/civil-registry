@@ -1,25 +1,33 @@
-/* ── Reset / Base ── */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-/* ════════════════════════════════════
-   PAGE SHELL
-════════════════════════════════════ */
 .login-page {
   width: 100%;
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   overflow: hidden;
   position: relative;
 }
 
-/* ════════════════════════════════════
-   RIGHT PANEL — full-bleed image (sits behind)
-════════════════════════════════════ */
+.login-topbar {
+  width: 100%;
+  height: 6px;
+  background: #2b1d14;
+  flex-shrink: 0;
+}
+
+.login-body {
+  flex: 1;
+  display: flex;
+  position: relative;
+  min-height: 0;
+}
+
 .login-right {
   position: absolute;
   inset: 0;
@@ -29,12 +37,9 @@
 .login-right-bg {
   position: absolute;
   inset: 0;
-  /* Zoomed past 100% to crop out the white/gray margin
-     baked into the source photo (home.jpg) */
   background-size: 100% auto;
   background-position: 65% 55%;
   margin-left: 45%;
-
 }
 
 .login-right-overlay {
@@ -43,21 +48,11 @@
   background: rgba(0, 0, 0, 0.18);
 }
 
-/* ════════════════════════════════════
-   LEFT PANEL — white form with S-curve edge
-
-   Panel is 55vw wide.
-   S-curve center at 50vw = 50/55 ≈ 90.91% of panel.
-
-   Cubic bezier bows:
-     +0.073 outward (right) at 25% height
-     -0.073 inward  (left)  at 75% height
-════════════════════════════════════ */
 .login-left {
   position: relative;
   z-index: 2;
   width: 55%;
-  min-height: 100vh;
+  min-height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,7 +64,6 @@
 .login-left-inner {
   width: 100%;
   max-width: 360px;
-  /* keep form content comfortably left of the S-curve */
   margin-right: 48px;
   animation: fadeInLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -79,7 +73,6 @@
   to   { opacity: 1; transform: translateX(0); }
 }
 
-/* ── Logo ── */
 .login-logo {
   width: 68px;
   height: 68px;
@@ -90,7 +83,6 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-/* ── Header ── */
 .login-header {
   text-align: center;
   margin-bottom: 32px;
@@ -118,7 +110,6 @@
   width: 80px;
 }
 
-/* ── Lock Banner ── */
 .lock-banner {
   display: flex;
   align-items: center;
@@ -134,7 +125,6 @@
   font-weight: 600;
 }
 
-/* ── Shake ── */
 .shake-wrapper {
   display: flex;
   flex-direction: column;
@@ -154,7 +144,6 @@
   animation: shake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
-/* ── Input Group ── */
 .input-group {
   display: flex;
   align-items: center;
@@ -180,7 +169,6 @@
   box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
 }
 
-/* ── Floating Label ── */
 .floating-label {
   position: absolute;
   left: 44px;
@@ -216,7 +204,6 @@
   background: #ffffff;
 }
 
-/* ── Input ── */
 .input-group input {
   flex: 1;
   border: none;
@@ -237,7 +224,6 @@
   transition: background-color 5000s ease-in-out 0s;
 }
 
-/* ── Left Icon ── */
 .icon-left {
   display: flex;
   align-items: center;
@@ -252,7 +238,6 @@
 .input-group:focus-within .icon-left { color: #1a73e8; }
 .input-group.input-locked .icon-left { color: #e74c3c; }
 
-/* ── Eye Icon ── */
 .password-group .icon-right {
   position: absolute;
   right: 10px;
@@ -272,7 +257,6 @@
   color: #374151;
 }
 
-/* ── Login Button ── */
 .login-btn {
   width: 100%;
   margin-top: 6px;
@@ -307,7 +291,7 @@
 }
 
 .login-btn.btn-locked:hover { opacity: 1; transform: none; }
-/* ── Login Button (loading state) ── */
+
 .login-btn.btn-loading {
   cursor: wait;
   opacity: 1;
@@ -321,7 +305,6 @@
   50%      { box-shadow: 0 4px 22px rgba(26, 115, 232, 0.6); }
 }
 
-/* subtle shimmer sweep across the button while loading */
 .login-btn.btn-loading::before {
   content: "";
   position: absolute;
@@ -341,7 +324,6 @@
   100% { background-position: -50% 0; }
 }
 
-/* ── Spinner (dual-tone, smoother easing) ── */
 .spinner {
   display: inline-block;
   width: 18px;
@@ -359,11 +341,7 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
-@keyframes spin { to { transform: rotate(360deg); } }
 
-/* ════════════════════════════════════
-   TOAST SYSTEM
-════════════════════════════════════ */
 .toast-wrap {
   position: fixed;
   top: 20px;
@@ -445,22 +423,11 @@
 input[type="password"]::-ms-reveal,
 input[type="password"]::-ms-clear { display: none; }
 
-/* ════════════════════════════════════
-   RESPONSIVE — mobile stacked
-════════════════════════════════════ */
 @media (max-width: 768px) {
   .login-page {
-    flex-direction: column;
-    /* FIX: flat white page background on mobile, so nothing but the
-       form panel is ever visible (see .login-right below). */
     background: #ffffff;
   }
 
-  /* FIX: the background photo panel used to stay visible (position:
-     absolute; inset: 0) behind/around the curved form panel on
-     mobile, bleeding through at the top corners where the wave
-     clip-path exposes it. Hiding it entirely keeps mobile fully
-     white, matching the reference layout. */
   .login-right {
     display: none;
   }
@@ -468,7 +435,6 @@ input[type="password"]::-ms-clear { display: none; }
   .login-left {
     width: 100%;
     min-height: auto;
-    /* on mobile: simple bottom wave instead of S-curve */
     clip-path: ellipse(110% 100% at 50% 0%);
     padding: 48px 28px 80px;
   }
@@ -478,9 +444,6 @@ input[type="password"]::-ms-clear { display: none; }
     margin-right: 0;
   }
 
-  /* FIX: notification moved from the bottom of the screen to the
-     upper-right corner (matching the desktop position), instead of
-     stretching full-width across the bottom. */
   .toast-wrap {
     top: 20px;
     bottom: auto;
@@ -489,11 +452,6 @@ input[type="password"]::-ms-clear { display: none; }
   }
 
   .toast {
-    /* FIX: previously stretched edge-to-edge (width: 100%), which
-       also made the corner radius look uneven/square-ish at the
-       right edge since the box had no room to actually curve.
-       Capping the width and rounding all four corners equally
-       fixes both the width and the right-corner appearance. */
     min-width: 0;
     max-width: min(340px, calc(100vw - 40px));
     width: auto;

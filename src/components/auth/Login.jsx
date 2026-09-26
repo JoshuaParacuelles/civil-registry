@@ -6,25 +6,8 @@ import "./Login.css";
 import bgImage from "../../assets/home.jpg";
 import loginLogo from "../../assets/scc.png";
 
-// BUG FIX: this was hardcoded to the absolute Render URL
-// ("https://civil-registry.onrender.com"), which made every login
-// request cross-origin/cross-site relative to the page — even in local
-// dev, since it pointed at the deployed backend instead of localhost.
-// That meant the session cookie Set-Cookie'd back by the login response
-// was a third-party cookie from the browser's point of view, which
-// modern browsers block or drop by default. The result: login appeared
-// to succeed, but the cookie never actually stuck, so the very next
-// /api/session check (in PermissionContext) came back unauthenticated
-// and bounced the user straight back to the login page.
-//
-// Relative by default — same pattern as PermissionContext.jsx. In local
-// dev this goes through the Vite proxy to localhost:5000; in production
-// it goes through the vercel.json rewrite to the Render backend. Either
-// way the request stays same-origin from the browser's perspective, so
-// the cookie is set and sent as first-party.
 const API = import.meta.env.VITE_API_BASE_URL || "";
 
-/* ── Icons ─────────────────────────────────────────────────────── */
 const UserIcon = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -66,13 +49,6 @@ const LockFilledIcon = () => (
   </svg>
 );
 
-/* ── Lock countdown formatting ───────────────────────────────────
-   Backend sends lock_seconds_remaining (an integer, from
-   compute_lock_status() in login.py). Format it the way that reads
-   best at each scale:
-     < 1 hour  -> "4:59"        (mm:ss, always 2-digit seconds)
-     >= 1 hour -> "23h 59m 12s" (the 24h tier)
-   ────────────────────────────────────────────────────────────────── */
 function formatLockCountdown(totalSeconds) {
   const s = Math.max(0, Math.floor(totalSeconds));
 
@@ -88,7 +64,6 @@ function formatLockCountdown(totalSeconds) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-/* ── Toast System ────────────────────────────────────────────────── */
 let _toastSetters = [];
 
 function useToasts() {
@@ -171,59 +146,6 @@ function Toast({ id, title, message, duration = 5000, success = true }) {
   );
 }
 
-/* ── Mobile-only style override ──────────────────────────────────
-   Requested fix: on mobile the page must be fully white (no bleed-
-   through from the .login-right background photo behind the curve)
-   and the toast must anchor to the UPPER-RIGHT corner — same as
-   desktop — instead of stretching across the bottom of the screen.
-
-   This is kept here (rather than only in Login.css) because the
-   CSS-only version wasn't reliably taking effect. Rendering it as a
-   <style> tag inside the component guarantees it loads after
-   Login.css, and the `!important`s make the override unambiguous
-   regardless of import/cache order. It only targets the existing
-   `≤768px` mobile breakpoint, so the desktop layout (S-curve,
-   background photo, top-right toast) is completely unaffected.
-   ────────────────────────────────────────────────────────────────── */
-const MobileOverrideStyles = () => (
-  <style>{`
-    @media (max-width: 768px) {
-      /* Hide the background photo panel entirely so nothing shows
-         through behind the curved/white form panel. */
-      .login-right {
-        display: none !important;
-      }
-
-      /* Make sure the page shell and the form panel are both a flat,
-         completely white background. */
-      .login-page {
-        background: #ffffff !important;
-      }
-
-      .login-left {
-        background: #ffffff !important;
-      }
-
-      /* Anchor the toast to the upper-right corner, matching the
-         desktop position, instead of stretching across the bottom. */
-      .toast-wrap {
-        top: 20px !important;
-        bottom: auto !important;
-        right: 20px !important;
-        left: auto !important;
-      }
-
-      .toast {
-        min-width: 0 !important;
-        max-width: min(340px, calc(100vw - 40px)) !important;
-        width: auto !important;
-        border-radius: 10px !important;
-      }
-    }
-  `}</style>
-);
-
-/* ── Main Component ──────────────────────────────────────────────── */
 const Login = () => {
   const [username, setUsername]         = useState("");
   const [password, setPassword]         = useState("");
@@ -231,22 +153,15 @@ const Login = () => {
   const [loading, setLoading]           = useState(false);
   const [isLocked, setIsLocked]         = useState(false);
 
-  // Live countdown for a temporary lockout. Seeded from the backend's
-  // `lock_seconds_remaining` (see compute_lock_status() in login.py) and
-  // ticks down client-side every second purely for display — the actual
-  // unlock is always re-checked against the server on the next submit,
-  // this timer never unlocks anything by itself.
   const [lockSecondsRemaining, setLockSecondsRemaining] = useState(0);
   const countdownRef = useRef(null);
 
   useEffect(() => {
-    // If already authenticated, route directly
     if (sessionStorage.getItem("isAuthenticated") === "true") {
       window.location.href = "/dashboard";
     }
   }, []);
 
-  // Tick the countdown down once a lock is active.
   useEffect(() => {
     if (!isLocked || lockSecondsRemaining <= 0) {
       clearInterval(countdownRef.current);
@@ -257,10 +172,6 @@ const Login = () => {
       setLockSecondsRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(countdownRef.current);
-          // Countdown hit zero — let the person try again. The next
-          // /api/login call is still the real source of truth; if the
-          // backend clock disagrees (e.g. this tab was asleep), it will
-          // just re-lock with a fresh, accurate remaining time.
           setIsLocked(false);
           return 0;
         }
@@ -292,13 +203,11 @@ const Login = () => {
         const userObj = response.data.user || {};
         const loggedUsername = userObj.username || username;
 
-        // Persist session flags explicitly
         sessionStorage.setItem("isAuthenticated", "true");
         sessionStorage.setItem("username", loggedUsername);
 
         pushToast({ title: "Login successful!", message: msg, success: true, duration: 2000 });
 
-        // Direct window refresh-navigation to trigger context re-mount
         setTimeout(() => {
           window.location.href = "/dashboard";
         }, 400);
@@ -331,110 +240,112 @@ const Login = () => {
 
   return (
     <div className="login-page">
-      <MobileOverrideStyles />
+      <div className="login-topbar" />
 
       <ToastContainer />
 
-      <svg width="0" height="0" style={{ position: "absolute" }}>
-        <defs>
-          <clipPath id="loginCurve" clipPathUnits="objectBoundingBox">
-            <path d="M 0 0 L 0.9091 0 C 0.9821 0.25, 0.8361 0.75, 0.9091 1 L 0 1 Z" />
-          </clipPath>
-        </defs>
-      </svg>
+      <div className="login-body">
+        <svg width="0" height="0" style={{ position: "absolute" }}>
+          <defs>
+            <clipPath id="loginCurve" clipPathUnits="objectBoundingBox">
+              <path d="M 0 0 L 0.95 0 L 0.75 1 L 0 1 Z" />
+            </clipPath>
+          </defs>
+        </svg>
 
-      <div className="login-right">
-        <div className="login-right-bg" style={{ backgroundImage: `url(${bgImage})` }} />
-        <div className="login-right-overlay" />
-      </div>
+        <div className="login-right">
+          <div className="login-right-bg" style={{ backgroundImage: `url(${bgImage})` }} />
+          <div className="login-right-overlay" />
+        </div>
 
-      <div className="login-left">
-        <div className="login-left-inner">
-          <div className="shake-wrapper">
-            <img src={loginLogo} alt="City of San Carlos Logo" className="login-logo" />
+        <div className="login-left">
+          <div className="login-left-inner">
+            <div className="shake-wrapper">
+              <img src={loginLogo} alt="City of San Carlos Logo" className="login-logo" />
 
-            <div className="login-header">
-              <h2>Local Civil Registrar</h2>
-              <hr />
-            </div>
-
-            {isLocked && (
-              <div className="lock-banner">
-                <LockFilledIcon />
-                <span>
-                  Account temporarily locked
-                  {lockSecondsRemaining > 0 && (
-                    <>
-                      {" "}— try again in{" "}
-                      <span className="lock-countdown">
-                        {formatLockCountdown(lockSecondsRemaining)}
-                      </span>
-                    </>
-                  )}
-                </span>
-              </div>
-            )}
-
-            <form onSubmit={handleLogin}>
-              <div className={`input-group${isLocked ? " input-locked" : ""}${username ? " has-value" : ""}`}>
-                <span className="icon-left"><UserIcon /></span>
-                <label className="floating-label" htmlFor="login-username">Username</label>
-                <input
-                  id="login-username"
-                  name="username"
-                  type="text"
-                  placeholder="Username"
-                  value={username}
-                  onChange={(e) => { setUsername(e.target.value); setIsLocked(false); }}
-                  required
-                  autoComplete="username"
-                  disabled={loading}
-                />
+              <div className="login-header">
+                <h2>Local Civil Registrar</h2>
+                <hr />
               </div>
 
-              <div className={`input-group password-group${isLocked ? " input-locked" : ""}${password ? " has-value" : ""}`}>
-                <span className="icon-left"><LockIcon /></span>
-                <label className="floating-label" htmlFor="login-password">Password</label>
-                <input
-                  id="login-password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setIsLocked(false); }}
-                  required
-                  autoComplete="current-password"
-                  disabled={loading}
-                />
-                <span
-                  className="icon-right"
-                  onClick={() => setShowPassword((p) => !p)}
-                  role="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+              {isLocked && (
+                <div className="lock-banner">
+                  <LockFilledIcon />
+                  <span>
+                    Account temporarily locked
+                    {lockSecondsRemaining > 0 && (
+                      <>
+                        {" "}— try again in{" "}
+                        <span className="lock-countdown">
+                          {formatLockCountdown(lockSecondsRemaining)}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              <form onSubmit={handleLogin}>
+                <div className={`input-group${isLocked ? " input-locked" : ""}${username ? " has-value" : ""}`}>
+                  <span className="icon-left"><UserIcon /></span>
+                  <label className="floating-label" htmlFor="login-username">Username</label>
+                  <input
+                    id="login-username"
+                    name="username"
+                    type="text"
+                    placeholder="Username"
+                    value={username}
+                    onChange={(e) => { setUsername(e.target.value); setIsLocked(false); }}
+                    required
+                    autoComplete="username"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className={`input-group password-group${isLocked ? " input-locked" : ""}${password ? " has-value" : ""}`}>
+                  <span className="icon-left"><LockIcon /></span>
+                  <label className="floating-label" htmlFor="login-password">Password</label>
+                  <input
+                    id="login-password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setIsLocked(false); }}
+                    required
+                    autoComplete="current-password"
+                    disabled={loading}
+                  />
+                  <span
+                    className="icon-right"
+                    onClick={() => setShowPassword((p) => !p)}
+                    role="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                  </span>
+                </div>
+
+                <button
+                  type="submit"
+                  className={`login-btn${loading ? " btn-loading" : ""}${isLocked ? " btn-locked" : ""}`}
+                  disabled={loading || isLocked}
                 >
-                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                </span>
-              </div>
-
-              <button
-                type="submit"
-                className={`login-btn${loading ? " btn-loading" : ""}${isLocked ? " btn-locked" : ""}`}
-                disabled={loading || isLocked}
-              >
-               {loading ? (
-  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-    <span className="spinner" />
-    Logging in…
-  </span>
-) : isLocked ? (
-  lockSecondsRemaining > 0
-    ? `Account Locked (${formatLockCountdown(lockSecondsRemaining)})`
-    : "Account Locked"
-) : (
-  "Log in"
-)}
-              </button>
-            </form>
+                  {loading ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <span className="spinner" />
+                      Logging in…
+                    </span>
+                  ) : isLocked ? (
+                    lockSecondsRemaining > 0
+                      ? `Account Locked (${formatLockCountdown(lockSecondsRemaining)})`
+                      : "Account Locked"
+                  ) : (
+                    "Log in"
+                  )}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </div>
