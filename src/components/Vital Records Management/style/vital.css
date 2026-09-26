@@ -386,7 +386,7 @@
   height: 34px;
   padding: 0 14px;
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: 999px;   /* was: var(--r-sm) */
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -576,19 +576,12 @@
   margin-top: 2px;
 }
 
-/* FIX: .search-btn previously had no `display: inline-flex`, so the
-   `justify-content: center` rule set for it in the 480px media query
-   below had no effect (justify-content only works on a flex/grid
-   container) and its text centering wasn't guaranteed to match every
-   other button in the app. Adding display/align-items/justify-content
-   here makes it behave exactly like the rest of the button set — same
-   centering, same shape — on every screen size. */
-/* .search-btn — primary action for this form (kept primary blue). */
+
 .search-btn {
   height: 36px;
   padding: 0 18px;
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: 999px;   /* was: var(--r-sm) */
   background: #2563eb !important;
   color: #fff !important;
   font-size: 12.5px;
@@ -757,7 +750,7 @@
   gap: 4px;
   min-width: 80px;
   padding: 5px 12px;
-  border-radius: 5px;
+  border-radius: 999px;
   border: 1.5px solid #2563eb;
   background: #2563eb !important;
   color: #fff !important;
@@ -783,23 +776,10 @@
 }
 .view-pdf-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-/* FIX: .select-btn sits directly beside .view-pdf-btn in every result
-   row but was missing display: inline-flex / align-items / justify-content
-   / flex-shrink that .view-pdf-btn has. Both buttons share near-identical
-   padding/border/font-size, so this was a subtle inconsistency rather than
-   a dramatic visual break, but it meant the pair's height/centering could
-   drift apart depending on font rendering, and .select-btn had no
-   protection from being squeezed at tight widths. Matching the two
-   buttons' box model exactly keeps their shape and size perfectly
-   consistent on every screen size. min-width/padding are now identical to
-   .view-pdf-btn so the pair reads as one consistent button group. */
-/* .select-btn — a positive/confirming action (choosing a record to work
-   with). Changed from blue to green so "Select" reads distinctly from
-   "View" while still following the same shape/sizing rules. */
 .select-btn {
   min-width: 80px;
   padding: 5px 12px;
-  border-radius: 5px;
+  border-radius: 999px;
   border: 1.5px solid #059669;
   background: #059669 !important;
   color: #fff !important;
@@ -841,7 +821,7 @@
    as a distinct, deliberate branch rather than a routine primary action. */
 .neg-btn {
   padding: 7px 14px;
-  border-radius: 5px;
+  border-radius: 999px;
   border: 1.5px solid rgba(217,119,6,0.35);
   background: #d97706 !important;
   color: #fff !important;
@@ -1055,22 +1035,9 @@
 }
 .modal-box h3 { margin: 0 0 7px; font-size: 15px; font-weight: 700; color: var(--txt); font-family: var(--fh); }
 .modal-box p  { margin: 0 0 16px; font-size: 12.5px; color: var(--txt2); line-height: 1.6; }
-/* FIX (button-shape bug): this row previously had no align-items, so it
-   defaulted to the browser's initial "stretch" behavior. Whenever the
-   modal message text wrapped or a sibling button/element in this row
-   was taller than usual, every .btn / .modal-cancel / .modal-confirm
-   button in the row was silently stretched to match that height —
-   turning a normal ~34px pill button into a tall, misshapen rectangle,
-   with no code change required to trigger it (just different content).
-   This reproduces at any screen width, including normal desktop sizes,
-   because the modal's max-width is fixed regardless of viewport.
-   Adding align-items: center locks every button in this row back to
-   its natural, consistent height/shape. */
+
 .modal-acts   { display: flex; gap: 7px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
 
-/* .modal-cancel — neutral/low-emphasis action (dismiss without acting).
-   Changed from solid blue to a quiet outlined/neutral style so it never
-   competes visually with the modal's actual confirm action. */
 .modal-cancel {
   padding: 7px 14px;
   border-radius: var(--r-sm);
