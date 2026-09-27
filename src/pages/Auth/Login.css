@@ -21,8 +21,6 @@
   z-index: 3;
 }
 
-/* ---------- Full-bleed background ---------- */
-
 .login-body {
   flex: 1;
   position: relative;
@@ -52,8 +50,6 @@
   );
   z-index: 1;
 }
-
-/* ---------- Card ---------- */
 
 .login-card {
   position: relative;
@@ -150,8 +146,6 @@
 .shake-wrapper.shake {
   animation: shake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
-
-/* ---------- Inputs ---------- */
 
 .input-group {
   display: flex;
@@ -266,8 +260,6 @@
   color: #374151;
 }
 
-/* ---------- Button ---------- */
-
 .login-btn {
   width: 100%;
   padding: 14px;
@@ -352,8 +344,6 @@
   to { transform: rotate(360deg); }
 }
 
-/* ---------- Footer note ---------- */
-
 .login-footnote {
   text-align: center;
   font-size: 12px;
@@ -361,30 +351,30 @@
   margin-top: 24px;
 }
 
-/* ---------- Toasts ---------- */
-
 .toast-wrap {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 9999;
+  position: fixed !important;
+  top: 12px;
+  right: 12px;
+  left: auto;
+  bottom: auto;
+  z-index: 99999;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   pointer-events: none;
 }
 
 .toast {
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  padding: 14px 16px;
-  min-width: 280px;
-  max-width: 360px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 10px 12px;
+  min-width: 220px;
+  max-width: 280px;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
   pointer-events: all;
   animation: slideInRight 0.35s cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
@@ -392,33 +382,33 @@
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(60px); }
+  from { opacity: 0; transform: translateX(50px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
 .toast.hiding { animation: slideOutRight 0.3s ease forwards; }
 
-@keyframes slideOutRight { to { opacity: 0; transform: translateX(60px); } }
+@keyframes slideOutRight { to { opacity: 0; transform: translateX(50px); } }
 
-.toast-icon { width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; }
+.toast-icon { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
 
 .toast-body { flex: 1; }
 
 .toast-title {
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   font-weight: 600;
   color: #111827;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
-.toast-msg { font-size: 0.75rem; color: #6b7280; line-height: 1.5; }
+.toast-msg { font-size: 0.7rem; color: #6b7280; line-height: 1.4; }
 
 .toast-close {
   background: none;
   border: none;
   cursor: pointer;
   color: #9ca3af;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1;
   padding: 0;
   flex-shrink: 0;
@@ -428,7 +418,7 @@
 .toast-close:hover { color: #111827; }
 
 .toast-progress {
-  height: 3px;
+  height: 2px;
   background: #f3f4f6;
   position: absolute;
   bottom: 0;
@@ -444,25 +434,40 @@
 input[type="password"]::-ms-reveal,
 input[type="password"]::-ms-clear { display: none; }
 
-/* ---------- Responsive ---------- */
+@media (max-width: 640px) {
+  .login-body {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+  }
 
-@media (max-width: 480px) {
-  .login-body { padding: 28px 16px; }
+  .login-bg,
+  .login-bg-overlay {
+    display: none;
+  }
 
   .login-card {
-    padding: 36px 24px 28px;
-    border-radius: 16px;
+    width: 100%;
+    max-width: none;
+    min-height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 48px 28px;
+    animation: none;
   }
 
   .toast-wrap {
-    top: 16px;
-    right: 16px;
-    left: 16px;
+    top: 10px;
+    right: 10px;
+    left: auto;
   }
 
   .toast {
     min-width: 0;
-    max-width: none;
+    max-width: 240px;
     width: auto;
   }
 }

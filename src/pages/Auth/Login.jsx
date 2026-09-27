@@ -87,10 +87,19 @@ function removeToast(id) {
   _toastSetters.forEach((set) => set((prev) => prev.filter((t) => t.id !== id)));
 }
 
+const TOAST_WRAP_STYLE = {
+  position: "fixed",
+  top: "12px",
+  right: "12px",
+  left: "auto",
+  bottom: "auto",
+  zIndex: 999999,
+};
+
 function ToastContainer() {
   const toasts = useToasts();
   return ReactDOM.createPortal(
-    <div className="toast-wrap">
+    <div className="toast-wrap" style={TOAST_WRAP_STYLE}>
       {toasts.map((t) => (
         <Toast key={t.id} {...t} />
       ))}
