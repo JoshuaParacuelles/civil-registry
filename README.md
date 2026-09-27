@@ -1,16 +1,21 @@
-# React + Vite
+# Civil Registry Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Project notes
 
-Currently, two official plugins are available:
+### Shared asset policy
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This app keeps static assets that need a stable URL in `public/` (for example, the favicon or other files referenced directly from `index.html` or by absolute URL). Component-scoped images should be imported from `src/assets` so Vite can process and hash them during the build.
 
-## React Compiler
+`dist/` is a generated Vite build artifact and should not be committed. The repo is configured to ignore it via `.gitignore`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### VitalRecords styling
 
-## Expanding the ESLint configuration
+The Birth, Death, and Marriage verifier screens intentionally share a single stylesheet at `src/pages/VitalRecords/VitalRecords.css`. This is not an oversight: each screen imports the same parent stylesheet instead of maintaining separate CSS files for the common layout and print styles.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Reusable UI and helper structure
+
+`src/components` is reserved for shared UI pieces such as buttons, modals, sidebars, or nav elements once they are extracted from page-level code. `src/hooks` and `src/utils` are the intended home for custom hooks and helper logic as the app grows.
+
+### Vite dist vs root HTML
+
+The root `index.html` is the app template used by Vite during local development, while `dist/index.html` is the generated production build output. Both are expected to coexist during development/builds, and the build output should remain untracked.

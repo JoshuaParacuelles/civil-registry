@@ -1,5 +1,9 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900;1,9..40,400&family=Sora:wght@400;600;700;800&display=swap");
 
+/* Shared VitalRecords styling for Birth, Death, and Marriage screens.
+   These views intentionally import the same parent stylesheet instead of
+   maintaining separate CSS files for the shared layout, tabs, and print rules. */
+
 /* ── CSS Variables ─────────────────────────────────────────────────────── */
 
 :root {

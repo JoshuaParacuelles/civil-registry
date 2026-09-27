@@ -1,0 +1,117 @@
+.topbar {
+  height: var(--topbar-height);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px 0 14px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
+  gap: 12px;
+  box-shadow: 0 1px 0 var(--border), var(--shadow-sm);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.topbar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  cursor: pointer;
+  color: var(--text-soft);
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
+  flex-shrink: 0;
+}
+
+.topbar-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: rgba(0, 0, 0, 0.20);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.06);
+}
+
+.topbar-toggle:active { transform: scale(0.97); }
+
+.topbar-toggle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.topbar-breadcrumb-current {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.topbar-datetime {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-inset);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.topbar-datetime-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.8px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.topbar-datetime-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .topbar-datetime { font-size: 11px; padding: 6px 9px; }
+}
+
+@media (max-width: 767px) {
+  .topbar { padding-left: 60px; }
+  .topbar-toggle { display: none; }
+  .topbar-datetime-item span:last-child { font-size: 11px; }
+  .topbar-datetime { padding: 6px 8px; gap: 6px; }
+}
+
+@media (max-width: 480px) {
+  .topbar { padding-left: 56px; padding-right: 10px; gap: 8px; }
+  .topbar-breadcrumb-current { font-size: 13px; }
+  .topbar-datetime-item span:last-child { font-size: 10.5px; }
+}
