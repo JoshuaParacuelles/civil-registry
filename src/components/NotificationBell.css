@@ -1,4 +1,8 @@
-.notif-wrapper { position: relative; }
+.notif-wrapper {
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+}
 
 .notif-btn {
   position: relative;
@@ -7,6 +11,8 @@
   justify-content: center;
   width: 34px;
   height: 34px;
+  min-width: 34px;
+  min-height: 34px;
   border-radius: 10px;
   border: 1px solid var(--border-strong);
   background: var(--bg-raised);
@@ -28,10 +34,12 @@
 .topbar-right .notif-wrapper {
   display: flex;
   align-self: stretch;
+  flex-shrink: 0;
 }
 
 .topbar-right .notif-btn {
   width: 32px;
+  min-width: 32px;
   height: auto;
   align-self: stretch;
 }
@@ -44,7 +52,10 @@
 }
 
 @media (max-width: 1024px) {
-  .topbar-right .notif-btn { width: 30px; }
+  .topbar-right .notif-btn {
+    width: 30px;
+    min-width: 30px;
+  }
 }
 
 .notif-count-badge {
@@ -78,8 +89,9 @@
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  width: var(--notif-dropdown-width);
-  max-height: var(--notif-dropdown-max-h);
+  width: var(--notif-dropdown-width, 380px);
+  max-width: calc(100vw - 24px);
+  max-height: var(--notif-dropdown-max-h, 520px);
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);
   border-radius: 14px;
@@ -106,18 +118,21 @@
   border-bottom: 1px solid var(--border);
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .notif-panel-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .notif-panel-title {
   font-size: 13.5px;
   font-weight: 800;
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .notif-panel-count {
@@ -129,6 +144,8 @@
   border-radius: 999px;
   padding: 1px 7px;
   line-height: 1.6;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .notif-mark-all {
@@ -214,6 +231,7 @@
   color: var(--text-primary);
   line-height: 1.45;
   margin-bottom: 3px;
+  overflow-wrap: anywhere;
 }
 
 .notif-msg-row .notif-msg {
@@ -276,7 +294,9 @@
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
+  left: auto;
   min-width: 150px;
+  max-width: min(150px, calc(100vw - 32px));
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -325,6 +345,7 @@
   padding: 32px 16px;
   gap: 6px;
   color: var(--text-muted);
+  text-align: center;
 }
 
 .notif-empty span {
@@ -406,18 +427,64 @@
   100% { background-position: -200% 0; }
 }
 
-@media (max-width: 767px) {
+/* ---------- Tablet ---------- */
+@media (max-width: 1024px) {
   .notif-dropdown {
-    right: -10px;
-    width: 300px;
-    max-height: 420px;
+    width: min(var(--notif-dropdown-width, 380px), 360px);
+    max-height: min(var(--notif-dropdown-max-h, 520px), 70vh);
   }
 }
 
-@media (max-width: 480px) {
+/* ---------- Small tablet / large phone ---------- */
+@media (max-width: 767px) {
   .notif-dropdown {
-    width: 280px;
-    right: -16px;
-    max-height: 400px;
+    right: -10px;
+    width: min(90vw, 320px);
+    max-width: calc(100% - 4px);
+    max-height: min(70vh, 460px);
   }
+
+  .notif-panel-header { padding: 12px 14px 8px; }
+  .notif-item { padding: 10px 14px; gap: 9px; }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 480px) {
+  .notif-btn { width: 32px; height: 32px; border-radius: 9px; }
+  .notif-btn-icon { width: 15px; height: 15px; }
+
+  .notif-count-badge {
+    min-width: 16px;
+    height: 16px;
+    font-size: 9px;
+    line-height: 16px;
+    top: -5px;
+    right: -5px;
+  }
+
+  .notif-dropdown {
+    right: -16px;
+    width: min(88vw, 300px);
+    border-radius: 12px;
+    max-height: min(72vh, 440px);
+  }
+
+  .notif-panel-title { font-size: 13px; }
+  .notif-panel-count { font-size: 10px; }
+  .notif-mark-all { font-size: 11px; }
+
+  .notif-item { padding: 10px 12px; gap: 8px; }
+  .notif-icon-wrap { width: 32px; height: 32px; border-radius: 9px; }
+  .notif-msg { font-size: 12px; }
+  .notif-time { font-size: 10.5px; }
+
+  .notif-kebab-btn { width: 26px; height: 26px; }
+  .notif-action-menu { min-width: 140px; }
+  .notif-action-menu-item { font-size: 12px; padding: 8px 10px; }
+}
+
+@media (max-width: 360px) {
+  .notif-dropdown { right: -12px; width: min(90vw, 270px); }
+  .notif-panel-header { padding: 10px 12px 8px; }
+  .notif-item { padding: 9px 10px; }
 }
