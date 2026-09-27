@@ -1631,10 +1631,7 @@ export default function UnifiedDeathRegistry() {
     : "Certificate of No Death Record (Negative Certificate)";
 
   const handlePrintNegativeCert = () => {
-    if (!orNumber.trim()) {
-      showNotif("O.R. Number is required before printing the certificate.", "error");
-      return;
-    }
+    // FIX: O.R. Number is now optional — no longer blocks printing.
     printNegativeCertificate({
       subjectName,
       dateOfDeath:       negCertInfo.dateOfDeath  || null,

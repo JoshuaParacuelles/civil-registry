@@ -1700,10 +1700,7 @@ export default function UnifiedBirthRegistry() {
     : "Certificate of No Birth Record (Negative Certificate)";
 
   const handlePrintNegativeCert = () => {
-    if (!orNumber.trim()) {
-      showNotif("O.R. Number is required before printing the certificate.", "error");
-      return;
-    }
+    // FIX: O.R. Number is now optional — no longer blocks printing.
     printNegativeCertificate({
       subjectName,
       dateOfBirth:       negCertInfo.dateOfBirth  || null,
