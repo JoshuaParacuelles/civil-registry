@@ -260,91 +260,94 @@ const Login = () => {
 
         <div className="login-left">
           <div className="login-left-inner">
-            <div className="shake-wrapper">
-              <img src={loginLogo} alt="City of San Carlos Logo" className="login-logo" />
+            <div className="login-card">
+              <div className="shake-wrapper">
+                <img src={loginLogo} alt="City of San Carlos Logo" className="login-logo" />
 
-              <div className="login-header">
-                <h2>Local Civil Registrar</h2>
-                <hr />
-              </div>
-
-              {isLocked && (
-                <div className="lock-banner">
-                  <LockFilledIcon />
-                  <span>
-                    Account temporarily locked
-                    {lockSecondsRemaining > 0 && (
-                      <>
-                        {" "}— try again in{" "}
-                        <span className="lock-countdown">
-                          {formatLockCountdown(lockSecondsRemaining)}
-                        </span>
-                      </>
-                    )}
-                  </span>
-                </div>
-              )}
-
-              <form onSubmit={handleLogin}>
-                <div className={`input-group${isLocked ? " input-locked" : ""}${username ? " has-value" : ""}`}>
-                  <span className="icon-left"><UserIcon /></span>
-                  <label className="floating-label" htmlFor="login-username">Username</label>
-                  <input
-                    id="login-username"
-                    name="username"
-                    type="text"
-                    placeholder="Username"
-                    value={username}
-                    onChange={(e) => { setUsername(e.target.value); setIsLocked(false); }}
-                    required
-                    autoComplete="username"
-                    disabled={loading}
-                  />
+                <div className="login-header">
+                  <h2>Local Civil Registrar</h2>
+                  <p className="login-subtitle">San Carlos City</p>
+                  <hr />
                 </div>
 
-                <div className={`input-group password-group${isLocked ? " input-locked" : ""}${password ? " has-value" : ""}`}>
-                  <span className="icon-left"><LockIcon /></span>
-                  <label className="floating-label" htmlFor="login-password">Password</label>
-                  <input
-                    id="login-password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); setIsLocked(false); }}
-                    required
-                    autoComplete="current-password"
-                    disabled={loading}
-                  />
-                  <span
-                    className="icon-right"
-                    onClick={() => setShowPassword((p) => !p)}
-                    role="button"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                  </span>
-                </div>
-
-                <button
-                  type="submit"
-                  className={`login-btn${loading ? " btn-loading" : ""}${isLocked ? " btn-locked" : ""}`}
-                  disabled={loading || isLocked}
-                >
-                  {loading ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <span className="spinner" />
-                      Logging in…
+                {isLocked && (
+                  <div className="lock-banner">
+                    <LockFilledIcon />
+                    <span>
+                      Account temporarily locked
+                      {lockSecondsRemaining > 0 && (
+                        <>
+                          {" "}— try again in{" "}
+                          <span className="lock-countdown">
+                            {formatLockCountdown(lockSecondsRemaining)}
+                          </span>
+                        </>
+                      )}
                     </span>
-                  ) : isLocked ? (
-                    lockSecondsRemaining > 0
-                      ? `Account Locked (${formatLockCountdown(lockSecondsRemaining)})`
-                      : "Account Locked"
-                  ) : (
-                    "Log in"
-                  )}
-                </button>
-              </form>
+                  </div>
+                )}
+
+                <form onSubmit={handleLogin}>
+                  <div className={`input-group${isLocked ? " input-locked" : ""}${username ? " has-value" : ""}`}>
+                    <span className="icon-left"><UserIcon /></span>
+                    <label className="floating-label" htmlFor="login-username">Username</label>
+                    <input
+                      id="login-username"
+                      name="username"
+                      type="text"
+                      placeholder="Username"
+                      value={username}
+                      onChange={(e) => { setUsername(e.target.value); setIsLocked(false); }}
+                      required
+                      autoComplete="username"
+                      disabled={loading}
+                    />
+                  </div>
+
+                  <div className={`input-group password-group${isLocked ? " input-locked" : ""}${password ? " has-value" : ""}`}>
+                    <span className="icon-left"><LockIcon /></span>
+                    <label className="floating-label" htmlFor="login-password">Password</label>
+                    <input
+                      id="login-password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => { setPassword(e.target.value); setIsLocked(false); }}
+                      required
+                      autoComplete="current-password"
+                      disabled={loading}
+                    />
+                    <span
+                      className="icon-right"
+                      onClick={() => setShowPassword((p) => !p)}
+                      role="button"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                    </span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className={`login-btn${loading ? " btn-loading" : ""}${isLocked ? " btn-locked" : ""}`}
+                    disabled={loading || isLocked}
+                  >
+                    {loading ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <span className="spinner" />
+                        Logging in…
+                      </span>
+                    ) : isLocked ? (
+                      lockSecondsRemaining > 0
+                        ? `Account Locked (${formatLockCountdown(lockSecondsRemaining)})`
+                        : "Account Locked"
+                    ) : (
+                      "Log in"
+                    )}
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
         </div>

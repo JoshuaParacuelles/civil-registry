@@ -1616,26 +1616,7 @@ export default function UnifiedBirthRegistry() {
     return aFN.localeCompare(bFN);
   });
 
-  // ─────────────────────────────────────────────────────────────────────
-  // FIX: ARCHIVE BUG — selecting a record must never change its
-  // is_archived status.
-  //
-  // Root cause: this function used to call restoreRecord(record.id)
-  // whenever an archived record was selected from search results. That
-  // fired a real POST to /records/<id>/restore, which flips is_archived
-  // from true to false in the database — so simply *selecting* an
-  // archived record (to view/process it) silently removed it from the
-  // Archive tab, even though nothing had actually been "restored" by
-  // the admin.
-  //
-  // Fix: selecting a record — archived or not — only updates local
-  // component state (selectedRecord / recordStatus / subjectName) so it
-  // can be viewed and used in the transaction flow. It no longer calls
-  // the backend (no more restoreRecord(record.id) call here) and no
-  // longer mutates the record's real is_archived value. The record
-  // therefore correctly remains in the Archive tab unless an explicit
-  // Restore action (not present in this flow) is taken.
-  // ─────────────────────────────────────────────────────────────────────
+
   const handleSelectFromSearch = (record) => {
     const displayName = getRecordDisplayName(record);
 
