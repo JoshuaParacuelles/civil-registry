@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import "./NotificationBell.css";
 
 const BellIcon = () => (
@@ -49,6 +50,23 @@ const NotifTypeIcon = ({ type }) => {
   return <SystemIcon />;
 };
 
+// True while the viewport matches the given media query (updates on resize/rotate)
+const useMediaQuery = (query) => {
+  const [matches, setMatches] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = (e) => setMatches(e.matches);
+    setMatches(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [query]);
+
+  return matches;
+};
+
 const NotificationBell = ({
   notifOpen,
   notifWrapperRef,
@@ -69,6 +87,8 @@ const NotificationBell = ({
   NOTIF_TARGETS,
   setOpenActionMenuId,
 }) => {
+  const isMobile = useMediaQuery("(max-width: 767px)");
+
   const badgeText = unreadCount > 99 ? "99+" : String(unreadCount);
   const statusTitle =
     notifStatus === "live"
@@ -76,6 +96,125 @@ const NotificationBell = ({
       : notifStatus === "error"
         ? "Can't reach the server — retrying"
         : "Connecting…";
+
+  const panel = (
+    <div
+      className="notif-dropdown"
+      role="dialog"
+      aria-label="Notifications"
+      // The mobile panel lives outside notifWrapperRef, so keep taps inside it
+      // from being treated as "click outside" by the parent's listener.
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+    >
+      <div className="notif-panel-header">
+        <div className="notif-panel-title-row">
+          <span className="notif-panel-title">Notifications</span>
+          {unreadCount > 0 && <span className="notif-panel-count">{unreadCount} new</span>}
+          <span className={`notif-sse-dot ${notifStatus}`} title={statusTitle} aria-label={statusTitle} />
+        </div>
+
+        {unreadCount > 0 && (
+          <button type="button" className="notif-mark-all" onClick={markAllNotificationsRead}>
+            Mark all as read
+          </button>
+        )}
+      </div>
+
+      <ul className="notif-list">
+        {notifLoading ? (
+          [0, 1, 2].map((i) => (
+            <li key={i} className="notif-skeleton-item">
+              <div className="notif-skeleton-icon" />
+              <div className="notif-skeleton-lines">
+                <div className="notif-skeleton-line long" />
+                <div className="notif-skeleton-line short" />
+              </div>
+            </li>
+          ))
+        ) : notifications.length === 0 ? (
+          <li className="notif-empty">
+            <BellIcon />
+            <span>{notifStatus === "error" ? "Can't load notifications" : "No notifications yet"}</span>
+            <span className="notif-empty-sub">
+              {notifStatus === "error"
+                ? "Check your Supabase connection (see console for details)."
+                : "New certificate requests will show up here."}
+            </span>
+          </li>
+        ) : (
+          notifications.map((n) => (
+            <li key={n.id} className={`notif-item${n.is_read ? "" : " unread"}`} onClick={() => handleNotifClick(n)}>
+              <span className="notif-dot" />
+              <div className={`notif-icon-wrap ${NOTIF_TARGETS[n.record_type] ? n.record_type : "system"}`}>
+                <NotifTypeIcon type={n.record_type} />
+              </div>
+              <div className="notif-body">
+                <div className="notif-msg-row">
+                  <p className="notif-msg">{n.message || n.title}</p>
+                  {!clickedIds.has(n.id) && <span className="notif-new-badge">NEW</span>}
+                </div>
+                <span className="notif-time">{timeAgo(n.created_at)}</span>
+              </div>
+              <div className="notif-kebab-wrap">
+                <button
+                  type="button"
+                  className="notif-kebab-btn"
+                  aria-label="More actions"
+                  aria-haspopup="true"
+                  aria-expanded={openActionMenuId === n.id}
+                  onClick={(e) => toggleActionMenu(n.id, e)}
+                >
+                  <KebabIcon />
+                </button>
+
+                {openActionMenuId === n.id && (
+                  <div className="notif-action-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+                    {n.is_read ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="notif-action-menu-item"
+                        onClick={() => {
+                          markNotificationUnread(n);
+                          setOpenActionMenuId(null);
+                        }}
+                      >
+                        Mark as Unread
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="notif-action-menu-item"
+                        onClick={() => {
+                          markNotificationRead(n);
+                          setOpenActionMenuId(null);
+                        }}
+                      >
+                        Mark as read
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="notif-action-menu-item notif-action-menu-item--danger"
+                      onClick={() => {
+                        deleteNotification(n);
+                        setOpenActionMenuId(null);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+            </li>
+          ))
+        )}
+      </ul>
+    </div>
+  );
 
   return (
     <div className="notif-wrapper" ref={notifWrapperRef}>
@@ -92,116 +231,9 @@ const NotificationBell = ({
         {unreadCount > 0 && <span className="notif-count-badge">{badgeText}</span>}
       </button>
 
-      {notifOpen && (
-        <div className="notif-dropdown" role="dialog" aria-label="Notifications">
-          <div className="notif-panel-header">
-            <div className="notif-panel-title-row">
-              <span className="notif-panel-title">Notifications</span>
-              {unreadCount > 0 && <span className="notif-panel-count">{unreadCount} new</span>}
-              <span className={`notif-sse-dot ${notifStatus}`} title={statusTitle} aria-label={statusTitle} />
-            </div>
-
-            {unreadCount > 0 && (
-              <button type="button" className="notif-mark-all" onClick={markAllNotificationsRead}>
-                Mark all as read
-              </button>
-            )}
-          </div>
-
-          <ul className="notif-list">
-            {notifLoading ? (
-              [0, 1, 2].map((i) => (
-                <li key={i} className="notif-skeleton-item">
-                  <div className="notif-skeleton-icon" />
-                  <div className="notif-skeleton-lines">
-                    <div className="notif-skeleton-line long" />
-                    <div className="notif-skeleton-line short" />
-                  </div>
-                </li>
-              ))
-            ) : notifications.length === 0 ? (
-              <li className="notif-empty">
-                <BellIcon />
-                <span>{notifStatus === "error" ? "Can't load notifications" : "No notifications yet"}</span>
-                <span className="notif-empty-sub">
-                  {notifStatus === "error"
-                    ? "Check your Supabase connection (see console for details)."
-                    : "New certificate requests will show up here."}
-                </span>
-              </li>
-            ) : (
-              notifications.map((n) => (
-                <li key={n.id} className={`notif-item${n.is_read ? "" : " unread"}`} onClick={() => handleNotifClick(n)}>
-                  <span className="notif-dot" />
-                  <div className={`notif-icon-wrap ${NOTIF_TARGETS[n.record_type] ? n.record_type : "system"}`}>
-                    <NotifTypeIcon type={n.record_type} />
-                  </div>
-                  <div className="notif-body">
-                    <div className="notif-msg-row">
-                      <p className="notif-msg">{n.message || n.title}</p>
-                      {!clickedIds.has(n.id) && <span className="notif-new-badge">NEW</span>}
-                    </div>
-                    <span className="notif-time">{timeAgo(n.created_at)}</span>
-                  </div>
-                  <div className="notif-kebab-wrap">
-                    <button
-                      type="button"
-                      className="notif-kebab-btn"
-                      aria-label="More actions"
-                      aria-haspopup="true"
-                      aria-expanded={openActionMenuId === n.id}
-                      onClick={(e) => toggleActionMenu(n.id, e)}
-                    >
-                      <KebabIcon />
-                    </button>
-
-                    {openActionMenuId === n.id && (
-                      <div className="notif-action-menu" role="menu" onClick={(e) => e.stopPropagation()}>
-                        {n.is_read ? (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="notif-action-menu-item"
-                            onClick={() => {
-                              markNotificationUnread(n);
-                              setOpenActionMenuId(null);
-                            }}
-                          >
-                            Mark as Unread
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="notif-action-menu-item"
-                            onClick={() => {
-                              markNotificationRead(n);
-                              setOpenActionMenuId(null);
-                            }}
-                          >
-                            Mark as read
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="notif-action-menu-item notif-action-menu-item--danger"
-                          onClick={() => {
-                            deleteNotification(n);
-                            setOpenActionMenuId(null);
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      )}
+      {/* Mobile: portal to <body> so no ancestor can offset position:fixed.
+          Desktop/tablet: render in place, anchored to the bell. */}
+      {notifOpen && (isMobile ? createPortal(panel, document.body) : panel)}
     </div>
   );
 };
