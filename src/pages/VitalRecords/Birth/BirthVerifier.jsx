@@ -1994,7 +1994,7 @@ export default function UnifiedBirthRegistry() {
                     </div>
                     <div className="ubr-action-bar">
                       <button
-                        className="btn btn-primary"
+                        className="btn btn-primary btn-proceed-compact"
                         onClick={handleProceedToPayment}
                         disabled={!selectedRecord && recordStatus !== "NOT_FOUND"}
                       >

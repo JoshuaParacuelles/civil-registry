@@ -2062,7 +2062,7 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
                       </div>
                       <div className="ubr-action-bar">
                         <button
-                          className="btn btn-primary"
+                          className="btn btn-primary btn-proceed-compact"
                           onClick={handleProceedToPayment}
                           disabled={!selectedRecord && recordStatus !== "NOT_FOUND"}
                         >
