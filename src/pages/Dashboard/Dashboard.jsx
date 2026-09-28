@@ -103,12 +103,39 @@ function useAnalyticsData() {
   return { data, loading, error, refetch: fetchAll };
 }
 
+const useContainerWidth = (fallback = 560) => {
+  const ref = useRef(null);
+  const [w, setW] = useState(fallback);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const update = () => {
+      setW(Math.round(el.getBoundingClientRect().width) || fallback);
+    };
+
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fallback]);
+
+  return [ref, w];
+};
+
 /* ══ SVG LINE CHART ══════════════════════════════════════════════════════════ */
 const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }) => {
   const [hoverIdx, setHoverIdx] = useState(null);
   const svgRef = useRef(null);
-  const W = 560, H = height;
-  const PAD = { top: 16, right: 16, bottom: 32, left: 44 };
+  const [wrapRef, W] = useContainerWidth();
+  const compact = W < 420;
+  const H = compact ? Math.min(height, 180) : height;
+  const PAD = compact
+    ? { top: 12, right: 10, bottom: 28, left: 34 }
+    : { top: 16, right: 16, bottom: 32, left: 44 };
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
 
@@ -169,12 +196,13 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
       return;
     }
     if (!svgRef.current) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const rect = svgRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (W / rect.width);
+    const x = (clientX - rect.left) * (W / rect.width);
     const relX = x - PAD.left;
     const idx = Math.round((relX / innerW) * (chartLabels.length - 1));
     setHoverIdx(Math.max(0, Math.min(chartLabels.length - 1, idx)));
-  }, [chartLabels.length, isSinglePoint]);
+  }, [chartLabels.length, isSinglePoint, W, innerW, PAD.left]);
 
   // Thin labels based on actual available pixel space, not a fixed
   // "every Nth index" rule, so long labels like "Aug 2026"/"Sep 2026"
@@ -198,13 +226,16 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
   };
 
   return (
-    <div style={{ position: "relative" }}>
+    <div ref={wrapRef} style={{ position: "relative" }}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        style={{ width: "100%", height: "auto", display: "block" }}
+        style={{ width: "100%", height: H, display: "block", touchAction: "pan-y" }}
         onMouseMove={handleMouseMove}
+        onTouchStart={handleMouseMove}
+        onTouchMove={handleMouseMove}
         onMouseLeave={() => setHoverIdx(null)}
+        onTouchEnd={() => setHoverIdx(null)}
       >
         <defs>
           {chartSeries.map((s, si) => (
@@ -921,7 +952,7 @@ const AnalyticsDashboard = () => {
     return (
       <div className="an-wrapper">
         <Skeleton h={140} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem", marginTop: "0.75rem" }}>
+        <div className="an-loading-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "1rem" }}>
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} h={92} />
           ))}

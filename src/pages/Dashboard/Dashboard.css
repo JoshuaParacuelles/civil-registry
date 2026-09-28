@@ -1021,6 +1021,79 @@
   }
 }
 
+/* ─── Responsive hardening ───────────────────────────────────── */
+.an-metric-card,
+.an-panel,
+.an-today-block { min-width: 0; }
+
+/* Bar rows: flexible label + auto-width value so big numbers never clip */
+.an-bar-row {
+  grid-template-columns: minmax(64px, 30%) minmax(0, 1fr) auto;
+}
+.an-bar-val { min-width: 36px; }
+
+.an-stacked-row {
+  grid-template-columns: minmax(70px, 28%) minmax(0, 1fr) auto;
+}
+
+/* Heatmap: keep readable cells, scroll sideways instead of squishing */
+.an-heatmap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.an-heatmap-row { min-width: 560px; }
+
+/* Error banner */
+.an-error-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.an-error-retry {
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  background: #fff;
+  color: #991b1b;
+  border-radius: var(--an-radius-sm);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Loading skeleton grid (now a class instead of inline style) */
+.an-loading-grid { margin-top: 0.75rem; }
+
+@media (max-width: 640px) {
+  .an-loading-grid      { grid-template-columns: 1fr; }
+  .an-kpi-secondary-row { grid-template-columns: 1fr; gap: 8px; }
+  .an-kpi-hero-row      { margin-bottom: 8px; }
+
+  .an-panel             { padding: 14px; }
+  .an-metric-card       { padding: 14px 16px; }
+  .an-metric-card--hero { padding: 18px; }
+
+  .an-bar-row { gap: 8px; }
+  .an-donut-wrap { justify-content: center; }
+}
+
+@media (max-width: 520px) {
+  /* Municipality rows: bar on its own line, pills beneath */
+  .an-muni-row  { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; }
+  .an-muni-info { min-width: 0; }
+  .an-muni-bars {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .an-muni-total { font-size: 12.5px; }
+
+  .an-today-big { font-size: 24px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
