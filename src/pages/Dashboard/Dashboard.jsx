@@ -1011,28 +1011,31 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       </div>
 
       <div className="an-kpi-secondary-row">
-        <MetricCard
-          label="Birth Records"
-          value={fmtNum(summary.total_birth_records)}
-          sub={`${summary.uploaded_today_breakdown?.birth || 0} uploaded today`}
-          accent={COLORS.birth}
-          onClick={recordLinks.birth || undefined}
-        />
-        <MetricCard
-          label="Marriage Records"
-          value={fmtNum(summary.total_marriage_records)}
-          sub={`${summary.uploaded_today_breakdown?.marriage || 0} uploaded today`}
-          accent={COLORS.marriage}
-          onClick={recordLinks.marriage || undefined}
-        />
-        <MetricCard
-          label="Death Records"
-          value={fmtNum(summary.total_death_records)}
-          sub={`${summary.uploaded_today_breakdown?.death || 0} uploaded today`}
-          accent={COLORS.death}
-          onClick={recordLinks.death || undefined}
-        />
-      </div>
+  <MetricCard
+    hero
+    label="Birth Records"
+    value={fmtNum(summary.total_birth_records)}
+    sub={`${summary.uploaded_today_breakdown?.birth || 0} uploaded today`}
+    accent={COLORS.birth}
+    onClick={recordLinks.birth || undefined}
+  />
+  <MetricCard
+    hero
+    label="Marriage Records"
+    value={fmtNum(summary.total_marriage_records)}
+    sub={`${summary.uploaded_today_breakdown?.marriage || 0} uploaded today`}
+    accent={COLORS.marriage}
+    onClick={recordLinks.marriage || undefined}
+  />
+  <MetricCard
+    hero
+    label="Death Records"
+    value={fmtNum(summary.total_death_records)}
+    sub={`${summary.uploaded_today_breakdown?.death || 0} uploaded today`}
+    accent={COLORS.death}
+    onClick={recordLinks.death || undefined}
+  />
+</div>
 
       <div className="an-tabs" role="tablist">
         {tabs.map((t) => (
