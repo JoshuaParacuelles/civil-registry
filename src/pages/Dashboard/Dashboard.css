@@ -182,20 +182,35 @@
 .an-metric-card--clickable {
   cursor: pointer;
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: transparent;  /* no tap flash on mobile */
+  -webkit-touch-callout: none;
   user-select: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.an-metric-card--clickable:hover {
-  border-color: var(--an-border-strong);
-  box-shadow: var(--an-shadow-hover);
+/* Hover effect only on devices with a real mouse/trackpad.
+   On touch screens this never applies, so no "stuck" hover after a tap. */
+@media (hover: hover) and (pointer: fine) {
+  .an-metric-card--clickable:hover {
+    border-color: var(--an-border-strong);
+    box-shadow: var(--an-shadow-hover);
+  }
 }
 
-.an-metric-card--clickable:active {
-  transform: scale(0.985);
+/* Touch devices: no visible feedback at all when tapping */
+@media (hover: none), (pointer: coarse) {
+  .an-metric-card--clickable:hover,
+  .an-metric-card--clickable:active,
+  .an-metric-card--clickable:focus {
+    border-color: var(--an-border);
+    box-shadow: none;
+    transform: none;
+    outline: none;
+  }
 }
 
+/* Keyboard users still get a focus ring (Tab key only, not mouse or touch) */
 .an-metric-card--clickable:focus-visible {
   outline: 2px solid var(--an-blue);
   outline-offset: 2px;
