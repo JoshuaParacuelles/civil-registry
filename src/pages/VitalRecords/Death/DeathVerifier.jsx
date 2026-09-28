@@ -574,13 +574,6 @@ const FileIconSm = () => (
   </svg>
 );
 
-const IconRotateCcw = ({ className = "" }) => (
-  <svg className={`icon-svg icon-svg--sm ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="1 4 1 10 7 10"/>
-    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-  </svg>
-);
-
 let _toastSetters = [];
 let _toastIdCounter = 0;
 
@@ -1433,7 +1426,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const [subjectName,    setSubjectName]    = useState("");
   const [payRef,         setPayRef]         = useState("");
   const [processing,     setProcessing]     = useState(false);
-  const [restoringId,    setRestoringId]    = useState(null);
 
   const [step2PdfData,     setStep2PdfData]     = useState(null);
   const [step2PdfLoading,  setStep2PdfLoading]  = useState(false);
@@ -1498,37 +1490,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   }, []);
 
   useEffect(() => { fetchRecords(); fetchArchived(); }, [fetchRecords, fetchArchived]);
-
-  // Explicit, user-initiated restore only. This is now the ONLY place in the
-  // component that calls the restore endpoint — it's wired to a visible
-  // "Restore" button in the Archive tab (see below), never fired implicitly
-  // from search/select. Selecting a record from search results
-  // (handleSelectFromSearch) does NOT call this.
-  const restoreRecord = useCallback(async (id, record) => {
-    setRestoringId(id);
-    try {
-      const res = await fetch(`${API}/records/${id}/restore`, { method: "POST" });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Restore failed"); }
-      await fetchRecords();
-      await fetchArchived();
-      showNotif(`"${getRecordDisplayName(record)}" restored to active records.`, "success");
-      return true;
-    } catch (err) {
-      showNotif(err.message || "Failed to restore record.", "error");
-      return false;
-    } finally { setRestoringId(null); }
-  }, [fetchRecords, fetchArchived]);
-
-  const handleRestoreClick = (id, record) => setConfirmModal({
-    title: "Restore Record",
-    message: `Restore <strong>"${getRecordDisplayName(record)}"</strong> from the archive back to active records?`,
-    confirmLabel: "Restore",
-    confirmColor: "#059669",
-    onConfirm: async () => {
-      setConfirmModal(null);
-      await restoreRecord(id, record);
-    },
-  });
 
   const handleSearch = () => {
     let valid = true;
@@ -2043,13 +2004,13 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                 <div className="tab-hdr__icon"><IconArchive /></div>
                 <div className="tab-hdr__info">
                   <h2>Archived Death Records</h2>
-                  <p>Upload, view, restore, or permanently delete archived records.</p>
+                  <p>Upload, view, or permanently delete archived records.</p>
                 </div>
               </div>
               <div className="tab-card">
                 <PasswordGate
                   module="archive_death"
-                  description="The Archive section is restricted to authorized personnel. Enter the administrator password to upload, view, restore, or delete records."
+                  description="The Archive section is restricted to authorized personnel. Enter the administrator password to upload, view, or delete records."
                   onUnlock={() => setArchiveUnlocked(true)}
                   showNotif={showNotif}
                 />
@@ -2061,7 +2022,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                 <div className="tab-hdr__icon"><IconArchive /></div>
                 <div className="tab-hdr__info">
                   <h2>Archived Records</h2>
-                  {!isMobile && <p>Upload new records, or view, restore, and permanently delete archived records.</p>}
+                  {!isMobile && <p>Upload new records, or view and permanently delete archived records.</p>}
                 </div>
                 <div className="tab-hdr__space" />
                 <button className="upload-btn" onClick={() => setShowUploadModal(true)}>
@@ -2107,8 +2068,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                         record={r}
                         index={i}
                         onView={() => handleViewPdf(r.id, r)}
-                        onRestore={() => handleRestoreClick(r.id, r)}
-                        restoring={restoringId === r.id}
                         onDelete={() => handleDelete(r.id, r)}
                       />
                     ))}
@@ -2140,19 +2099,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                             <td>
                               <div className="tbl-acts">
                                 <button className="tbl-btn tbl-btn--blue" onClick={() => handleViewPdf(r.id, r)}>View</button>
-                                <button
-                                  className="tbl-btn tbl-btn--green"
-                                  style={{ background: "#059669", borderColor: "#059669", color: "#fff" }}
-                                  onClick={() => handleRestoreClick(r.id, r)}
-                                  disabled={restoringId === r.id}
-                                  title="Restore to active records"
-                                >
-                                  {restoringId === r.id ? (
-                                    <><div className="spinner spinner--sm" />&nbsp;Restoring…</>
-                                  ) : (
-                                    <><IconRotateCcw />&nbsp;Restore</>
-                                  )}
-                                </button>
                                 <button className="tbl-btn tbl-btn--red"  onClick={() => handleDelete(r.id, r)}>Delete</button>
                               </div>
                             </td>

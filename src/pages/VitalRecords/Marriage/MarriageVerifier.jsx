@@ -643,17 +643,6 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
     </svg>
   );
 
-  // FIX (Archive bug): added so the Marriage Archive tab can render an
-  // explicit "Restore" button identical to the one already used in the
-  // Death registry — see the restoreRecord / handleRestoreClick /
-  // handleSelectFromSearch changes further below for the actual fix.
-  const IconRotateCcw = ({ className = "" }) => (
-    <svg className={`icon-svg icon-svg--sm ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="1 4 1 10 7 10"/>
-      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-    </svg>
-  );
-
   let _toastSetters = [];
   let _toastIdCounter = 0;
 
@@ -1469,11 +1458,7 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
     );
   };
 
-  // FIX (Archive bug): now accepts onRestore/restoring props, exactly like
-  // the Death registry's MobileRecordCardArchive, and renders an explicit
-  // Restore button. This is part of moving restoration from an implicit
-  // side effect of "selecting a record" to an explicit, admin-only action.
-  const MobileRecordCardArchive = ({ record, index, onView, onDelete, onRestore, restoring }) => {
+  const MobileRecordCardArchive = ({ record, index, onView, onDelete }) => {
     const displayName = getRecordDisplayName(record);
     const groom       = getGroomDisplayName(record);
     const bride       = getBrideDisplayName(record);
@@ -1492,14 +1477,6 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
         <div className="mobile-record-card__date">{formatDate(record.archived_at)}</div>
         <div className="mobile-record-card__actions">
           <button className="tbl-btn tbl-btn--blue" onClick={onView}>View</button>
-          <button
-            className="tbl-btn tbl-btn--green"
-            style={{ background: "#059669", borderColor: "#059669", color: "#fff" }}
-            onClick={onRestore}
-            disabled={restoring}
-          >
-            {restoring ? "Restoring…" : "Restore"}
-          </button>
           <button className="tbl-btn tbl-btn--red"  onClick={onDelete}>Delete</button>
         </div>
       </div>
@@ -1529,7 +1506,6 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
     const [subjectName,      setSubjectName]      = useState("");
     const [payRef,           setPayRef]           = useState("");
     const [processing,       setProcessing]       = useState(false);
-    const [restoringId,      setRestoringId]      = useState(null);
 
     const [step2PdfData,     setStep2PdfData]     = useState(null);
     const [step2PdfError,    setStep2PdfError]    = useState("");
@@ -1600,64 +1576,6 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
 
     useEffect(() => { fetchRecords(); fetchArchived(); }, [fetchRecords, fetchArchived]);
 
-    // ─────────────────────────────────────────────────────────────────────
-    // FIX: THE ACTUAL ROOT CAUSE OF THE ARCHIVE BUG (Marriage)
-    //
-    // Symptom: archived marriage records quietly disappear from the
-    // Archive tab over days/months even though they still exist in the
-    // database, with is_archived flipped back to FALSE.
-    //
-    // Root cause: handleSelectFromSearch() used to call
-    // restoreRecord(record.id) automatically, with no admin action,
-    // any time a clerk selected an ARCHIVED record from search results
-    // while processing an ordinary "New Transaction" (see the removed
-    // branch below). That fired a real PUT to
-    // /api/marriage/records/<id>/restore, which permanently sets
-    // is_archived = FALSE in the database. Over weeks/months, as
-    // different clerks searched different surnames and happened to
-    // select archived records to view/process them, those records
-    // silently leaked out of the Archive tab one by one — exactly the
-    // reported symptom. (Birth and Death already had this exact bug
-    // fixed; Marriage was the one module still doing it.)
-    //
-    // Fix: restoreRecord() is now ONLY ever called from an explicit,
-    // admin-clicked "Restore" button in the Archive tab (see
-    // handleRestoreClick / the Archive tab render below — mirrors
-    // Death's Restore button exactly). Selecting a record — archived or
-    // not — is now purely a local UI action (see the new
-    // handleSelectFromSearch below): it never touches the backend and
-    // never changes a record's real is_archived value.
-    // ─────────────────────────────────────────────────────────────────────
-    const restoreRecord = useCallback(async (id, record) => {
-      setRestoringId(id);
-      try {
-        const res = await fetch(`${API}/records/${id}/restore`, { method: "PUT" });
-        if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Restore failed"); }
-        await fetchRecords();
-        await fetchArchived();
-        showNotif(`"${getRecordDisplayName(record)}" restored to active records.`, "success");
-        return true;
-      } catch (err) {
-        showNotif(err.message || "Failed to restore record.", "error");
-        return false;
-      } finally { setRestoringId(null); }
-    }, [fetchRecords, fetchArchived]);
-
-    // Explicit, user-initiated restore only. This is now the ONLY place in
-    // the component that calls restoreRecord() — it's wired to a visible
-    // "Restore" button in the Archive tab (see below), never fired
-    // implicitly from search/select.
-    const handleRestoreClick = (id, record) => setConfirmModal({
-      title: "Restore Record",
-      message: `Restore <strong>"${getRecordDisplayName(record)}"</strong> from the archive back to active records?`,
-      confirmLabel: "Restore",
-      confirmColor: "#059669",
-      onConfirm: async () => {
-        setConfirmModal(null);
-        await restoreRecord(id, record);
-      },
-    });
-
     const handleSearch = () => {
       let valid = true;
       if (!srchFirstName.trim()) { setFirstNameError("First name is required."); valid = false; } else setFirstNameError("");
@@ -1691,14 +1609,8 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
       return (aFNs[0] || "").localeCompare(bFNs[0] || "");
     });
 
-    // FIX: selecting a record — whether active or archived — is purely a
-    // local/UI action. It only sets which record is chosen for this
-    // transaction; it never calls the backend and never changes the
-    // record's real is_archived status in the database. Archived records
-    // stay archived until an admin explicitly clicks "Restore" in the
-    // Archive tab (see restoreRecord/handleRestoreClick above). This
-    // mirrors the Birth and Death registries, where the equivalent
-    // implicit-restore bug was already fixed.
+    // Selecting a record is a purely local UI action: it chooses the record
+    // for this transaction without mutating the archived status in the database.
     const handleSelectFromSearch = (record) => {
       const displayName = getMatchedSpouseName(record, srchFirstName, srchLastName);
 
@@ -2180,13 +2092,13 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
                   <div className="tab-hdr__icon"><IconArchive /></div>
                   <div className="tab-hdr__info">
                     <h2>Archived Marriage Records</h2>
-                    <p>Upload, view, restore, or permanently delete archived records.</p>
+                    <p>Upload, view, or permanently delete archived records.</p>
                   </div>
                 </div>
                 <div className="tab-card">
                   <PasswordGate
                     module="archive_marriage"
-                    description="The Archive section is restricted to authorized personnel. Enter the administrator password to upload, view, restore, or delete records."
+                    description="The Archive section is restricted to authorized personnel. Enter the administrator password to upload, view, or delete records."
                     onUnlock={() => setArchiveUnlocked(true)}
                     showNotif={showNotif}
                   />
@@ -2198,7 +2110,7 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
                   <div className="tab-hdr__icon"><IconArchive /></div>
                   <div className="tab-hdr__info">
                     <h2>Archived Records</h2>
-                    {!isMobile && <p>Upload new records, or view, restore, and permanently delete archived records.</p>}
+                    {!isMobile && <p>Upload new records, or view and permanently delete archived records.</p>}
                   </div>
                   <div className="tab-hdr__space" />
                   <button className="upload-btn" onClick={() => setShowUploadModal(true)}>
@@ -2242,8 +2154,6 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
                           record={r}
                           index={i}
                           onView={() => handleViewPdf(r.id, r)}
-                          onRestore={() => handleRestoreClick(r.id, r)}
-                          restoring={restoringId === r.id}
                           onDelete={() => handleDelete(r.id, r)}
                         />
                       ))}
@@ -2275,19 +2185,6 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
                               <td>
                                 <div className="tbl-acts">
                                   <button className="tbl-btn tbl-btn--blue" onClick={() => handleViewPdf(r.id, r)}>View</button>
-                                  <button
-                                    className="tbl-btn tbl-btn--green"
-                                    style={{ background: "#059669", borderColor: "#059669", color: "#fff" }}
-                                    onClick={() => handleRestoreClick(r.id, r)}
-                                    disabled={restoringId === r.id}
-                                    title="Restore to active records"
-                                  >
-                                    {restoringId === r.id ? (
-                                      <><div className="spinner spinner--sm" />&nbsp;Restoring…</>
-                                    ) : (
-                                      <><IconRotateCcw />&nbsp;Restore</>
-                                    )}
-                                  </button>
                                   <button className="tbl-btn tbl-btn--red"  onClick={() => handleDelete(r.id, r)}>Delete</button>
                                 </div>
                               </td>
