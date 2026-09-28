@@ -543,23 +543,46 @@ const GrowthBadge = ({ value }) => {
 };
 
 /* ══ METRIC CARD ═════════════════════════════════════════════════════════════ */
-const MetricCard = ({ label, value, sub, accent, growth, hero = false, period, trend }) => (
-  <div className={`an-metric-card${hero ? " an-metric-card--hero" : ""}`}>
-    <div className="an-metric-label">
-      {accent && <span className="an-metric-dot" style={{ background: accent }} />}
-      {label}
+const MetricCard = ({ label, value, sub, accent, growth, hero = false, period, trend, onClick }) => {
+  const interactive = typeof onClick === "function";
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
+  return (
+    <div
+      className={
+        `an-metric-card${hero ? " an-metric-card--hero" : ""}` +
+        `${interactive ? " an-metric-card--clickable" : ""}`
+      }
+      {...(interactive && {
+        role: "link",
+        tabIndex: 0,
+        onClick,
+        onKeyDown: handleKeyDown,
+        "aria-label": `Open ${label}`,
+      })}
+    >
+      <div className="an-metric-label">
+        {accent && <span className="an-metric-dot" style={{ background: accent }} />}
+        {label}
+      </div>
+      <div className="an-metric-value">{value}</div>
+      <div className="an-metric-footer">
+        <span className="an-metric-sub">{sub}</span>
+        {growth != null && <GrowthBadge value={growth} />}
+      </div>
+      {period && <div className="an-metric-period">{period}</div>}
+      {trend && trend.length > 1 && (
+        <Sparkline data={trend} color={accent || COLORS.birth} height={hero ? 48 : 32} />
+      )}
     </div>
-    <div className="an-metric-value">{value}</div>
-    <div className="an-metric-footer">
-      <span className="an-metric-sub">{sub}</span>
-      {growth != null && <GrowthBadge value={growth} />}
-    </div>
-    {period && <div className="an-metric-period">{period}</div>}
-    {trend && trend.length > 1 && (
-      <Sparkline data={trend} color={accent || COLORS.birth} height={hero ? 48 : 32} />
-    )}
-  </div>
-);
+  );
+};
 
 /* ══ PANEL WRAPPER ═══════════════════════════════════════════════════════════ */
 const Panel = ({ title, sub, children, full = false }) => (
@@ -873,7 +896,7 @@ function buildGrowthKpis(growth) {
 }
 
 /* ══ MAIN ANALYTICS DASHBOARD ════════════════════════════════════════════════ */
-const AnalyticsDashboard = () => {
+const AnalyticsDashboard = ({ recordLinks = {} }) => {
   const { data, loading, error, refetch } = useAnalyticsData();
   const [tab, setTab] = useState("overview");
 
@@ -993,18 +1016,21 @@ const AnalyticsDashboard = () => {
           value={fmtNum(summary.total_birth_records)}
           sub={`${summary.uploaded_today_breakdown?.birth || 0} uploaded today`}
           accent={COLORS.birth}
+          onClick={recordLinks.birth || undefined}
         />
         <MetricCard
           label="Marriage Records"
           value={fmtNum(summary.total_marriage_records)}
           sub={`${summary.uploaded_today_breakdown?.marriage || 0} uploaded today`}
           accent={COLORS.marriage}
+          onClick={recordLinks.marriage || undefined}
         />
         <MetricCard
           label="Death Records"
           value={fmtNum(summary.total_death_records)}
           sub={`${summary.uploaded_today_breakdown?.death || 0} uploaded today`}
           accent={COLORS.death}
+          onClick={recordLinks.death || undefined}
         />
       </div>
 

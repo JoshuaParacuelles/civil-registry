@@ -400,6 +400,24 @@ const Home = () => {
     setSelectedNotif(null);
   };
 
+  const openRecordPage = useCallback(
+    (type) => {
+      const target = NOTIF_TARGETS[type];
+      if (!target || !canAccess(target.permission)) return;
+      setActiveSubMenu(target.menu);
+      setVitalRecordsOpen(true);
+      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
+      if (viewport === "mobile") setMobileMenuOpen(false);
+    },
+    [canAccess, viewport]
+  );
+
+  const recordLinks = {
+    birth:    canAccess("birth_verification")    ? () => openRecordPage("birth")    : null,
+    marriage: canAccess("marriage_verification") ? () => openRecordPage("marriage") : null,
+    death:    canAccess("death_verification")    ? () => openRecordPage("death")    : null,
+  };
+
   useEffect(() => {
     if (!selectedNotif) return undefined;
     const onKeyDown = (e) => {
@@ -525,7 +543,7 @@ const Home = () => {
         return canAccess("role_management") ? <RoleManagement /> : <AccessDenied />;
       case MENU_KEYS.DASHBOARD:
       default:
-        return <PaymentInventory />;
+        return <PaymentInventory recordLinks={recordLinks} />;
     }
   };
 

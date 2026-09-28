@@ -178,6 +178,29 @@
   border-color: var(--an-border-strong);
 }
 
+/* ─── Clickable metric cards ─────────────────────────────────── */
+.an-metric-card--clickable {
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.an-metric-card--clickable:hover {
+  border-color: var(--an-border-strong);
+  box-shadow: var(--an-shadow-hover);
+}
+
+.an-metric-card--clickable:active {
+  transform: scale(0.985);
+}
+
+.an-metric-card--clickable:focus-visible {
+  outline: 2px solid var(--an-blue);
+  outline-offset: 2px;
+}
+
 /* ─── Hero / secondary KPI hierarchy ──────────────────────────
    One prominent primary metric (hero) with smaller, equal-weight
    secondary metrics beneath it, instead of a row of identical
