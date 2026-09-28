@@ -2574,3 +2574,199 @@
   display: inline-flex !important;
   white-space: nowrap !important;
 }
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ *   VITAL RECORDS — SIZING & SPACING PASS
+ *   Paste at the VERY BOTTOM of VitalRecords.css (must load last).
+ *   Reference size = the "New Transaction" / "Archive" header tabs (34px).
+ *   Each section scales its controls to fit its own container, and every
+ *   rule is scoped to that section so nothing leaks into another one.
+ *   Zones:
+ *     nav     header tabs ............ 34px
+ *     action  step action bar ........ 34px  (Proceed, Back, Release…)
+ *     form    inputs + Search + pw ... 40px
+ *     row     result-row View/Select . 30px
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+/* ── 0. Neutralise earlier experiments so no JSX edits are needed ─────── */
+.btn.btn-thick,
+.btn.btn-proceed-compact {
+  height: 34px !important;
+  padding: 0 18px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  min-width: 0 !important;
+}
+
+/* ── 1. HEADER TABS (New Transaction / Archive) ───────────────────────── */
+.ubr-header { gap: 10px; }
+.ubr-header__tabs { gap: 6px; }
+.ubr-tab-btn {
+  height: 34px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+/* ── 2. STEP CONTENT SPACING ──────────────────────────────────────────── */
+.step-inner { padding: 18px 20px 14px; gap: 16px; }
+.step-inner--pdf { padding: 16px 16px 12px; }
+.page-hdr { padding-bottom: 12px; }
+
+/* ── 3. SEARCH FORM (inputs + Search button share one 40px line) ──────── */
+.search-form { padding: 14px 16px; }
+.search-form__row { gap: 10px; align-items: flex-end; }
+.field { gap: 5px; min-width: 140px; }
+.field-input {
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.search-btn {
+  height: 40px !important;
+  padding: 0 24px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
+}
+
+/* ── 4. RESULT ROWS (View / Select sit inside a card → smaller) ───────── */
+.results-hdr { padding: 8px 14px; }
+.result-row { padding: 12px 16px; gap: 12px; }
+.result-row__info { gap: 6px; }
+.result-row__actions { gap: 8px; }
+
+.view-pdf-btn,
+.select-btn {
+  height: 30px !important;
+  min-width: 84px !important;
+  padding: 0 16px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  line-height: 1;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Negative-certificate call-outs (smaller than row buttons) */
+.no-results { padding: 24px 16px; gap: 10px; }
+.no-match-alt { padding: 10px 16px; gap: 10px; }
+.neg-btn {
+  height: 30px !important;
+  padding: 0 16px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  box-sizing: border-box;
+}
+.neg-btn.neg-btn--inline {
+  height: 26px !important;
+  padding: 0 12px !important;
+  font-size: 11.5px !important;
+}
+
+/* ── 5. ACTION BAR (Proceed / Back / Proceed to Release / Release…) ───── */
+.ubr-action-bar {
+  padding: 12px 18px;
+  gap: 10px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+.ubr-action-bar .btn {
+  flex: 0 0 auto;
+  width: auto !important;
+  height: 34px !important;
+  padding: 0 18px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  min-width: 0 !important;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.ubr-action-bar .btn-secondary { min-width: 76px !important; }
+
+/* ── 6. PASSWORD GATE ("Unlock & View Records") ───────────────────────── */
+.pw-gate { padding: 32px 18px; gap: 14px; }
+.pw-gate__form { max-width: 320px; gap: 10px; }
+.pw-input { height: 40px; box-sizing: border-box; }
+.pw-gate .pw-gate__submit-btn {
+  width: 100%;
+  height: 40px !important;
+  padding: 0 18px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
+}
+
+/* ── 7. UPLOAD MODAL FOOTER (Cancel / Upload) ─────────────────────────── */
+.upl-foot { gap: 10px; padding-top: 8px; }
+.upl-foot .btn {
+  height: 34px !important;
+  padding: 0 18px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  min-width: 0 !important;
+}
+.upl-foot .btn-secondary { min-width: 76px !important; }
+
+/* ── 8. TOUCH DEVICES — drop the blanket 40px min-height from before so
+      each zone keeps its own size (mobile heights set below) ──────────── */
+@media (hover: none) and (pointer: coarse) {
+  .ubr-tab-btn, .btn, .search-btn,
+  .view-pdf-btn, .select-btn, .neg-btn, .upload-btn { min-height: 0; }
+}
+
+/* ── 9. PHONES (≤ 480px) — slightly taller for tapping, tighter gaps ──── */
+@media (max-width: 480px) {
+  .ubr-header { gap: 6px; }
+  .ubr-tab-btn { height: 32px; padding: 0 12px; font-size: 12px; }
+
+  .step-inner { padding: 12px 12px 10px; gap: 12px; }
+
+  .search-form { padding: 12px; }
+  .search-form__row { flex-direction: column; gap: 10px; }
+  .field { width: 100%; min-width: 0; }
+  .field-input { height: 42px; font-size: 16px; }
+  .search-btn { width: 100%; height: 42px !important; }
+
+  .result-row { padding: 10px 12px; gap: 10px; }
+  .result-row__actions { width: 100%; justify-content: flex-start; }
+  .view-pdf-btn,
+  .select-btn { height: 34px !important; min-width: 84px !important; }
+
+  .ubr-action-bar { padding: 10px 12px; gap: 8px; }
+  .ubr-action-bar .btn {
+    height: 36px !important;
+    padding: 0 14px !important;
+    font-size: 12.5px !important;
+  }
+  .ubr-action-bar .btn-secondary { min-width: 68px !important; }
+
+  .pw-gate { padding: 24px 14px; }
+  .pw-gate__form { max-width: 100%; }
+  .pw-input { height: 42px; }
+  .pw-gate .pw-gate__submit-btn { height: 42px !important; }
+
+  .upl-foot .btn { height: 36px !important; }
+}
+
+/* ── 10. VERY NARROW (≤ 360px) — keep the long label on one line ──────── */
+@media (max-width: 360px) {
+  .ubr-action-bar { gap: 6px; padding: 10px; }
+  .ubr-action-bar .btn {
+    padding: 0 10px !important;
+    font-size: 12px !important;
+  }
+  .ubr-action-bar .btn-secondary { min-width: 60px !important; }
+}
