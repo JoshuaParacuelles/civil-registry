@@ -411,7 +411,7 @@
   background: #2563eb !important;
   color: #ffffff !important;
   box-shadow: 0 2px 8px rgba(37,99,235,0.25);
-  min-width: 110px;
+  min-width: 100px;
   justify-content: center;
 }
 .btn-primary:hover:not(:disabled) {
@@ -435,16 +435,16 @@
   font-weight: 700 !important;
 }
 .btn-thick.btn-primary {
-  min-width: 150px;
+  min-width: 150px !important;
 }
 .btn-thick.btn-secondary {
-  min-width: 100px;
+  min-width: 100px !important;
 }
 .btn-thick.btn-primary--wide {
-  min-width: 250px;
+  min-width: 250px !important;
 }
 @media (max-width: 480px) {
-  .btn-thick.btn-primary--wide { min-width: 175px; }
+  .btn-thick.btn-primary--wide { min-width: 175px !important; }
 }
 
 .btn-secondary {
