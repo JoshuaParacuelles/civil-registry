@@ -49,6 +49,9 @@ const NotifTypeIcon = ({ type }) => {
   return <SystemIcon />;
 };
 
+// Max width of the notification panel on phones (shrinks on narrower screens)
+const NOTIF_MOBILE_MAX_WIDTH = 340;
+
 // True while the viewport matches the given media query (updates on resize/rotate)
 const useMediaQuery = (query) => {
   const [matches, setMatches] = useState(
@@ -104,10 +107,13 @@ const NotificationBell = ({
       const rect = el.getBoundingClientRect();
       const vw = document.documentElement.clientWidth || window.innerWidth;
       const margin = vw <= 480 ? 8 : 12;
+      const width = Math.min(NOTIF_MOBILE_MAX_WIDTH, vw - margin * 2);
+      // Right edge of the panel sits `margin` px from the right of the screen
+      const leftInViewport = vw - margin - width;
       setMobileStyle({
-        left: `${margin - rect.left}px`,
+        left: `${leftInViewport - rect.left}px`,
         right: "auto",
-        width: `${vw - margin * 2}px`,
+        width: `${width}px`,
       });
     };
 
