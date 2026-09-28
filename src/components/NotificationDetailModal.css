@@ -131,7 +131,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 16px;
+  margin-bottom: 4px;
 }
+
+.notif-detail-section + .notif-detail-section { padding-top: 18px; }
 
 .notif-detail-field { min-width: 0; }
 
@@ -245,7 +248,7 @@
   background: var(--accent-blue);
   color: #ffffff;
   transition: background 0.15s;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .notif-detail-open-btn:hover { background: #1d4ed8; }
@@ -309,28 +312,50 @@
     max-height: calc(100dvh - 24px);
   }
 
-  .notif-detail-header { padding: 14px; gap: 10px; }
-  .notif-detail-heading { min-width: 140px; }
-  .notif-detail-heading h2 { font-size: 14.5px; }
-  .notif-detail-heading p { font-size: 11px; }
+  /* Header: icon + text + close on row 1, status pill drops to its own row */
+  .notif-detail-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon heading close"
+      "status status status";
+    align-items: start;
+    padding: 14px;
+    gap: 10px 10px;
+  }
+  .notif-detail-header .notif-icon-wrap { grid-area: icon; }
+  .notif-detail-heading { grid-area: heading; min-width: 0; }
+  .notif-detail-status  { grid-area: status; justify-self: start; }
+  .notif-detail-close   { grid-area: close; width: 28px; height: 28px; }
 
+  .notif-detail-heading h2 { font-size: 14.5px; line-height: 1.3; }
+  .notif-detail-heading p  { font-size: 11px; line-height: 1.5; }
   .notif-detail-status { font-size: 9.5px; padding: 3px 8px; }
-  .notif-detail-close { width: 28px; height: 28px; }
 
   .notif-detail-body { padding: 6px 14px 14px; }
   .notif-detail-section h3 { font-size: 12px; }
   .notif-detail-field dt { font-size: 10.5px; }
   .notif-detail-field dd { font-size: 12.5px; }
-
   .notif-detail-signature { max-height: 110px; }
 
   .notif-detail-footer { padding: 10px 14px; }
 }
 
 @media (max-width: 520px) {
-  .notif-detail-grid { grid-template-columns: 1fr; }
-  .notif-detail-footer { flex-wrap: wrap; }
-  .notif-detail-footer button { flex: 1; min-width: 120px; }
+  .notif-detail-grid { grid-template-columns: 1fr; gap: 8px; }
+
+  /* Footer: stack buttons full width so long labels never clip */
+  .notif-detail-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .notif-detail-footer button {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+  }
 }
 
 @media (max-width: 380px) {
