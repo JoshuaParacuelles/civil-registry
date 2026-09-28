@@ -375,6 +375,14 @@
     width: 250px !important;
     z-index: 1200;
     box-shadow: 4px 0 36px rgba(0, 0, 0, 0.35);
+
+    /* Use the real visible height, not the "toolbar hidden" 100vh */
+    top: 0;
+    bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+    height: var(--app-height, 100dvh);
+    max-height: 100%;
   }
 
   .sidebar.mobile-open { left: 0; }
@@ -391,12 +399,23 @@
     pointer-events: auto;
   }
 
+  /* Menu scrolls; header, user block and footer stay fixed in place */
+  .sidebar-menu {
+    overscroll-behavior: contain;
+    min-height: 0;
+  }
+
   .sidebar.mobile-open .sidebar-menu > li {
     justify-content: flex-start;
     padding: 9px 10px;
   }
 
   .sidebar.mobile-open .sidebar-group-label { display: block; }
+
+  .sidebar-footer {
+    flex-shrink: 0;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
 
   .sidebar.mobile-open .sidebar-footer .footer-item {
     justify-content: flex-start;
@@ -411,4 +430,7 @@
   .logo-img { width: 32px; height: 32px; }
   .sidebar-brand-title { font-size: 12px; }
   .sidebar-brand-subtitle { font-size: 10px; }
+
+  /* Short phones: tighten the user block so more menu fits */
+  .sidebar-user { padding: 12px 14px; }
 }

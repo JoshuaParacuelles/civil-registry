@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "./Sidebar.css";
 
 const Sidebar = ({
@@ -28,6 +28,25 @@ const Sidebar = ({
   accountIcon,
   logoutIcon,
 }) => {
+  useEffect(() => {
+    const setAppHeight = () => {
+      document.documentElement.style.setProperty("--app-height", `${window.innerHeight}px`);
+    };
+
+    setAppHeight();
+    window.addEventListener("resize", setAppHeight);
+    window.addEventListener("orientationchange", setAppHeight);
+    window.addEventListener("pageshow", setAppHeight);
+    document.addEventListener("visibilitychange", setAppHeight);
+
+    return () => {
+      window.removeEventListener("resize", setAppHeight);
+      window.removeEventListener("orientationchange", setAppHeight);
+      window.removeEventListener("pageshow", setAppHeight);
+      document.removeEventListener("visibilitychange", setAppHeight);
+    };
+  }, []);
+
   const vitalIsActive = VITAL_CHILDREN ? VITAL_CHILDREN.includes(activeSubMenu) : false;
   const settingsIsActive = SETTINGS_CHILDREN ? SETTINGS_CHILDREN.includes(activeSubMenu) : false;
 
