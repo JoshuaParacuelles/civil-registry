@@ -201,6 +201,7 @@ const Home = () => {
   );
 
   const [activeSubMenu, setActiveSubMenu] = useState(MENU_KEYS.DASHBOARD);
+  const [verifierEntry, setVerifierEntry] = useState(null); // "archive" | null
   const [settingsOpen, setSettingsOpen] = useState(() => getPersistedSubmenuState("settingsOpen"));
   const [vitalRecordsOpen, setVitalRecordsOpen] = useState(() => getPersistedSubmenuState("vitalRecordsOpen"));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -392,6 +393,7 @@ const Home = () => {
   const openInVerifier = (notif) => {
     const target = NOTIF_TARGETS[notif.record_type];
     if (target && canAccess(target.permission)) {
+      setVerifierEntry(null);
       setActiveSubMenu(target.menu);
       setVitalRecordsOpen(true);
       try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
@@ -404,6 +406,7 @@ const Home = () => {
     (type) => {
       const target = NOTIF_TARGETS[type];
       if (!target || !canAccess(target.permission)) return;
+      setVerifierEntry("archive");
       setActiveSubMenu(target.menu);
       setVitalRecordsOpen(true);
       try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
@@ -448,6 +451,7 @@ const Home = () => {
   }, [viewport]);
 
   const handleMenuClick = (menu) => {
+    setVerifierEntry(null);
     if (menu === MENU_KEYS.VITAL) {
       setVitalRecordsOpen((prev) => {
         const next = !prev;
@@ -469,6 +473,7 @@ const Home = () => {
   };
 
   const handleSubMenuClick = (submenu, parent) => {
+    setVerifierEntry(null);
     setActiveSubMenu(submenu);
     if (parent === MENU_KEYS.VITAL) {
       setVitalRecordsOpen(true);
@@ -530,11 +535,11 @@ const Home = () => {
       case MENU_KEYS.ACCOUNT:
         return <ChangePassword />;
       case MENU_KEYS.BIRTH:
-        return canAccess("birth_verification") ? <UnifiedBirthRegistry /> : <AccessDenied />;
+        return canAccess("birth_verification") ? <UnifiedBirthRegistry initialView={verifierEntry} /> : <AccessDenied />;
       case MENU_KEYS.MARRIAGE:
-        return canAccess("marriage_verification") ? <UnifiedMarriageRegistry /> : <AccessDenied />;
+        return canAccess("marriage_verification") ? <UnifiedMarriageRegistry initialView={verifierEntry} /> : <AccessDenied />;
       case MENU_KEYS.DEATH:
-        return canAccess("death_verification") ? <DeathVerifier /> : <AccessDenied />;
+        return canAccess("death_verification") ? <DeathVerifier initialView={verifierEntry} /> : <AccessDenied />;
       case MENU_KEYS.SCIMS:
         return canAccess("scims_lookup") ? <ExternalIndividualsLookup /> : <AccessDenied />;
       case MENU_KEYS.AUDIT:

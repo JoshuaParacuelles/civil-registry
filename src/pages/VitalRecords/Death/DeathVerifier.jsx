@@ -1411,8 +1411,8 @@ const MobileRecordCardArchive = ({ record, index, onView, onDelete, onRestore, r
 };
 
 /* ── Main Component ──────────────────────────────────────────────────────── */
-export default function UnifiedDeathRegistry() {
-  const [tab,             setTab]             = useState("transaction");
+export default function UnifiedDeathRegistry({ initialView = null }) {
+  const [tab,             setTab]             = useState(initialView === "archive" ? "archive" : "transaction");
   const [confirmModal,    setConfirmModal]    = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [pdfModal,        setPdfModal]        = useState(null);

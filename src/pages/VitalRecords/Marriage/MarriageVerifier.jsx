@@ -1507,8 +1507,8 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
   };
 
   /* ── Main Component ──────────────────────────────────────────────────────── */
-  export default function UnifiedMarriageRegistry() {
-    const [tab,              setTab]              = useState("transaction");
+  export default function UnifiedMarriageRegistry({ initialView = null }) {
+    const [tab,              setTab]              = useState(initialView === "archive" ? "archive" : "transaction");
     const [confirmModal,     setConfirmModal]     = useState(null);
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [pdfModal,         setPdfModal]         = useState(null);

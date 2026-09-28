@@ -1479,8 +1479,8 @@ const MobileRecordCardArchive = ({ record, index, onView, onDelete }) => {
 };
 
 /* ── Main Component ──────────────────────────────────────────────────────── */
-export default function UnifiedBirthRegistry() {
-  const [tab,             setTab]             = useState("transaction");
+export default function UnifiedBirthRegistry({ initialView = null }) {
+  const [tab,             setTab]             = useState(initialView === "archive" ? "archive" : "transaction");
   const [confirmModal,    setConfirmModal]    = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [pdfModal,        setPdfModal]        = useState(null);
