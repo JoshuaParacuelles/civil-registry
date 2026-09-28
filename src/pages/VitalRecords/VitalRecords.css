@@ -387,18 +387,18 @@
 
 
 .btn {
-  height: 34px;
-  padding: 0 14px;
+  height: 44px;
+  padding: 0 22px;
   border: none;
-  border-radius: 999px;   /* was: var(--r-sm) */
-  font-size: 12.5px;
-  font-weight: 600;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   font-family: var(--f);
   transition: all 0.15s;
   touch-action: manipulation;
@@ -412,14 +412,14 @@
 .btn-primary {
   background: #2563eb !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(37,99,235,0.25);
-  min-width: 110px;
+  box-shadow: 0 3px 10px rgba(37,99,235,0.30);
+  min-width: 130px;
   justify-content: center;
 }
 .btn-primary:hover:not(:disabled) {
   background: #1d4ed8 !important;
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(37,99,235,0.35);
+  box-shadow: 0 5px 18px rgba(37,99,235,0.40);
 }
 .btn-primary:disabled {
   background: rgba(37,99,235,0.35) !important;
@@ -431,7 +431,7 @@
    Keep the base desktop/tablet min-width here so the modifier works across
    all widths rather than silently disappearing when the breakpoint rules end. */
 .btn-primary--wide {
-  min-width: 220px;
+  min-width: 240px;
 }
 
 /* .btn-secondary — low-emphasis / neutral action (e.g. "← Back",
@@ -441,9 +441,9 @@
 .btn-secondary {
   background: #ffffff !important;
   color: var(--txt2) !important;
-  border: 1.5px solid var(--border-strong);
+  border: 2px solid var(--border-strong);
   box-shadow: none;
-  min-width: 80px;
+  min-width: 95px;
 }
 .btn-secondary:hover:not(:disabled) {
   background: var(--surf-2) !important;
@@ -465,8 +465,8 @@
 .btn-success {
   background: #059669 !important;
   color: #fff !important;
-  box-shadow: 0 2px 8px rgba(5,150,105,0.25);
-  min-width: 130px;
+  box-shadow: 0 3px 10px rgba(5,150,105,0.30);
+  min-width: 150px;
   justify-content: center;
 }
 .btn-success:hover:not(:disabled) { background: #047857 !important; transform: translateY(-1px); }
@@ -592,13 +592,13 @@
 
 
 .search-btn {
-  height: 36px;
-  padding: 0 18px;
+  height: 44px;
+  padding: 0 24px;
   border: none;
-  border-radius: 999px;   /* was: var(--r-sm) */
+  border-radius: 999px;
   background: #2563eb !important;
   color: #fff !important;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   font-family: var(--f);
@@ -610,7 +610,7 @@
   transition: all 0.15s;
   touch-action: manipulation;
   align-self: flex-end;
-  box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+  box-shadow: 0 3px 10px rgba(37,99,235,0.30);
 }
 .search-btn:hover:not(:disabled) { background: #1d4ed8 !important; transform: translateY(-1px); }
 .search-btn:disabled              { background: rgba(37,99,235,0.35) !important; cursor: not-allowed; }
@@ -767,14 +767,14 @@
   align-items: center;
   justify-content: center;
   vertical-align: middle;
-  gap: 4px;
-  min-width: 80px;
-  padding: 5px 12px;
+  gap: 5px;
+  min-width: 92px;
+  padding: 9px 16px;
   border-radius: 999px;
   border: 1.5px solid #2563eb;
   background: #2563eb !important;
   color: #fff !important;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   font-family: var(--f);
@@ -798,13 +798,13 @@
 .view-pdf-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .select-btn {
-  min-width: 80px;
-  padding: 5px 12px;
+  min-width: 92px;
+  padding: 9px 16px;
   border-radius: 999px;
   border: 1.5px solid #059669;
   background: #059669 !important;
   color: #fff !important;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   font-family: var(--f);
@@ -842,12 +842,12 @@
    confirms NO record was found). Changed from blue to amber so it reads
    as a distinct, deliberate branch rather than a routine primary action. */
 .neg-btn {
-  padding: 7px 14px;
+  padding: 10px 18px;
   border-radius: 999px;
   border: 1.5px solid rgba(217,119,6,0.35);
   background: #d97706 !important;
   color: #fff !important;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
   font-family: var(--f);
@@ -2450,7 +2450,7 @@
   .upload-btn { font-size: 11.5px; padding: 4px 9px; }
   .btn { height: 36px; font-size: 12px; }
   .btn-primary { min-width: 95px; }
-  .btn-primary--wide { min-width: 145px; }
+  .btn-primary--wide { min-width: 165px; }
   .ubr-action-bar { padding: 7px 9px; gap: 8px; }
   /*
     FIX v3: buttons now match the requested look — a solid "primary"
