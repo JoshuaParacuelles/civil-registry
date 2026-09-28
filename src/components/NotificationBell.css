@@ -433,11 +433,9 @@
   .notif-dropdown {
     --notif-mobile-top: 70px;
 
-    position: fixed;
-    top: calc(var(--notif-mobile-top) + env(safe-area-inset-top, 0px));
-    left: 12px;
-    right: 12px;
-    width: auto;
+    /* left + width are set inline by NotificationBell.jsx */
+    position: absolute;
+    top: calc(100% + 10px);
     max-width: none;
     max-height: calc(100vh - var(--notif-mobile-top) - 16px);
     max-height: calc(100dvh - var(--notif-mobile-top) - 16px);
@@ -479,8 +477,6 @@
 /* ---------- Small phones ---------- */
 @media (max-width: 480px) {
   .notif-dropdown {
-    left: 8px;
-    right: 8px;
     border-radius: 14px;
   }
 

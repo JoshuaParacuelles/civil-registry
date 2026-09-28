@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import "./NotificationBell.css";
 
 const BellIcon = () => (
@@ -89,6 +88,38 @@ const NotificationBell = ({
 }) => {
   const isMobile = useMediaQuery("(max-width: 767px)");
 
+  // On mobile, the panel is absolutely positioned inside the wrapper, but its
+  // left offset and width are measured so it always fits inside the screen.
+  const [mobileStyle, setMobileStyle] = useState(undefined);
+
+  useLayoutEffect(() => {
+    if (!notifOpen || !isMobile) {
+      setMobileStyle(undefined);
+      return undefined;
+    }
+
+    const measure = () => {
+      const el = notifWrapperRef && notifWrapperRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const vw = document.documentElement.clientWidth || window.innerWidth;
+      const margin = vw <= 480 ? 8 : 12;
+      setMobileStyle({
+        left: `${margin - rect.left}px`,
+        right: "auto",
+        width: `${vw - margin * 2}px`,
+      });
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+    };
+  }, [notifOpen, isMobile, notifWrapperRef]);
+
   const badgeText = unreadCount > 99 ? "99+" : String(unreadCount);
   const statusTitle =
     notifStatus === "live"
@@ -102,10 +133,7 @@ const NotificationBell = ({
       className="notif-dropdown"
       role="dialog"
       aria-label="Notifications"
-      // The mobile panel lives outside notifWrapperRef, so keep taps inside it
-      // from being treated as "click outside" by the parent's listener.
-      onMouseDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
+      style={mobileStyle}
     >
       <div className="notif-panel-header">
         <div className="notif-panel-title-row">
@@ -231,9 +259,7 @@ const NotificationBell = ({
         {unreadCount > 0 && <span className="notif-count-badge">{badgeText}</span>}
       </button>
 
-      {/* Mobile: portal to <body> so no ancestor can offset position:fixed.
-          Desktop/tablet: render in place, anchored to the bell. */}
-      {notifOpen && (isMobile ? createPortal(panel, document.body) : panel)}
+      {notifOpen && panel}
     </div>
   );
 };
