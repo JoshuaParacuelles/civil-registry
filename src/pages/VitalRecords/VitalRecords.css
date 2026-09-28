@@ -2532,3 +2532,22 @@
   .ubr-body, .tab-wrap { padding: 0; }
   .pdf-inline-viewer { height: auto; }
 }
+
+/* ── HARD OVERRIDE: guarantee Proceed / Back never stretch ────────────── */
+.ubr-action-bar {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+}
+
+.ubr-action-bar .btn,
+.ubr-action-bar .btn-primary,
+.ubr-action-bar .btn-secondary,
+.ubr-action-bar .btn-primary--wide {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  max-width: max-content !important;
+  display: inline-flex !important;
+  white-space: nowrap !important;
+}
