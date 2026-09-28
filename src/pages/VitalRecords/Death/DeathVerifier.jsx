@@ -1973,8 +1973,8 @@ export default function UnifiedDeathRegistry() {
                       </div>
                     </div>
                     <div className="ubr-action-bar">
-                      <button className="btn btn-secondary" onClick={() => setStep("select")}>← Back</button>
-                      <button className="btn btn-primary" onClick={handleConfirmPayment}>
+                      <button className="btn btn-secondary btn-thick" onClick={() => setStep("select")}>← Back</button>
+                      <button className="btn btn-primary btn-thick" onClick={handleConfirmPayment}>
                         Proceed to Release →
                       </button>
                     </div>
@@ -2006,14 +2006,14 @@ export default function UnifiedDeathRegistry() {
                     </div>
                     <div className="ubr-action-bar">
                       <button
-                        className="btn btn-secondary"
+                        className="btn btn-secondary btn-thick"
                         onClick={() => setStep("payment")}
                         disabled={processing}
                       >
                         ← Back
                       </button>
                       <button
-                        className="btn btn-primary btn-primary--wide"
+                        className="btn btn-primary btn-primary--wide btn-thick"
                         onClick={async () => {
                           const saved = await handleCompleteTransaction();
                           if (saved) resetTransaction();

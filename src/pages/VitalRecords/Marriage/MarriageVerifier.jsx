@@ -2109,8 +2109,8 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
                         </div>
                       </div>
                       <div className="ubr-action-bar">
-                        <button className="btn btn-secondary" onClick={() => setStep("select")}>← Back</button>
-                        <button className="btn btn-primary" onClick={handleConfirmPayment}>
+                        <button className="btn btn-secondary btn-thick" onClick={() => setStep("select")}>← Back</button>
+                        <button className="btn btn-primary btn-thick" onClick={handleConfirmPayment}>
                           Proceed to Release →
                         </button>
                       </div>
@@ -2142,7 +2142,7 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
                       </div>
                       <div className="ubr-action-bar">
                         <button
-                          className="btn btn-secondary"
+                          className="btn btn-secondary btn-thick"
                           onClick={() => setStep("payment")}
                           disabled={processing}
                         >
@@ -2150,7 +2150,7 @@ const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
                         </button>
                         {/* FIX: only reset on confirmed backend success. */}
                         <button
-                          className="btn btn-primary btn-primary--wide"
+                          className="btn btn-primary btn-primary--wide btn-thick"
                           onClick={async () => {
                             const saved = await handleCompleteTransaction();
                             if (saved) resetTransaction();

@@ -387,18 +387,18 @@
 
 
 .btn {
-  height: 44px;
-  padding: 0 22px;
+  height: 34px;
+  padding: 0 14px;
   border: none;
   border-radius: 999px;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   font-family: var(--f);
   transition: all 0.15s;
   touch-action: manipulation;
@@ -407,19 +407,17 @@
   box-sizing: border-box;
 }
 
-/* .btn-primary — the main forward/confirm action in a flow (e.g.
-   "Proceed →", "Upload N Files"). Stays primary blue. */
 .btn-primary {
   background: #2563eb !important;
   color: #ffffff !important;
-  box-shadow: 0 3px 10px rgba(37,99,235,0.30);
-  min-width: 130px;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+  min-width: 110px;
   justify-content: center;
 }
 .btn-primary:hover:not(:disabled) {
   background: #1d4ed8 !important;
   transform: translateY(-1px);
-  box-shadow: 0 5px 18px rgba(37,99,235,0.40);
+  box-shadow: 0 4px 16px rgba(37,99,235,0.35);
 }
 .btn-primary:disabled {
   background: rgba(37,99,235,0.35) !important;
@@ -427,23 +425,34 @@
   box-shadow: none;
 }
 
-/* Wide primary variant for long labels such as "Release & New Transaction".
-   Keep the base desktop/tablet min-width here so the modifier works across
-   all widths rather than silently disappearing when the breakpoint rules end. */
-.btn-primary--wide {
-  min-width: 240px;
+/* ── THICK VARIANT — para sa Back, Proceed to Release, Release & New
+   Transaction, Unlock & View Records. Gi-apply nato as an ADD-ON class
+   (.btn-thick) para dili maapil ang plain "Proceed" (Step 1). ────────── */
+.btn-thick {
+  height: 46px !important;
+  padding: 0 24px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+}
+.btn-thick.btn-primary {
+  min-width: 150px;
+}
+.btn-thick.btn-secondary {
+  min-width: 100px;
+}
+.btn-thick.btn-primary--wide {
+  min-width: 250px;
+}
+@media (max-width: 480px) {
+  .btn-thick.btn-primary--wide { min-width: 175px; }
 }
 
-/* .btn-secondary — low-emphasis / neutral action (e.g. "← Back",
-   "Cancel"). Changed from a solid blue button (which made it compete
-   visually with the primary action) to a quiet outlined/neutral style,
-   so the primary action in any button pair is always the obvious one. */
 .btn-secondary {
   background: #ffffff !important;
   color: var(--txt2) !important;
   border: 2px solid var(--border-strong);
   box-shadow: none;
-  min-width: 95px;
+  min-width: 80px;
 }
 .btn-secondary:hover:not(:disabled) {
   background: var(--surf-2) !important;
@@ -1833,8 +1842,11 @@
   background: #2563eb !important;
   color: #ffffff !important;
   border: none;
-  min-width: 220px;
-  width: 100%;
+  height: 46px !important;
+  padding: 0 24px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  min-width: 250px;
 }
 .pw-gate__submit-btn:hover:not(:disabled) {
   background: #1d4ed8 !important;
