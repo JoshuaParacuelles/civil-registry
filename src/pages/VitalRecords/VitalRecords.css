@@ -397,12 +397,14 @@
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   font-family: var(--f);
   transition: all 0.15s;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 /* .btn-primary — the main forward/confirm action in a flow (e.g.
@@ -425,6 +427,13 @@
   box-shadow: none;
 }
 
+/* Wide primary variant for long labels such as "Release & New Transaction".
+   Keep the base desktop/tablet min-width here so the modifier works across
+   all widths rather than silently disappearing when the breakpoint rules end. */
+.btn-primary--wide {
+  min-width: 220px;
+}
+
 /* .btn-secondary — low-emphasis / neutral action (e.g. "← Back",
    "Cancel"). Changed from a solid blue button (which made it compete
    visually with the primary action) to a quiet outlined/neutral style,
@@ -434,6 +443,7 @@
   color: var(--txt2) !important;
   border: 1.5px solid var(--border-strong);
   box-shadow: none;
+  min-width: 80px;
 }
 .btn-secondary:hover:not(:disabled) {
   background: var(--surf-2) !important;
@@ -701,7 +711,13 @@
 
 .result-row__no-parent { font-size: 11px; color: var(--txt3); }
 
-.result-row__actions { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.result-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
 
 /* Badges */
 .exact-match-badge {
@@ -770,6 +786,7 @@
      its sibling .select-btn inside .result-row__actions at tight widths,
      breaking the matched "View" / "Select →" button pair shape. */
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 .view-pdf-btn:hover:not(:disabled) {
   background: #1d4ed8 !important;
@@ -798,6 +815,7 @@
   flex-shrink: 0;
   transition: all 0.15s;
   touch-action: manipulation;
+  box-sizing: border-box;
 }
 .select-btn:hover           { background: #047857 !important; border-color: #047857; color: #fff !important; }
 .select-btn--selected       { background: #047857 !important; color: #fff !important; border-color: #047857; cursor: default; }
@@ -1815,6 +1833,8 @@
   background: #2563eb !important;
   color: #ffffff !important;
   border: none;
+  min-width: 220px;
+  width: 100%;
 }
 .pw-gate__submit-btn:hover:not(:disabled) {
   background: #1d4ed8 !important;
