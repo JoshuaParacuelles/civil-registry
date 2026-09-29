@@ -90,6 +90,7 @@ const NotificationBell = ({
   setOpenActionMenuId,
 }) => {
   const isMobile = useMediaQuery("(max-width: 767px)");
+  void clickedIds;
 
   // On mobile, the panel is absolutely positioned inside the wrapper, but its
   // left offset and width are measured so it always fits inside the screen.
@@ -186,7 +187,7 @@ const NotificationBell = ({
               <div className="notif-body">
                 <div className="notif-msg-row">
                   <p className="notif-msg">{n.message || n.title}</p>
-                  {!clickedIds.has(n.id) && <span className="notif-new-badge">NEW</span>}
+                  {!n.is_read && <span className="notif-new-badge">NEW</span>}
                 </div>
                 <span className="notif-time">{timeAgo(n.created_at)}</span>
               </div>

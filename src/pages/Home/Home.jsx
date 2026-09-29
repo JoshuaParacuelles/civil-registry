@@ -314,7 +314,6 @@ const Home = () => {
 
   const handleNotifClick = async (notif) => {
     markNotificationClicked(notif.id);
-    markNotificationRead(notif);
     setSigFailed(false);
     setSigZoomed(false);
     setSelectedNotif(notif);

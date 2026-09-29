@@ -2,10 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
 const NOTIFICATION_TABLE = "notification";
-const NOTIF_SELECT_COLUMNS =
-  "id, record_type, record_id, control_no, title, message, request_snapshot, is_read, created_at, read_at, read_by";
+const READS_TABLE = "notification_reads";
+const NOTIF_COLUMNS =
+  "id, record_type, record_id, control_no, title, message, request_snapshot, created_at";
+// Embeds this admin's read row (if any). Filtered per user in fetchNotifications.
+const NOTIF_SELECT = `${NOTIF_COLUMNS}, ${READS_TABLE}(username)`;
 const NOTIF_POLL_MS = 15000;
 const NOTIF_CLICKED_KEY = "notifClickedIds";
+const PENDING_TTL_MS = 30000;
 
 const loadClickedIds = () => {
   try {
@@ -20,6 +24,12 @@ const saveClickedIds = (set) => {
   try {
     localStorage.setItem(NOTIF_CLICKED_KEY, JSON.stringify([...set].slice(-500)));
   } catch {}
+};
+
+// Turns a joined row into the shape the UI already expects (is_read is per admin).
+const toNotif = (row) => {
+  const { [READS_TABLE]: reads, ...rest } = row;
+  return { ...rest, is_read: Array.isArray(reads) && reads.length > 0 };
 };
 
 const timeAgo = (iso) => {
@@ -41,6 +51,10 @@ export const NOTIF_TARGETS = {
 };
 
 export default function useNotifications({ username, onOpenVerifier }) {
+  // Read state is stored per admin. If username isn't known yet, a placeholder is used
+  // and the list refetches automatically once it arrives.
+  const reader = username || "unknown";
+
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -51,6 +65,9 @@ export default function useNotifications({ username, onOpenVerifier }) {
   const clickedSeededRef = useRef(loadClickedIds() !== null);
   const notifWrapperRef = useRef(null);
   const notificationsRef = useRef(notifications);
+  const pendingRef = useRef(new Map()); // id -> { is_read, ts } optimistic changes not yet confirmed
+  const manualUnreadRef = useRef(new Set()); // ids marked unread by hand while the panel is open
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
     notificationsRef.current = notifications;
@@ -59,20 +76,42 @@ export default function useNotifications({ username, onOpenVerifier }) {
   const fetchNotifications = useCallback(async () => {
     try {
       const [listResult, countResult] = await Promise.all([
-        supabase.from(NOTIFICATION_TABLE).select(NOTIF_SELECT_COLUMNS).order("created_at", { ascending: false }).limit(50),
-        supabase.from(NOTIFICATION_TABLE).select("id", { count: "exact", head: true }).eq("is_read", false),
+        supabase
+          .from(NOTIFICATION_TABLE)
+          .select(NOTIF_SELECT)
+          .eq(`${READS_TABLE}.username`, reader)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase.rpc("notification_unread_count", { p_username: reader }),
       ]);
 
       if (listResult.error) throw listResult.error;
       if (countResult.error) throw countResult.error;
 
-      setNotifications(Array.isArray(listResult.data) ? listResult.data : []);
-      setUnreadCount(typeof countResult.count === "number" ? countResult.count : 0);
+      const rows = (Array.isArray(listResult.data) ? listResult.data : []).map(toNotif);
+      const serverCount = typeof countResult.data === "number" ? countResult.data : 0;
 
-      if (!clickedSeededRef.current && Array.isArray(listResult.data)) {
+      // Keep optimistic changes until the server agrees (or they expire).
+      const nowMs = Date.now();
+      let adjust = 0;
+      const merged = rows.map((n) => {
+        const p = pendingRef.current.get(n.id);
+        if (!p) return n;
+        if (nowMs - p.ts > PENDING_TTL_MS || p.is_read === n.is_read) {
+          pendingRef.current.delete(n.id);
+          return n;
+        }
+        adjust += p.is_read ? -1 : 1;
+        return { ...n, is_read: p.is_read };
+      });
+
+      setNotifications(merged);
+      setUnreadCount(Math.max(0, serverCount + adjust));
+
+      if (!clickedSeededRef.current) {
         clickedSeededRef.current = true;
-        const seed = new Set(listResult.data.filter((n) => n.is_read).map((n) => n.id));
-        localStorage.setItem(NOTIF_CLICKED_KEY, JSON.stringify([...seed].slice(-500)));
+        const seed = new Set(rows.filter((n) => n.is_read).map((n) => n.id));
+        saveClickedIds(seed);
         setClickedIds(seed);
       }
 
@@ -83,37 +122,33 @@ export default function useNotifications({ username, onOpenVerifier }) {
     } finally {
       setNotifLoading(false);
     }
-  }, []);
+  }, [reader]);
 
   useEffect(() => {
     fetchNotifications();
 
     const channel = supabase
       .channel("home-notification-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: NOTIFICATION_TABLE },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const row = payload.new;
-            setNotifications((prev) => (prev.some((n) => n.id === row.id) ? prev : [row, ...prev].slice(0, 50)));
-            if (!row.is_read) setUnreadCount((c) => c + 1);
-          } else if (payload.eventType === "UPDATE") {
-            const row = payload.new;
-            const previous = notificationsRef.current.find((n) => n.id === row.id);
-            const wasUnread = previous ? !previous.is_read : !payload.old?.is_read;
-            const nowUnread = !row.is_read;
-            if (wasUnread && !nowUnread) setUnreadCount((c) => Math.max(0, c - 1));
-            else if (!wasUnread && nowUnread) setUnreadCount((c) => c + 1);
-            setNotifications((prev) => prev.map((n) => (n.id === row.id ? { ...n, ...row } : n)));
-          } else if (payload.eventType === "DELETE") {
-            const row = payload.old;
-            const removed = notificationsRef.current.find((n) => n.id === row.id);
-            if (removed && !removed.is_read) setUnreadCount((c) => Math.max(0, c - 1));
-            setNotifications((prev) => prev.filter((n) => n.id !== row.id));
-          }
+      .on("postgres_changes", { event: "*", schema: "public", table: NOTIFICATION_TABLE }, (payload) => {
+        if (payload.eventType === "INSERT") {
+          const row = { ...payload.new, is_read: false };
+          setNotifications((prev) => (prev.some((n) => n.id === row.id) ? prev : [row, ...prev].slice(0, 50)));
+          setUnreadCount((c) => c + 1);
+        } else if (payload.eventType === "UPDATE") {
+          // Ignore the legacy global is_read/read_at/read_by; read state is per admin now.
+          const { is_read, read_at, read_by, ...rest } = payload.new;
+          setNotifications((prev) => prev.map((n) => (n.id === rest.id ? { ...n, ...rest } : n)));
+        } else if (payload.eventType === "DELETE") {
+          const row = payload.old;
+          const removed = notificationsRef.current.find((n) => n.id === row.id);
+          if (removed && !removed.is_read) setUnreadCount((c) => Math.max(0, c - 1));
+          setNotifications((prev) => prev.filter((n) => n.id !== row.id));
         }
-      )
+      })
+      // Read changes made in another tab/device: refetch (pending map protects local clicks).
+      .on("postgres_changes", { event: "*", schema: "public", table: READS_TABLE }, () => {
+        fetchNotifications();
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") setNotifStatus("live");
         else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setNotifStatus("error");
@@ -194,79 +229,146 @@ export default function useNotifications({ username, onOpenVerifier }) {
     });
   }, [fetchNotifications]);
 
+  // Saves "read" rows for this admin. Verifies rows were actually written.
+  const saveReads = useCallback(
+    async (ids) => {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from(READS_TABLE)
+        .upsert(
+          ids.map((id) => ({ username: reader, notification_id: id, read_at: now })),
+          { onConflict: "username,notification_id" }
+        )
+        .select("notification_id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error("Nothing was saved (check the RLS policies on notification_reads).");
+      }
+    },
+    [reader]
+  );
+
   const markNotificationRead = useCallback(
     async (notif) => {
       if (!notif || notif.is_read) return;
-
+      manualUnreadRef.current.delete(notif.id);
+      pendingRef.current.set(notif.id, { is_read: true, ts: Date.now() });
       setNotifications((prev) => prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n)));
       setUnreadCount((c) => Math.max(0, c - 1));
 
       try {
-        const { error } = await supabase
-          .from(NOTIFICATION_TABLE)
-          .update({ is_read: true, read_at: new Date().toISOString(), read_by: username || null })
-          .eq("id", notif.id);
-
-        if (error) throw error;
+        await saveReads([notif.id]);
       } catch (err) {
         console.error("[Home] Could not mark notification as read:", err);
+        pendingRef.current.delete(notif.id);
         fetchNotifications();
       }
     },
-    [fetchNotifications, username]
+    [fetchNotifications, saveReads]
   );
 
   const markNotificationUnread = useCallback(
     async (notif) => {
       if (!notif || !notif.is_read) return;
-
+      manualUnreadRef.current.add(notif.id);
+      pendingRef.current.set(notif.id, { is_read: false, ts: Date.now() });
       setNotifications((prev) => prev.map((n) => (n.id === notif.id ? { ...n, is_read: false } : n)));
       setUnreadCount((c) => c + 1);
 
       try {
-        const { error } = await supabase
-          .from(NOTIFICATION_TABLE)
-          .update({ is_read: false, read_at: null, read_by: null })
-          .eq("id", notif.id);
-
+        const { data, error } = await supabase
+          .from(READS_TABLE)
+          .delete()
+          .eq("username", reader)
+          .eq("notification_id", notif.id)
+          .select("notification_id");
         if (error) throw error;
+        if (!data || data.length === 0) {
+          throw new Error("Nothing was removed (check the RLS policies on notification_reads).");
+        }
       } catch (err) {
         console.error("[Home] Could not mark notification as unread:", err);
+        pendingRef.current.delete(notif.id);
+        manualUnreadRef.current.delete(notif.id);
         fetchNotifications();
       }
     },
-    [fetchNotifications]
+    [fetchNotifications, reader]
+  );
+
+  const markIdsRead = useCallback(
+    async (ids) => {
+      if (!ids.length) return;
+      const idSet = new Set(ids);
+      const nowMs = Date.now();
+      ids.forEach((id) => pendingRef.current.set(id, { is_read: true, ts: nowMs }));
+      setNotifications((prev) => prev.map((n) => (idSet.has(n.id) ? { ...n, is_read: true } : n)));
+      setUnreadCount((c) => Math.max(0, c - ids.length));
+
+      try {
+        await saveReads(ids);
+      } catch (err) {
+        console.error("[Home] Could not mark notifications as read:", err);
+        ids.forEach((id) => pendingRef.current.delete(id));
+        fetchNotifications();
+      }
+    },
+    [fetchNotifications, saveReads]
   );
 
   const markAllNotificationsRead = useCallback(async () => {
     if (unreadCount === 0) return;
-
+    manualUnreadRef.current.clear();
+    const nowMs = Date.now();
+    notificationsRef.current
+      .filter((n) => !n.is_read)
+      .forEach((n) => pendingRef.current.set(n.id, { is_read: true, ts: nowMs }));
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
 
     try {
-      const { error } = await supabase
-        .from(NOTIFICATION_TABLE)
-        .update({ is_read: true, read_at: new Date().toISOString(), read_by: username || null })
-        .eq("is_read", false);
-
+      const { error } = await supabase.rpc("notification_mark_all_read", { p_username: reader });
       if (error) throw error;
     } catch (err) {
       console.error("[Home] Could not mark all notifications as read:", err);
-      fetchNotifications();
+      notificationsRef.current.forEach((n) => pendingRef.current.delete(n.id));
     }
-  }, [fetchNotifications, unreadCount, username]);
+    fetchNotifications();
+  }, [fetchNotifications, reader, unreadCount]);
 
-  const markNotificationClicked = useCallback((id) => {
-    setClickedIds((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      saveClickedIds(next);
-      return next;
-    });
-  }, []);
+  // Opening the bell shows what's new; closing it marks what you saw as read (saved to the DB).
+  useEffect(() => {
+    if (notifOpen) {
+      wasOpenRef.current = true;
+      manualUnreadRef.current.clear();
+      return;
+    }
+    if (!wasOpenRef.current) return;
+    wasOpenRef.current = false;
+    const ids = notificationsRef.current
+      .filter((n) => !n.is_read && !manualUnreadRef.current.has(n.id))
+      .map((n) => n.id);
+    markIdsRead(ids);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifOpen]);
 
+  const markNotificationClicked = useCallback(
+    (id) => {
+      setClickedIds((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.add(id);
+        saveClickedIds(next);
+        return next;
+      });
+      const notif = notificationsRef.current.find((n) => n.id === id);
+      if (notif) markNotificationRead(notif);
+    },
+    [markNotificationRead]
+  );
+
+  // Removing a notification deletes it for every admin (same as before);
+  // their notification_reads rows are removed automatically.
   const deleteNotification = useCallback(
     async (notif) => {
       if (!notif) return;
