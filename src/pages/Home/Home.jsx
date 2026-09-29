@@ -241,6 +241,7 @@ const Home = () => {
   const [statusNote, setStatusNote]       = useState("");
   const [statusSaving, setStatusSaving]   = useState(false);
   const [notifyVia, setNotifyVia]         = useState("email");
+  const [historyKey, setHistoryKey]       = useState(0);
 
   // NEW: full request row fetched from the session-gated backend. Kept in
   // its own state (NOT merged into the notification / snapshot that is
@@ -416,6 +417,7 @@ const Home = () => {
             : n
         )
       );
+      setHistoryKey((key) => key + 1);
     } catch (err) {
       showStatusToast("Error", err.message || "Could not update status.", "error");
     } finally {
@@ -693,6 +695,8 @@ const Home = () => {
         getSignatureSrc={getSignatureSrc}
         REQUEST_STATUS_OPTIONS={REQUEST_STATUS_OPTIONS}
         REQUEST_STATUS_LABELS={REQUEST_STATUS_LABELS}
+        requestDetail={requestDetail}
+        historyKey={historyKey}
       />
 
       <LogoutModal
