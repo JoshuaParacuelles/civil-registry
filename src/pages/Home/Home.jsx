@@ -388,10 +388,11 @@ const Home = () => {
       const savedStatus = (data.status || statusDraft).toUpperCase();
 
       const notifiedByEmail = Boolean(data.email_sent);
+      const noEmailNeeded = Boolean(data.email_skipped);
       showStatusToast(
-        notifiedByEmail ? "Success" : "Notice",
+        notifiedByEmail || noEmailNeeded ? "Success" : "Notice",
         data.message || `Updated to ${data.status_label}.`,
-        notifiedByEmail ? "success" : "warning"
+        notifiedByEmail || noEmailNeeded ? "success" : "warning"
       );
 
       setStatusDraft(savedStatus);
