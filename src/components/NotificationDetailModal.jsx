@@ -83,6 +83,9 @@ const NotificationDetailModal = ({
   const currentStatus = (snap.status || "").toUpperCase();
   const isRejecting = statusDraft === "REJECTED";
   const remarkMissing = isRejecting && !statusNote.trim();
+  const FINAL_STATUSES = ["COMPLETED", "REJECTED"];
+  const isFinalized = FINAL_STATUSES.includes(currentStatus);
+  const optionLocked = (status) => isFinalized && !FINAL_STATUSES.includes(status);
 
   return (
     <div className="notif-detail-overlay" onClick={onClose}>
@@ -168,7 +171,9 @@ const NotificationDetailModal = ({
                   disabled={statusSaving}
                 >
                   {statusOptions.map((status) => (
-                    <option key={status} value={status}>{statusOptionLabel(status)}</option>
+                    <option key={status} value={status} disabled={optionLocked(status)}>
+                      {statusOptionLabel(status)}
+                    </option>
                   ))}
                 </select>
 
@@ -187,15 +192,7 @@ const NotificationDetailModal = ({
                 <button
                   type="button"
                   className={`notif-status-update-btn ${isRejecting ? "reject" : ""}`}
-                  onClick={() => {
-                    if (
-                      isRejecting &&
-                      !window.confirm("Reject this request? The citizen will be notified by email.")
-                    ) {
-                      return;
-                    }
-                    updateRequestStatus();
-                  }}
+                  onClick={() => updateRequestStatus()}
                   disabled={statusSaving || statusDraft === currentStatus || remarkMissing}
                   title={remarkMissing ? "Enter a remark to reject" : undefined}
                 >
