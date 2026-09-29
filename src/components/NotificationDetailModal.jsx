@@ -58,6 +58,7 @@ const NotificationDetailModal = ({
   setStatusNote,
   statusSaving,
   updateRequestStatus,
+  onReject,
   NOTIF_TARGETS,
   TYPE_SECTIONS,
   COMMON_SECTIONS,
@@ -165,26 +166,51 @@ const NotificationDetailModal = ({
                   {REQUEST_STATUS_OPTIONS.map((s) => (
                     <option key={s} value={s}>{REQUEST_STATUS_LABELS[s]}</option>
                   ))}
+                  {statusDraft === "REJECTED" && (
+                    <option value="REJECTED">{REQUEST_STATUS_LABELS.REJECTED}</option>
+                  )}
                 </select>
 
+                <label className="notif-status-note-label" htmlFor="notif-status-remark">
+                  Remark
+                </label>
                 <textarea
+                  id="notif-status-remark"
                   className="notif-status-note"
-                  placeholder="Optional note to include in the citizen's notification…"
+                  placeholder="Remark to include in the citizen's email (required when rejecting)…"
                   value={statusNote}
                   onChange={(e) => setStatusNote(e.target.value)}
                   disabled={statusSaving}
                 />
-                <button
-                  type="button"
-                  className="notif-status-update-btn"
-                  onClick={updateRequestStatus}
-                  disabled={
-                    statusSaving ||
-                    statusDraft === (notification?.request_snapshot?.status || "").toUpperCase()
-                  }
-                >
-                  {statusSaving ? "Updating…" : "Update Status"}
-                </button>
+                <div className="notif-status-actions">
+                  <button
+                    type="button"
+                    className="notif-status-update-btn"
+                    onClick={updateRequestStatus}
+                    disabled={
+                      statusSaving ||
+                      statusDraft === (notification?.request_snapshot?.status || "").toUpperCase()
+                    }
+                  >
+                    {statusSaving ? "Updating…" : "Update Status"}
+                  </button>
+
+                  {(snap.status || "").toUpperCase() !== "REJECTED" && (
+                    <button
+                      type="button"
+                      className="notif-status-reject-btn"
+                      onClick={() => {
+                        if (window.confirm("Reject this request? The citizen will be notified by email.")) {
+                          onReject();
+                        }
+                      }}
+                      disabled={statusSaving || !statusNote.trim()}
+                      title={!statusNote.trim() ? "Enter a remark to reject" : undefined}
+                    >
+                      Reject
+                    </button>
+                  )}
+                </div>
               </div>
             </section>
           )}

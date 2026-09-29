@@ -208,6 +208,18 @@
   min-height: 56px;
 }
 
+.notif-status-note-label {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.notif-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .notif-status-update-btn {
   align-self: flex-start;
   padding: 8px 16px;
@@ -224,6 +236,19 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.notif-status-reject-btn {
+  background: #dc2626;
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notif-status-reject-btn:hover:not(:disabled) { background: #b91c1c; }
+.notif-status-reject-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .notif-detail-footer {
   display: flex;

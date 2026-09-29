@@ -368,7 +368,7 @@ const Home = () => {
     setNotifyVia("email");
   }, []);
 
-  const updateRequestStatus = async () => {
+  const updateRequestStatus = async (requestedStatus = statusDraft, forceEmail = false) => {
     if (!selectedNotif?.record_id || !isOnlineRequest) return;
     setStatusSaving(true);
     try {
@@ -377,15 +377,15 @@ const Home = () => {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status: statusDraft,
+          status: requestedStatus,
           note: statusNote.trim() || undefined,
-          notify_via: notifyVia,
+          notify_via: forceEmail ? "email" : notifyVia,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`);
 
-      const savedStatus = (data.status || statusDraft).toUpperCase();
+      const savedStatus = (data.status || requestedStatus).toUpperCase();
 
       const notifiedByEmail = Boolean(data.email_sent);
       const noEmailNeeded = Boolean(data.email_skipped);
@@ -684,6 +684,7 @@ const Home = () => {
         setStatusNote={setStatusNote}
         statusSaving={statusSaving}
         updateRequestStatus={updateRequestStatus}
+        onReject={() => updateRequestStatus("REJECTED", true)}
         notifyVia={notifyVia}
         setNotifyVia={setNotifyVia}
         NOTIF_TARGETS={NOTIF_TARGETS}
