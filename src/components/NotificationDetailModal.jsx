@@ -1,5 +1,6 @@
 import React from "react";
 import "./NotificationDetailModal.css";
+import RequestActivityLog from "./RequestActivityLog";
 
 const CloseIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -65,7 +66,9 @@ const NotificationDetailModal = ({
   getSignatureSrc,
   REQUEST_STATUS_OPTIONS,
   REQUEST_STATUS_LABELS,
-  selectedNotif,
+  isOnlineRequest,
+  requestDetail,
+  historyKey,
 }) => {
   if (!notification) return null;
 
@@ -187,6 +190,17 @@ const NotificationDetailModal = ({
                 </button>
               </div>
             </section>
+          )}
+
+          {isOnlineRequest && canAccess("citizen_requests") && (
+            <RequestActivityLog
+              controlNumber={
+                requestDetail?.notifId === notification.id
+                  ? requestDetail.data.control_no
+                  : notification.control_no
+              }
+              refreshKey={historyKey}
+            />
           )}
         </div>
 
