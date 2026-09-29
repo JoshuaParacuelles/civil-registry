@@ -29,7 +29,6 @@ const ACTION_CONFIG = {
   DELETE:         { label: "Deleted",         tone: "danger"  },
   TRANSACTION:    { label: "Transaction",     tone: "success" },
   ACCOUNT_UPDATE: { label: "Account Updated", tone: "warning" },
-  STATUS_CHANGE:  { label: "Status Changed", tone: "warning" },
   NAVIGATE:       { label: "Navigated",       tone: "neutral" },
 };
 
