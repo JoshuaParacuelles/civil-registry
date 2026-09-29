@@ -85,7 +85,6 @@ const NotificationDetailModal = ({
   const remarkMissing = isRejecting && !statusNote.trim();
   const FINAL_STATUSES = ["COMPLETED", "REJECTED"];
   const isFinalized = FINAL_STATUSES.includes(currentStatus);
-  const optionLocked = (status) => isFinalized && !FINAL_STATUSES.includes(status);
 
   return (
     <div className="notif-detail-overlay" onClick={onClose}>
@@ -168,36 +167,41 @@ const NotificationDetailModal = ({
                   className="notif-status-select"
                   value={statusDraft}
                   onChange={(e) => setStatusDraft(e.target.value)}
-                  disabled={statusSaving}
+                  disabled={statusSaving || isFinalized}
                 >
                   {statusOptions.map((status) => (
-                    <option key={status} value={status} disabled={optionLocked(status)}>
-                      {statusOptionLabel(status)}
-                    </option>
+                    <option key={status} value={status}>{statusOptionLabel(status)}</option>
                   ))}
                 </select>
 
-                <label className="notif-status-note-label" htmlFor="notif-status-remark">
-                  Remark{isRejecting ? " (required)" : ""}
-                </label>
-                <textarea
-                  id="notif-status-remark"
-                  className="notif-status-note"
-                  placeholder="Remark to include in the citizen's email…"
-                  value={statusNote}
-                  onChange={(e) => setStatusNote(e.target.value)}
-                  disabled={statusSaving}
-                />
-
-                <button
-                  type="button"
-                  className={`notif-status-update-btn ${isRejecting ? "reject" : ""}`}
-                  onClick={() => updateRequestStatus()}
-                  disabled={statusSaving || statusDraft === currentStatus || remarkMissing}
-                  title={remarkMissing ? "Enter a remark to reject" : undefined}
-                >
-                  {statusSaving ? "Updating…" : isRejecting ? "Reject Request" : "Update Status"}
-                </button>
+                {isFinalized ? (
+                  <p className="notif-status-locked">
+                    This request is {statusOptionLabel(currentStatus)}. Its status can no longer be changed.
+                  </p>
+                ) : (
+                  <>
+                    <label className="notif-status-note-label" htmlFor="notif-status-remark">
+                      Remark{isRejecting ? " (required)" : ""}
+                    </label>
+                    <textarea
+                      id="notif-status-remark"
+                      className="notif-status-note"
+                      placeholder="Remark to include in the citizen's email…"
+                      value={statusNote}
+                      onChange={(e) => setStatusNote(e.target.value)}
+                      disabled={statusSaving}
+                    />
+                    <button
+                      type="button"
+                      className={`notif-status-update-btn ${isRejecting ? "reject" : ""}`}
+                      onClick={() => updateRequestStatus()}
+                      disabled={statusSaving || statusDraft === currentStatus || remarkMissing}
+                      title={remarkMissing ? "Enter a remark to reject" : undefined}
+                    >
+                      {statusSaving ? "Updating…" : isRejecting ? "Reject Request" : "Update Status"}
+                    </button>
+                  </>
+                )}
               </div>
             </section>
           )}

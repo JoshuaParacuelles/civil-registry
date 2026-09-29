@@ -214,6 +214,8 @@
   font-weight: 600;
 }
 
+.notif-status-locked { margin: 8px 0 0; font-size: 13px; color: #64748b; }
+
 .notif-status-update-btn {
   align-self: flex-start;
   padding: 8px 16px;
