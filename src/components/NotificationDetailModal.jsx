@@ -58,7 +58,6 @@ const NotificationDetailModal = ({
   setStatusNote,
   statusSaving,
   updateRequestStatus,
-  onReject,
   NOTIF_TARGETS,
   TYPE_SECTIONS,
   COMMON_SECTIONS,
@@ -79,6 +78,11 @@ const NotificationDetailModal = ({
   const showSignatureImage = Boolean(snap.has_signature) && !sigFailed;
   const topStatusValue = statusDraft || (snap.status || "").toUpperCase();
   const topStatusLabel = REQUEST_STATUS_LABELS[topStatusValue] || topStatusValue;
+  const statusOptions = Array.from(new Set([...(REQUEST_STATUS_OPTIONS || []), "REJECTED"]));
+  const statusOptionLabel = (status) => REQUEST_STATUS_LABELS[status] || (status === "REJECTED" ? "Rejected" : status);
+  const currentStatus = (snap.status || "").toUpperCase();
+  const isRejecting = statusDraft === "REJECTED";
+  const remarkMissing = isRejecting && !statusNote.trim();
 
   return (
     <div className="notif-detail-overlay" onClick={onClose}>
@@ -163,54 +167,40 @@ const NotificationDetailModal = ({
                   onChange={(e) => setStatusDraft(e.target.value)}
                   disabled={statusSaving}
                 >
-                  {REQUEST_STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{REQUEST_STATUS_LABELS[s]}</option>
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>{statusOptionLabel(status)}</option>
                   ))}
-                  {statusDraft === "REJECTED" && (
-                    <option value="REJECTED">{REQUEST_STATUS_LABELS.REJECTED}</option>
-                  )}
                 </select>
 
                 <label className="notif-status-note-label" htmlFor="notif-status-remark">
-                  Remark
+                  Remark{isRejecting ? " (required)" : ""}
                 </label>
                 <textarea
                   id="notif-status-remark"
                   className="notif-status-note"
-                  placeholder="Remark to include in the citizen's email (required when rejecting)…"
+                  placeholder="Remark to include in the citizen's email…"
                   value={statusNote}
                   onChange={(e) => setStatusNote(e.target.value)}
                   disabled={statusSaving}
                 />
-                <div className="notif-status-actions">
-                  <button
-                    type="button"
-                    className="notif-status-update-btn"
-                    onClick={updateRequestStatus}
-                    disabled={
-                      statusSaving ||
-                      statusDraft === (notification?.request_snapshot?.status || "").toUpperCase()
-                    }
-                  >
-                    {statusSaving ? "Updating…" : "Update Status"}
-                  </button>
 
-                  {(snap.status || "").toUpperCase() !== "REJECTED" && (
-                    <button
-                      type="button"
-                      className="notif-status-reject-btn"
-                      onClick={() => {
-                        if (window.confirm("Reject this request? The citizen will be notified by email.")) {
-                          onReject();
-                        }
-                      }}
-                      disabled={statusSaving || !statusNote.trim()}
-                      title={!statusNote.trim() ? "Enter a remark to reject" : undefined}
-                    >
-                      Reject
-                    </button>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  className={`notif-status-update-btn ${isRejecting ? "reject" : ""}`}
+                  onClick={() => {
+                    if (
+                      isRejecting &&
+                      !window.confirm("Reject this request? The citizen will be notified by email.")
+                    ) {
+                      return;
+                    }
+                    updateRequestStatus();
+                  }}
+                  disabled={statusSaving || statusDraft === currentStatus || remarkMissing}
+                  title={remarkMissing ? "Enter a remark to reject" : undefined}
+                >
+                  {statusSaving ? "Updating…" : isRejecting ? "Reject Request" : "Update Status"}
+                </button>
               </div>
             </section>
           )}
