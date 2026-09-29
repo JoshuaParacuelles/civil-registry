@@ -210,7 +210,6 @@ const Home = () => {
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [now, setNow] = useState(() => new Date());
 
   const {
     notifOpen,
@@ -220,7 +219,6 @@ const Home = () => {
     unreadCount,
     notifLoading,
     notifStatus,
-    clickedIds,
     openActionMenuId,
     notifWrapperRef,
     toggleActionMenu,
@@ -261,14 +259,17 @@ const Home = () => {
     setStatusToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const visibleVitalChildren = isAdminUser
-    ? VITAL_CHILDREN
-    : [
-        ...(canAccess("birth_verification")    ? [MENU_KEYS.BIRTH]    : []),
-        ...(canAccess("marriage_verification") ? [MENU_KEYS.MARRIAGE] : []),
-        ...(canAccess("death_verification")    ? [MENU_KEYS.DEATH]    : []),
-        ...(canAccess("scims_lookup")          ? [MENU_KEYS.SCIMS]    : []),
-      ];
+  const visibleVitalChildren = useMemo(
+    () => isAdminUser
+      ? VITAL_CHILDREN
+      : [
+          ...(canAccess("birth_verification")    ? [MENU_KEYS.BIRTH]    : []),
+          ...(canAccess("marriage_verification") ? [MENU_KEYS.MARRIAGE] : []),
+          ...(canAccess("death_verification")    ? [MENU_KEYS.DEATH]    : []),
+          ...(canAccess("scims_lookup")          ? [MENU_KEYS.SCIMS]    : []),
+        ],
+    [isAdminUser, canAccess]
+  );
 
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_FLAG_KEY, "true"); } catch {}
@@ -283,11 +284,6 @@ const Home = () => {
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  useEffect(() => {
-    const tick = setInterval(() => setNow(new Date()), 60000);
-    return () => clearInterval(tick);
   }, []);
 
   useEffect(() => {
@@ -312,7 +308,7 @@ const Home = () => {
     };
   }, [selectedNotif, requestDetail]);
 
-  const handleNotifClick = async (notif) => {
+  const handleNotifClick = useCallback(async (notif) => {
     markNotificationClicked(notif.id);
     setSigFailed(false);
     setSigZoomed(false);
@@ -356,7 +352,18 @@ const Home = () => {
     } catch (err) {
       console.error("[Home] Could not load request details:", err);
     }
-  };
+  }, [
+    markNotificationClicked,
+    setSigFailed,
+    setSigZoomed,
+    setSelectedNotif,
+    setNotifOpen,
+    setStatusNote,
+    setRequestDetail,
+    setStatusDraft,
+    setNotifyVia,
+    setNotifications,
+  ]);
 
   const closeNotifDetails = useCallback(() => {
     activeNotifIdRef.current = null;
@@ -483,7 +490,7 @@ const Home = () => {
     if (viewport === "mobile") setMobileMenuOpen(false);
   }, [viewport]);
 
-  const handleMenuClick = (menu) => {
+  const handleMenuClick = useCallback((menu) => {
     setVerifierEntry(null);
     if (menu === MENU_KEYS.VITAL) {
       setVitalRecordsOpen((prev) => {
@@ -503,9 +510,9 @@ const Home = () => {
     }
     setActiveSubMenu(menu);
     closeMobileMenu();
-  };
+  }, [closeMobileMenu]);
 
-  const handleSubMenuClick = (submenu, parent) => {
+  const handleSubMenuClick = useCallback((submenu, parent) => {
     setVerifierEntry(null);
     setActiveSubMenu(submenu);
     if (parent === MENU_KEYS.VITAL) {
@@ -517,7 +524,7 @@ const Home = () => {
       localStorage.setItem("settingsOpen", "true");
     }
     closeMobileMenu();
-  };
+  }, [closeMobileMenu]);
 
   const handleConfirmLogout = async () => {
     setLoggingOut(true);
@@ -641,7 +648,7 @@ const Home = () => {
       />
 
       <div className="main-content-wrapper">
-        <Topbar activeSubMenu={activeSubMenu} now={now} toggleSidebar={toggleSidebar}>
+        <Topbar activeSubMenu={activeSubMenu} toggleSidebar={toggleSidebar}>
           <NotificationBell
             notifOpen={notifOpen}
             notifWrapperRef={notifWrapperRef}
@@ -650,7 +657,6 @@ const Home = () => {
             notifStatus={notifStatus}
             notifLoading={notifLoading}
             notifications={notifications}
-            clickedIds={clickedIds}
             openActionMenuId={openActionMenuId}
             toggleActionMenu={toggleActionMenu}
             markAllNotificationsRead={markAllNotificationsRead}

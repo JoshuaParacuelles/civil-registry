@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import "./Dashboard.css";
 
 /* ══ CONSTANTS ═══════════════════════════════════════════════════════════════ */
@@ -8,6 +8,18 @@ import "./Dashboard.css";
 // absolute http://host:5000 URL here — it breaks on LAN and is blocked
 // as mixed content behind an HTTPS tunnel.
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/analytics`;
+const STALE_MS = 60_000;
+const analyticsCache = new Map();
+const ENDPOINTS = {
+  summary:           `${API}/summary`,
+  byYear:            `${API}/records-by-year`,
+  byMonth:           `${API}/records-by-month`,
+  reqByYear:         `${API}/requests-by-year`,
+  reqByMonth:        `${API}/requests-by-month`,
+  topMunicipalities: `${API}/top-municipalities`,
+  growthRate:        `${API}/growth-rate`,
+  today:             `${API}/dashboard-today`,
+};
 
 const COLORS = {
   birth:          "#378ADD",
@@ -22,10 +34,21 @@ const COLORS = {
 const MONTH_SHORT = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 /* ══ HELPERS ═════════════════════════════════════════════════════════════════ */
-const fmtNum  = (v) => Number(v || 0).toLocaleString("en-PH");
+const numFmt = new Intl.NumberFormat("en-PH");
+const phpFmt = new Intl.NumberFormat("en-PH", { maximumFractionDigits: 0 });
+const fmtNum  = (v) => numFmt.format(Number(v || 0));
 const fmtPct  = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Number(v).toFixed(1)}%`);
-const fmtPHP  = (v) => `₱${Number(v || 0).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-const safeArr = (v) => (Array.isArray(v) ? v : []);
+const fmtPHP  = (v) => `₱${phpFmt.format(Number(v || 0))}`;
+const EMPTY_ARRAY = Object.freeze([]);
+const safeArr = (v) => (Array.isArray(v) ? v : EMPTY_ARRAY);
+
+const getAnalyticsCacheKey = () => {
+  try {
+    return sessionStorage.getItem("username") || "anonymous";
+  } catch {
+    return "session-unavailable";
+  }
+};
 
 /* ══ DATA HOOK ═══════════════════════════════════════════════════════════════
    Each failed endpoint is tagged with `{ __failed: true, __error }`
@@ -40,67 +63,76 @@ const safeArr = (v) => (Array.isArray(v) ? v : []);
    genuinely empty — hit /api/analytics/debug-counts to confirm.
    ══════════════════════════════════════════════════════════════════════════ */
 function useAnalyticsData() {
-  const [data, setData]       = useState({});
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(() => analyticsCache.get(getAnalyticsCacheKey())?.data || {});
+  const [loading, setLoading] = useState(() => !analyticsCache.get(getAnalyticsCacheKey())?.data?.summary);
   const [error, setError]     = useState(null);
+  const acRef = useRef(null);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const endpoints = {
-      summary:           `${API}/summary`,
-      byYear:            `${API}/records-by-year`,
-      byMonth:           `${API}/records-by-month`,
-      reqByYear:         `${API}/requests-by-year`,
-      reqByMonth:        `${API}/requests-by-month`,
-      topMunicipalities: `${API}/top-municipalities`,
-      growthRate:        `${API}/growth-rate`,
-      today:             `${API}/dashboard-today`,
-    };
-    try {
-      const fetchPromises = Object.entries(endpoints).map(async ([key, url]) => {
-        try {
-          const r = await fetch(url, { credentials: "include" });
-          if (!r.ok) {
-            let msg = `HTTP ${r.status} ${r.statusText || ""}`.trim();
-            try {
-              const j = await r.json();
-              if (j && j.error) msg = j.error;
-            } catch {
-              // Response body wasn't JSON — keep the HTTP status message.
-            }
-            return [key, { __failed: true, __error: msg }];
-          }
-          const json = await r.json();
-          return [key, json];
-        } catch (e) {
-          return [key, { __failed: true, __error: e.message || "Network error" }];
-        }
-      });
-
-      const results = await Promise.all(fetchPromises);
-      const merged = Object.fromEntries(results);
-      setData(merged);
-
-      const failures = results.filter(([, v]) => v && v.__failed);
-      if (failures.length) {
-        const detail = failures.map(([key, v]) => `${key} (${v.__error})`).join(", ");
-        setError(
-          `${failures.length} of ${results.length} analytics endpoint(s) failed to load: ${detail}`
-        );
-      }
-    } catch (e) {
-      setError(e.message);
-    } finally {
+  const fetchAll = useCallback(async ({ force = false } = {}) => {
+    const cacheKey = getAnalyticsCacheKey();
+    const cached = analyticsCache.get(cacheKey);
+    if (!force && cached?.ts && Date.now() - cached.ts < STALE_MS) {
+      setData(cached.data);
+      setError(null);
       setLoading(false);
+      return;
     }
+
+    acRef.current?.abort();
+    const controller = new AbortController();
+    acRef.current = controller;
+    if (!cached?.data?.summary) setLoading(true);
+    setError(null);
+
+    const failures = [];
+    await Promise.all(Object.entries(ENDPOINTS).map(async ([key, url]) => {
+      let value;
+      try {
+        const response = await fetch(url, { credentials: "include", signal: controller.signal });
+        if (!response.ok) {
+          let message = `HTTP ${response.status} ${response.statusText || ""}`.trim();
+          try {
+            const body = await response.json();
+            if (body?.error) message = body.error;
+          } catch {
+            // Keep the HTTP status when the response body isn't JSON.
+          }
+          throw new Error(message);
+        }
+        value = await response.json();
+      } catch (requestError) {
+        if (requestError.name === "AbortError") return;
+        failures.push(`${key} (${requestError.message || "Network error"})`);
+        value = { __failed: true, __error: requestError.message || "Network error" };
+      }
+
+      if (controller.signal.aborted || acRef.current !== controller) return;
+      const latest = analyticsCache.get(cacheKey);
+      const nextData = { ...(latest?.data || {}), [key]: value };
+      analyticsCache.set(cacheKey, { data: nextData, ts: latest?.ts || 0 });
+      setData(nextData);
+      if (key === "summary") setLoading(false);
+    }));
+
+    if (controller.signal.aborted || acRef.current !== controller) return;
+    if (failures.length) {
+      setError(`${failures.length} analytics endpoint(s) failed: ${failures.join(", ")}`);
+      const latest = analyticsCache.get(cacheKey);
+      if (latest) analyticsCache.set(cacheKey, { ...latest, ts: 0 });
+    } else {
+      const latest = analyticsCache.get(cacheKey);
+      if (latest) analyticsCache.set(cacheKey, { ...latest, ts: Date.now() });
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchAll();
+    return () => acRef.current?.abort();
   }, [fetchAll]);
 
-  return { data, loading, error, refetch: fetchAll };
+  const refetch = useCallback(() => fetchAll({ force: true }), [fetchAll]);
+  return { data, loading, error, refetch };
 }
 
 const useContainerWidth = (fallback = 560) => {
@@ -895,6 +927,13 @@ function buildGrowthKpis(growth) {
   return { momDisplay, momLabel, momAccent: momDisplayAccent, prevMomDisplay, prevMomLabel };
 }
 
+const MemoLineChart = memo(LineChart);
+const MemoBarChart = memo(BarChart);
+const MemoStackedBar = memo(StackedBar);
+const MemoDonutChart = memo(DonutChart);
+const MemoMetricCard = memo(MetricCard);
+const MemoMunicipalityTable = memo(MunicipalityTable);
+
 /* ══ MAIN ANALYTICS DASHBOARD ════════════════════════════════════════════════ */
 const AnalyticsDashboard = ({ recordLinks = {} }) => {
   const { data, loading, error, refetch } = useAnalyticsData();
@@ -923,13 +962,8 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     ];
   }, [growth]);
 
-  const yearLabels   = byYear.map((r) => String(r.year));
-  const growthLabels = growth.map((r) => r.label);
-
-  const reqYearSeries = useMemo(() => {
-    if (!reqYear.length) return [];
-    return [{ name: "Requests", data: reqYear.map((r) => r.count), color: COLORS.marriage }];
-  }, [reqYear]);
+  const yearLabels = useMemo(() => byYear.map((r) => String(r.year)), [byYear]);
+  const growthLabels = useMemo(() => growth.map((r) => r.label), [growth]);
 
   const { momDisplay, momLabel, momAccent, prevMomDisplay, prevMomLabel } = useMemo(
     () => buildGrowthKpis(growth),
@@ -950,18 +984,66 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       : growthLabels[0]
     : null;
 
-  const last12Growth = growth.slice(-12);
+  const last12Growth = useMemo(() => growth.slice(-12), [growth]);
   const last12Period = last12Growth.length
     ? last12Growth.length > 1
       ? `${last12Growth[0].label} – ${last12Growth[last12Growth.length - 1].label}`
       : last12Growth[0].label
     : null;
 
-  const donutSlices = [
-    { label: "Birth",    count: summary.total_birth_records    || 0, color: COLORS.birth    },
+  const donutSlices = useMemo(() => [
+    { label: "Birth", count: summary.total_birth_records || 0, color: COLORS.birth },
     { label: "Marriage", count: summary.total_marriage_records || 0, color: COLORS.marriage },
-    { label: "Death",    count: summary.total_death_records    || 0, color: COLORS.death    },
-  ];
+    { label: "Death", count: summary.total_death_records || 0, color: COLORS.death },
+  ], [summary.total_birth_records, summary.total_marriage_records, summary.total_death_records]);
+
+  const byYearRows = useMemo(
+    () => byYear.map((row) => ({ ...row, label: String(row.year), color: COLORS.birth })),
+    [byYear]
+  );
+  const requestYearRows = useMemo(
+    () => reqYear.map((row) => ({ ...row, label: String(row.year), color: COLORS.marriage })),
+    [reqYear]
+  );
+  const byMonthRows = useMemo(
+    () => byMonth.map((row) => ({ ...row, label: row.month_name, color: COLORS.birth })),
+    [byMonth]
+  );
+  const requestMonthRows = useMemo(
+    () => reqMonth.map((row) => ({ ...row, label: row.month_name, color: COLORS.marriage })),
+    [reqMonth]
+  );
+  const topMunicipalityRows = useMemo(() => munis.slice(0, 15), [munis]);
+  const hotspots = useMemo(() => {
+    const top = (key, color) => [...munis]
+      .sort((a, b) => Number(b[key] || 0) - Number(a[key] || 0))
+      .slice(0, 10)
+      .map((row) => ({ label: row.name, count: row[key] || 0, color }));
+    return {
+      Birth: top("Birth", COLORS.birth),
+      Marriage: top("Marriage", COLORS.marriage),
+      Death: top("Death", COLORS.death),
+    };
+  }, [munis]);
+  const todayRequestRows = useMemo(() => (today.requests_breakdown || []).map((row) => ({
+    label: row.label,
+    count: row.count,
+    color: {
+      Birth: COLORS.birth,
+      Marriage: COLORS.marriage,
+      Death: COLORS.death,
+      Verification: COLORS.verification,
+    }[row.label] || "#64748b",
+  })), [today.requests_breakdown]);
+  const todayPaymentRows = useMemo(() => (today.payments_breakdown || []).map((row) => ({
+    label: row.label,
+    count: row.amount,
+    color: {
+      Birth: COLORS.birth,
+      Marriage: COLORS.marriage,
+      Death: COLORS.death,
+    }[row.label] || "#64748b",
+  })), [today.payments_breakdown]);
 
   const tabs = [
     { id: "overview",   label: "Overview"    },
@@ -999,7 +1081,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       )}
 
       <div className="an-kpi-hero-row">
-        <MetricCard
+        <MemoMetricCard
           hero
           label="Total Records"
           value={fmtNum(summary.total_records)}
@@ -1011,7 +1093,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       </div>
 
       <div className="an-kpi-secondary-row">
-  <MetricCard
+  <MemoMetricCard
     hero
     label="Birth Records"
     value={fmtNum(summary.total_birth_records)}
@@ -1019,7 +1101,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     accent={COLORS.birth}
     onClick={recordLinks.birth || undefined}
   />
-  <MetricCard
+  <MemoMetricCard
     hero
     label="Marriage Records"
     value={fmtNum(summary.total_marriage_records)}
@@ -1027,7 +1109,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     accent={COLORS.marriage}
     onClick={recordLinks.marriage || undefined}
   />
-  <MetricCard
+  <MemoMetricCard
     hero
     label="Death Records"
     value={fmtNum(summary.total_death_records)}
@@ -1055,7 +1137,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
         <div className="an-tab-content">
           <div className="an-two-col">
             <Panel title="Record type distribution" sub="Total active civil registry records">
-              <DonutChart slices={donutSlices} size={130} />
+              <MemoDonutChart slices={donutSlices} size={130} />
             </Panel>
             <Panel title="Seasonal patterns" sub="Record & request volume by month of year">
               <MonthHeatmap byMonth={byMonth} reqByMonth={reqMonth} />
@@ -1068,7 +1150,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             sub={heroPeriod ? `Historical civil registry growth, ${heroPeriod}` : "Historical civil registry growth"}
           >
             {byYear.length ? (
-              <LineChart series={byYearSeries} labels={yearLabels} height={200} showLegend={false} />
+              <MemoLineChart series={byYearSeries} labels={yearLabels} height={200} showLegend={false} />
             ) : (
               <Empty msg="No year data" />
             )}
@@ -1088,7 +1170,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             }
           >
             {growthSeries.length ? (
-              <LineChart series={growthSeries} labels={growthLabels} height={220} showLegend />
+              <MemoLineChart series={growthSeries} labels={growthLabels} height={220} showLegend />
             ) : (
               <Empty msg="No trend data" />
             )}
@@ -1097,16 +1179,16 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
           <div className="an-two-col">
             <Panel title="Records registered per year" sub="Total civil records entered into the system">
               {byYear.length ? (
-                <BarChart
-                  rows={byYear.map((r) => ({ ...r, label: String(r.year), color: COLORS.birth }))}
+                <MemoBarChart
+                  rows={byYearRows}
                   colorKey="color" valueKey="count" labelKey="label"
                 />
               ) : <Empty />}
             </Panel>
             <Panel title="Certificate requests per year" sub="Requests across all document types">
               {reqYear.length ? (
-                <BarChart
-                  rows={reqYear.map((r) => ({ ...r, label: String(r.year), color: COLORS.marriage }))}
+                <MemoBarChart
+                  rows={requestYearRows}
                   colorKey="color" valueKey="count" labelKey="label"
                 />
               ) : <Empty />}
@@ -1115,8 +1197,8 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
           <Panel full title="Monthly seasonality — records" sub="Which months see the highest registration activity">
             {byMonth.length ? (
-              <BarChart
-                rows={byMonth.map((r) => ({ ...r, label: r.month_name, color: COLORS.birth }))}
+              <MemoBarChart
+                rows={byMonthRows}
                 colorKey="color" valueKey="count" labelKey="label"
               />
             ) : <Empty />}
@@ -1124,8 +1206,8 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
           <Panel full title="Monthly seasonality — requests" sub="Certificate request demand by month">
             {reqMonth.length ? (
-              <BarChart
-                rows={reqMonth.map((r) => ({ ...r, label: r.month_name, color: COLORS.marriage }))}
+              <MemoBarChart
+                rows={requestMonthRows}
                 colorKey="color" valueKey="count" labelKey="label"
               />
             ) : <Empty />}
@@ -1142,9 +1224,9 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
           >
             {munis.length ? (
               <>
-                <StackedBar rows={munis.slice(0, 15)} />
+                <MemoStackedBar rows={topMunicipalityRows} />
                 <div style={{ marginTop: "1.25rem" }}>
-                  <MunicipalityTable rows={munis} />
+                  <MemoMunicipalityTable rows={munis} />
                 </div>
               </>
             ) : (
@@ -1163,29 +1245,20 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
                rules (2 columns at <=1024px, 1 column at <=768px) apply. */
             <div className="an-three-col">
               <Panel title="Hotspot analysis — Birth records" sub="Municipalities with concentrated birth registrations">
-                <BarChart
-                  rows={[...munis]
-                    .sort((a, b) => b.Birth - a.Birth)
-                    .slice(0, 10)
-                    .map((r) => ({ label: r.name, count: r.Birth, color: COLORS.birth }))}
+                <MemoBarChart
+                  rows={hotspots.Birth}
                   colorKey="color" valueKey="count" labelKey="label"
                 />
               </Panel>
               <Panel title="Hotspot analysis — Marriage records" sub="Municipalities with the most marriage registrations">
-                <BarChart
-                  rows={[...munis]
-                    .sort((a, b) => b.Marriage - a.Marriage)
-                    .slice(0, 10)
-                    .map((r) => ({ label: r.name, count: r.Marriage, color: COLORS.marriage }))}
+                <MemoBarChart
+                  rows={hotspots.Marriage}
                   colorKey="color" valueKey="count" labelKey="label"
                 />
               </Panel>
               <Panel title="Hotspot analysis — Death records" sub="Municipalities with the highest death registrations">
-                <BarChart
-                  rows={[...munis]
-                    .sort((a, b) => b.Death - a.Death)
-                    .slice(0, 10)
-                    .map((r) => ({ label: r.name, count: r.Death, color: COLORS.death }))}
+                <MemoBarChart
+                  rows={hotspots.Death}
                   colorKey="color" valueKey="count" labelKey="label"
                 />
               </Panel>
@@ -1197,26 +1270,26 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       {tab === "growth" && (
         <div className="an-tab-content">
           <div className="an-kpi-grid">
-            <MetricCard
+            <MemoMetricCard
               label="This month vs last"
               value={momDisplay}
               sub={momLabel}
               accent={momAccent}
               trend={last12Growth.map((r) => r.count)}
             />
-            <MetricCard
+            <MemoMetricCard
               label="Last month MoM"
               value={prevMomDisplay}
               sub={prevMomLabel}
               accent="#64748b"
             />
-            <MetricCard
+            <MemoMetricCard
               label="Months tracked"
               value={fmtNum(growth.length)}
               sub="Historical request periods"
               accent={COLORS.birth}
             />
-            <MetricCard
+            <MemoMetricCard
               label="Highest month"
               value={growth.length ? fmtNum(Math.max(...growth.map((r) => r.count))) : "—"}
               sub="Peak request volume period"
@@ -1234,7 +1307,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             }
           >
             {growthSeries.length ? (
-              <LineChart series={growthSeries} labels={growthLabels} height={240} showLegend />
+              <MemoLineChart series={growthSeries} labels={growthLabels} height={240} showLegend />
             ) : <Empty />}
           </Panel>
 
@@ -1257,31 +1330,14 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
           {today.requests_breakdown?.length > 0 && (
             <div className="an-two-col">
               <Panel title="Requests breakdown" sub="Certificate types requested today">
-                <BarChart
-                  rows={(today.requests_breakdown || []).map((r) => ({
-                    label: r.label,
-                    count: r.count,
-                    color: {
-                      Birth:        COLORS.birth,
-                      Marriage:     COLORS.marriage,
-                      Death:        COLORS.death,
-                      Verification: COLORS.verification,
-                    }[r.label] || "#64748b",
-                  }))}
+                <MemoBarChart
+                  rows={todayRequestRows}
                   colorKey="color" valueKey="count" labelKey="label"
                 />
               </Panel>
               <Panel title="Revenue by type" sub="Payment amounts collected today per document type">
-                <BarChart
-                  rows={(today.payments_breakdown || []).map((r) => ({
-                    label: r.label,
-                    count: r.amount,
-                    color: {
-                      Birth:    COLORS.birth,
-                      Marriage: COLORS.marriage,
-                      Death:    COLORS.death,
-                    }[r.label] || "#64748b",
-                  }))}
+                <MemoBarChart
+                  rows={todayPaymentRows}
                   colorKey="color" valueKey="count" labelKey="label"
                 />
               </Panel>

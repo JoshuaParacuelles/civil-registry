@@ -1,5 +1,12 @@
-import React from "react";
+import React, { memo, useEffect, useState } from "react";
 import "./Topbar.css";
+
+const dateFmt = new Intl.DateTimeFormat("en-PH", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
 
 const CalendarIcon = () => (
   <svg className="topbar-datetime-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -10,7 +17,36 @@ const CalendarIcon = () => (
   </svg>
 );
 
-const Topbar = ({ activeSubMenu, now, toggleSidebar, children }) => (
+const TopbarDate = memo(function TopbarDate() {
+  const [label, setLabel] = useState(() => dateFmt.format(new Date()));
+
+  useEffect(() => {
+    let timer;
+    const schedule = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const delay = nextMidnight.getTime() - now.getTime() + 1000;
+      timer = setTimeout(() => {
+        setLabel(dateFmt.format(new Date()));
+        schedule();
+      }, delay);
+    };
+
+    schedule();
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="topbar-datetime" aria-label="Current date">
+      <span className="topbar-datetime-item">
+        <CalendarIcon />
+        <span>{label}</span>
+      </span>
+    </div>
+  );
+});
+
+const Topbar = ({ activeSubMenu, toggleSidebar, children }) => (
   <header className="topbar">
     <div className="topbar-left">
       <button className="topbar-toggle" onClick={toggleSidebar} type="button">
@@ -20,16 +56,11 @@ const Topbar = ({ activeSubMenu, now, toggleSidebar, children }) => (
     </div>
 
     <div className="topbar-right">
-      <div className="topbar-datetime" aria-label="Current date">
-        <span className="topbar-datetime-item">
-          <CalendarIcon />
-          <span>{new Date(now).toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</span>
-        </span>
-      </div>
+      <TopbarDate />
 
       {children}
     </div>
   </header>
 );
 
-export default Topbar;
+export default memo(Topbar);

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { memo } from "react";
 import "./Sidebar.css";
 
 const Sidebar = ({
@@ -28,25 +28,6 @@ const Sidebar = ({
   accountIcon,
   logoutIcon,
 }) => {
-  useEffect(() => {
-    const setAppHeight = () => {
-      document.documentElement.style.setProperty("--app-height", `${window.innerHeight}px`);
-    };
-
-    setAppHeight();
-    window.addEventListener("resize", setAppHeight);
-    window.addEventListener("orientationchange", setAppHeight);
-    window.addEventListener("pageshow", setAppHeight);
-    document.addEventListener("visibilitychange", setAppHeight);
-
-    return () => {
-      window.removeEventListener("resize", setAppHeight);
-      window.removeEventListener("orientationchange", setAppHeight);
-      window.removeEventListener("pageshow", setAppHeight);
-      document.removeEventListener("visibilitychange", setAppHeight);
-    };
-  }, []);
-
   const vitalIsActive = VITAL_CHILDREN ? VITAL_CHILDREN.includes(activeSubMenu) : false;
   const settingsIsActive = SETTINGS_CHILDREN ? SETTINGS_CHILDREN.includes(activeSubMenu) : false;
 
@@ -61,7 +42,7 @@ const Sidebar = ({
   return (
     <aside id="main-sidebar" className={sidebarClasses} aria-label="Main navigation">
       <div className="sidebar-header">
-        <img src={logoImg} alt="Local Civil Registry" className="logo-img" />
+        <img src={logoImg} alt="Local Civil Registry" className="logo-img" width="38" height="38" />
         <div className="sidebar-brand-text">
           <span className="sidebar-brand-title">Local Civil Registry</span>
           <span className="sidebar-brand-subtitle">San Carlos City</span>
@@ -82,7 +63,7 @@ const Sidebar = ({
           {showLabels && <p className="sidebar-group-label">MAIN</p>}
 
           <li role="menuitem" className={activeSubMenu === MENU_KEYS.DASHBOARD ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.DASHBOARD)}>
-            <img src={dashboardIcon} alt="" className="menu-icon" />
+            <img src={dashboardIcon} alt="" className="menu-icon" width="18" height="18" />
             {showLabels && <span>Dashboard</span>}
           </li>
 
@@ -93,7 +74,7 @@ const Sidebar = ({
               {showLabels && <p className="sidebar-group-label">VERIFIERS</p>}
 
               <li role="menuitem" aria-expanded={vitalRecordsOpen} className={`parent-only${vitalIsActive ? " active" : ""}`} onClick={() => handleMenuClick(MENU_KEYS.VITAL)}>
-                <img src={vitalIcon} alt="" className="menu-icon" />
+                <img src={vitalIcon} alt="" className="menu-icon" width="18" height="18" />
                 {showLabels && <span>Vital Records Management</span>}
                 {showLabels && <span className={`arrow${vitalRecordsOpen ? " down" : ""}`} />}
               </li>
@@ -131,7 +112,7 @@ const Sidebar = ({
             <>
               {showLabels && <p className="sidebar-group-label">HEATMAPS</p>}
               <li role="menuitem" className={activeSubMenu === MENU_KEYS.HEATMAPS ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.HEATMAPS)}>
-                <img src={heatmapsIcon} alt="" className="menu-icon" />
+                <img src={heatmapsIcon} alt="" className="menu-icon" width="18" height="18" />
                 {showLabels && <span>Heatmaps</span>}
               </li>
               <hr className="menu-separator" />
@@ -142,7 +123,7 @@ const Sidebar = ({
             <>
               {showLabels && <p className="sidebar-group-label">DOCUMENT TRACKING</p>}
               <li role="menuitem" className={activeSubMenu === MENU_KEYS.DOCUMENT_TRACKING ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.DOCUMENT_TRACKING)}>
-                <img src={trackingIcon} alt="" className="menu-icon" />
+                <img src={trackingIcon} alt="" className="menu-icon" width="18" height="18" />
                 {showLabels && <span>Document Tracking</span>}
               </li>
               <hr className="menu-separator" />
@@ -152,7 +133,7 @@ const Sidebar = ({
           {showLabels && <p className="sidebar-group-label">ADMINISTRATION</p>}
 
           <li role="menuitem" aria-expanded={settingsOpen} className={`parent-only${settingsIsActive ? " active" : ""}`} onClick={() => handleMenuClick(MENU_KEYS.SETTINGS)}>
-            <img src={accountIcon} alt="" className="menu-icon" />
+            <img src={accountIcon} alt="" className="menu-icon" width="18" height="18" />
             {showLabels && <span>System Settings</span>}
             {showLabels && <span className={`arrow${settingsOpen ? " down" : ""}`} />}
           </li>
@@ -178,7 +159,7 @@ const Sidebar = ({
 
         <div className="sidebar-footer">
           <button className="footer-item" onClick={() => setShowLogoutModal(true)} type="button">
-            <img src={logoutIcon} alt="" className="menu-icon" />
+            <img src={logoutIcon} alt="" className="menu-icon" width="18" height="18" />
             {showLabels && <span>Logout</span>}
           </button>
         </div>
@@ -187,4 +168,4 @@ const Sidebar = ({
   );
 };
 
-export default Sidebar;
+export default memo(Sidebar);

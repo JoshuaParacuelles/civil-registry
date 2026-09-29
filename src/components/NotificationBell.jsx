@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useState } from "react";
+import React, { memo, useEffect, useLayoutEffect, useState } from "react";
 import "./NotificationBell.css";
 
 const BellIcon = () => (
@@ -61,13 +61,78 @@ const useMediaQuery = (query) => {
   useEffect(() => {
     const mq = window.matchMedia(query);
     const onChange = (e) => setMatches(e.matches);
-    setMatches(mq.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, [query]);
 
   return matches;
 };
+
+const NotifItem = memo(function NotifItem({
+  n,
+  menuOpen,
+  targets,
+  onClick,
+  onToggleMenu,
+  onRead,
+  onUnread,
+  onDelete,
+  onCloseMenu,
+  timeAgo,
+}) {
+  const act = (callback) => () => {
+    callback(n);
+    onCloseMenu(null);
+  };
+
+  return (
+    <li className={`notif-item${n.is_read ? "" : " unread"}`} onClick={() => onClick(n)}>
+      <span className="notif-dot" />
+      <div className={`notif-icon-wrap ${targets[n.record_type] ? n.record_type : "system"}`}>
+        <NotifTypeIcon type={n.record_type} />
+      </div>
+      <div className="notif-body">
+        <div className="notif-msg-row">
+          <p className="notif-msg">{n.message || n.title}</p>
+          {!n.is_read && <span className="notif-new-badge">NEW</span>}
+        </div>
+        <span className="notif-time">{timeAgo(n.created_at)}</span>
+      </div>
+      <div className="notif-kebab-wrap">
+        <button
+          type="button"
+          className="notif-kebab-btn"
+          aria-label="More actions"
+          aria-haspopup="true"
+          aria-expanded={menuOpen}
+          onClick={(e) => onToggleMenu(n.id, e)}
+        >
+          <KebabIcon />
+        </button>
+        {menuOpen && (
+          <div className="notif-action-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              role="menuitem"
+              className="notif-action-menu-item"
+              onClick={act(n.is_read ? onUnread : onRead)}
+            >
+              {n.is_read ? "Mark as Unread" : "Mark as read"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="notif-action-menu-item notif-action-menu-item--danger"
+              onClick={act(onDelete)}
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
+    </li>
+  );
+});
 
 const NotificationBell = ({
   notifOpen,
@@ -77,7 +142,6 @@ const NotificationBell = ({
   notifStatus,
   notifLoading,
   notifications,
-  clickedIds,
   openActionMenuId,
   toggleActionMenu,
   markAllNotificationsRead,
@@ -90,17 +154,13 @@ const NotificationBell = ({
   setOpenActionMenuId,
 }) => {
   const isMobile = useMediaQuery("(max-width: 767px)");
-  void clickedIds;
 
   // On mobile, the panel is absolutely positioned inside the wrapper, but its
   // left offset and width are measured so it always fits inside the screen.
   const [mobileStyle, setMobileStyle] = useState(undefined);
 
   useLayoutEffect(() => {
-    if (!notifOpen || !isMobile) {
-      setMobileStyle(undefined);
-      return undefined;
-    }
+    if (!notifOpen || !isMobile) return undefined;
 
     const measure = () => {
       const el = notifWrapperRef && notifWrapperRef.current;
@@ -140,7 +200,7 @@ const NotificationBell = ({
       className="notif-dropdown"
       role="dialog"
       aria-label="Notifications"
-      style={mobileStyle}
+      style={isMobile && notifOpen ? mobileStyle : undefined}
     >
       <div className="notif-panel-header">
         <div className="notif-panel-title-row">
@@ -179,72 +239,19 @@ const NotificationBell = ({
           </li>
         ) : (
           notifications.map((n) => (
-            <li key={n.id} className={`notif-item${n.is_read ? "" : " unread"}`} onClick={() => handleNotifClick(n)}>
-              <span className="notif-dot" />
-              <div className={`notif-icon-wrap ${NOTIF_TARGETS[n.record_type] ? n.record_type : "system"}`}>
-                <NotifTypeIcon type={n.record_type} />
-              </div>
-              <div className="notif-body">
-                <div className="notif-msg-row">
-                  <p className="notif-msg">{n.message || n.title}</p>
-                  {!n.is_read && <span className="notif-new-badge">NEW</span>}
-                </div>
-                <span className="notif-time">{timeAgo(n.created_at)}</span>
-              </div>
-              <div className="notif-kebab-wrap">
-                <button
-                  type="button"
-                  className="notif-kebab-btn"
-                  aria-label="More actions"
-                  aria-haspopup="true"
-                  aria-expanded={openActionMenuId === n.id}
-                  onClick={(e) => toggleActionMenu(n.id, e)}
-                >
-                  <KebabIcon />
-                </button>
-
-                {openActionMenuId === n.id && (
-                  <div className="notif-action-menu" role="menu" onClick={(e) => e.stopPropagation()}>
-                    {n.is_read ? (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="notif-action-menu-item"
-                        onClick={() => {
-                          markNotificationUnread(n);
-                          setOpenActionMenuId(null);
-                        }}
-                      >
-                        Mark as Unread
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="notif-action-menu-item"
-                        onClick={() => {
-                          markNotificationRead(n);
-                          setOpenActionMenuId(null);
-                        }}
-                      >
-                        Mark as read
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="notif-action-menu-item notif-action-menu-item--danger"
-                      onClick={() => {
-                        deleteNotification(n);
-                        setOpenActionMenuId(null);
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                )}
-              </div>
-            </li>
+            <NotifItem
+              key={n.id}
+              n={n}
+              menuOpen={openActionMenuId === n.id}
+              targets={NOTIF_TARGETS}
+              onClick={handleNotifClick}
+              onToggleMenu={toggleActionMenu}
+              onRead={markNotificationRead}
+              onUnread={markNotificationUnread}
+              onDelete={deleteNotification}
+              onCloseMenu={setOpenActionMenuId}
+              timeAgo={timeAgo}
+            />
           ))
         )}
       </ul>

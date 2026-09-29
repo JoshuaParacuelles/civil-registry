@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 
 // Relative by default. Only set VITE_API_BASE_URL if your backend truly
 // lives on a different origin (e.g. a separate deployed domain) — leave it
@@ -23,6 +23,7 @@ const PermissionContext = createContext({
   is_admin:             false,
   can_manage_personnel: false,
   loading:              true,
+  waking:               false,
   error:                null,
   hasAccess:            () => false,
   refresh:              async () => {},
@@ -55,11 +56,8 @@ export function PermissionProvider({ children }) {
   // or silently kicking them back to login after a long wait.
   const [waking, setWaking] = useState(false);
 
-  // Tracks whether this is the very first /api/session call since the
-  // page loaded. Only that first call is likely to hit a cold backend;
-  // subsequent refreshes (tab focus, manual retry, etc.) hit an already-
-  // warm server and don't need the "waking up" messaging.
-  const isFirstRefresh = useRef(true);
+  const inFlight = useRef(null);
+  const hasLoadedOnce = useRef(false);
 
   const clearPerms = useCallback(() => {
     setRole(null);
@@ -84,85 +82,86 @@ export function PermissionProvider({ children }) {
     }
   }, [clearPerms]);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(() => {
+    if (inFlight.current) return inFlight.current;
 
-    const firstAttempt = isFirstRefresh.current;
-    isFirstRefresh.current = false;
+    const run = async () => {
+      const firstLoad = !hasLoadedOnce.current;
+      if (firstLoad) setLoading(true);
+      setError(null);
 
-    // Only show "waking up" messaging on the first load, and only after
-    // a couple seconds — a warm server responds almost instantly, so this
-    // avoids flashing the message on every normal page load.
-    let wakingTimer = null;
-    if (firstAttempt) {
-      wakingTimer = setTimeout(() => setWaking(true), 2000);
-    }
+      let wakingTimer = null;
+      if (firstLoad) wakingTimer = setTimeout(() => setWaking(true), 2000);
 
-    try {
-      const res = await fetchWithTimeout(`${API}/api/session`, {
-        credentials: "include",
-        headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
-      });
+      try {
+        const res = await fetchWithTimeout(`${API}/api/session`, {
+          credentials: "include",
+          headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
+        });
 
-      if (res.status === 401) {
-        clearPerms();
-        return;
-      }
-
-      if (!res.ok) {
-        console.warn("[Permissions] /api/session returned status", res.status);
-        setError(`Server returned ${res.status}`);
-        clearPerms();
-        return;
-      }
-
-      const data = await res.json();
-
-      if (data.authenticated || data.user) {
-        const userObj = data.user || {};
-
-        const userAdmin =
-          Boolean(userObj.is_admin || data.is_admin) ||
-          (userObj.role && userObj.role.toLowerCase().includes("admin")) ||
-          (data.role && data.role.toLowerCase().includes("admin"));
-
-        const perms = Array.isArray(userObj.permissions)
-          ? userObj.permissions
-          : Array.isArray(data.permissions)
-            ? data.permissions
-            : [];
-
-        if (!perms.includes("dashboard")) {
-          perms.push("dashboard");
+        if (res.status === 401) {
+          clearPerms();
+          return;
         }
 
-        setRole(userObj.role || data.role || (userAdmin ? "Administrator" : "User"));
-        setPermissions(perms);
-        setIsAdmin(userAdmin);
-        setAuthenticated(true);
-
-        if (data.username) {
-          sessionStorage.setItem("username", data.username);
+        if (!res.ok) {
+          console.warn("[Permissions] /api/session returned status", res.status);
+          setError(`Server returned ${res.status}`);
+          if (firstLoad) clearPerms();
+          return;
         }
-        sessionStorage.setItem("isAuthenticated", "true");
-      } else {
-        clearPerms();
+
+        const data = await res.json();
+
+        if (data.authenticated || data.user) {
+          const userObj = data.user || {};
+
+          const userAdmin =
+            Boolean(userObj.is_admin || data.is_admin) ||
+            (userObj.role && userObj.role.toLowerCase().includes("admin")) ||
+            (data.role && data.role.toLowerCase().includes("admin"));
+
+          const perms = [
+            ...(Array.isArray(userObj.permissions)
+              ? userObj.permissions
+              : Array.isArray(data.permissions)
+                ? data.permissions
+                : []),
+          ];
+
+          if (!perms.includes("dashboard")) perms.push("dashboard");
+
+          setRole(userObj.role || data.role || (userAdmin ? "Administrator" : "User"));
+          setPermissions(perms);
+          setIsAdmin(userAdmin);
+          setAuthenticated(true);
+
+          if (data.username) sessionStorage.setItem("username", data.username);
+          sessionStorage.setItem("isAuthenticated", "true");
+        } else {
+          clearPerms();
+        }
+      } catch (e) {
+        if (e.name === "AbortError") {
+          console.error("[Permissions] /api/session timed out after", FETCH_TIMEOUT_MS, "ms");
+          setError("Request timed out.");
+        } else {
+          console.error("[Permissions] /api/session failed:", e);
+          setError("Could not reach the server.");
+        }
+        if (firstLoad) clearPerms();
+      } finally {
+        hasLoadedOnce.current = true;
+        if (wakingTimer) clearTimeout(wakingTimer);
+        setWaking(false);
+        if (firstLoad) setLoading(false);
       }
-    } catch (e) {
-      if (e.name === "AbortError") {
-        console.error("[Permissions] /api/session timed out after", FETCH_TIMEOUT_MS, "ms");
-        setError("Request timed out.");
-      } else {
-        console.error("[Permissions] /api/session failed:", e);
-        setError("Could not reach the server.");
-      }
-      clearPerms();
-    } finally {
-      if (wakingTimer) clearTimeout(wakingTimer);
-      setWaking(false);
-      setLoading(false);
-    }
+    };
+
+    inFlight.current = run().finally(() => {
+      inFlight.current = null;
+    });
+    return inFlight.current;
   }, [clearPerms]);
 
   useEffect(() => {
@@ -196,22 +195,22 @@ export function PermissionProvider({ children }) {
     [permissions, isAdmin, authenticated]
   );
 
-  const canManagePersonnel = isAdmin;
+  const value = useMemo(() => ({
+    role,
+    permissions,
+    is_admin: isAdmin,
+    can_manage_personnel: isAdmin,
+    loading,
+    waking,
+    error,
+    hasAccess,
+    refresh,
+    clearPerms,
+    logout,
+  }), [role, permissions, isAdmin, loading, waking, error, hasAccess, refresh, clearPerms, logout]);
 
   return (
-    <PermissionContext.Provider value={{
-      role,
-      permissions,
-      is_admin: isAdmin,
-      can_manage_personnel: canManagePersonnel,
-      loading,
-      waking,
-      error,
-      hasAccess,
-      refresh,
-      clearPerms,
-      logout,
-    }}>
+    <PermissionContext.Provider value={value}>
       {children}
     </PermissionContext.Provider>
   );

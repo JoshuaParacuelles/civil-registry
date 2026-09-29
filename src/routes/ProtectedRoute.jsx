@@ -1,29 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { usePermissions } from "../context/PermissionContext";
-
-const LoadingScreen = ({ waking }) => (
-  <div style={{
-    display: "flex", flexDirection: "column",
-    alignItems: "center", justifyContent: "center",
-    height: "100vh", gap: "12px", color: "#888",
-  }}>
-    <div style={{
-      width: "32px", height: "32px",
-      border: "3px solid #e5e7eb",
-      borderTop: "3px solid #6366f1",
-      borderRadius: "50%",
-      animation: "spin 0.8s linear infinite",
-    }} />
-    {/* BUG FIX: without this, a cold-start wait (50-90s+ on a free-tier
-        backend) just looks like a frozen spinner, and users assume the
-        app is broken. Naming what's actually happening (and that it can
-        take up to a minute) sets the right expectation instead. */}
-    <p style={{ margin: 0 }}>
-      {waking ? "Waking up the server, this can take up to a minute…" : "Loading..."}
-    </p>
-    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-  </div>
-);
+import LoadingScreen from "./LoadingScreen";
 
 export default function ProtectedRoute({ module, adminOnly = false, children }) {
   const { hasAccess, is_admin, loading, waking } = usePermissions();

@@ -376,12 +376,10 @@
     z-index: 1200;
     box-shadow: 4px 0 36px rgba(0, 0, 0, 0.35);
 
-    /* Use the real visible height, not the "toolbar hidden" 100vh */
     top: 0;
     bottom: 0;
     height: 100vh;
     height: 100dvh;
-    height: var(--app-height, 100dvh);
     max-height: 100%;
   }
 

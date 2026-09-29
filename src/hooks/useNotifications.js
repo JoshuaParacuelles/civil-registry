@@ -8,28 +8,34 @@ const NOTIF_COLUMNS =
 // Embeds this admin's read row (if any). Filtered per user in fetchNotifications.
 const NOTIF_SELECT = `${NOTIF_COLUMNS}, ${READS_TABLE}(username)`;
 const NOTIF_POLL_MS = 15000;
-const NOTIF_CLICKED_KEY = "notifClickedIds";
 const PENDING_TTL_MS = 30000;
-
-const loadClickedIds = () => {
-  try {
-    const raw = localStorage.getItem(NOTIF_CLICKED_KEY);
-    return raw === null ? null : new Set(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-};
-
-const saveClickedIds = (set) => {
-  try {
-    localStorage.setItem(NOTIF_CLICKED_KEY, JSON.stringify([...set].slice(-500)));
-  } catch {}
-};
 
 // Turns a joined row into the shape the UI already expects (is_read is per admin).
 const toNotif = (row) => {
   const { [READS_TABLE]: reads, ...rest } = row;
   return { ...rest, is_read: Array.isArray(reads) && reads.length > 0 };
+};
+
+const sameNotification = (a, b) =>
+  a.id === b.id &&
+  a.record_type === b.record_type &&
+  a.record_id === b.record_id &&
+  a.control_no === b.control_no &&
+  a.title === b.title &&
+  a.message === b.message &&
+  a.created_at === b.created_at &&
+  a.is_read === b.is_read &&
+  JSON.stringify(a.request_snapshot) === JSON.stringify(b.request_snapshot);
+
+const retainUnchangedNotifications = (previous, next) => {
+  if (previous.length !== next.length) return next;
+  let changed = false;
+  const stable = next.map((notification, index) => {
+    if (sameNotification(previous[index], notification)) return previous[index];
+    changed = true;
+    return notification;
+  });
+  return changed ? stable : previous;
 };
 
 const timeAgo = (iso) => {
@@ -60,20 +66,25 @@ export default function useNotifications({ username, onOpenVerifier }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifLoading, setNotifLoading] = useState(true);
   const [notifStatus, setNotifStatus] = useState("connecting");
-  const [clickedIds, setClickedIds] = useState(() => loadClickedIds() ?? new Set());
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
-  const clickedSeededRef = useRef(loadClickedIds() !== null);
   const notifWrapperRef = useRef(null);
   const notificationsRef = useRef(notifications);
   const pendingRef = useRef(new Map()); // id -> { is_read, ts } optimistic changes not yet confirmed
   const manualUnreadRef = useRef(new Set()); // ids marked unread by hand while the panel is open
   const wasOpenRef = useRef(false);
+  const fetchSeqRef = useRef(0);
+  const statusRef = useRef(notifStatus);
 
   useEffect(() => {
     notificationsRef.current = notifications;
   }, [notifications]);
 
+  useEffect(() => {
+    statusRef.current = notifStatus;
+  }, [notifStatus]);
+
   const fetchNotifications = useCallback(async () => {
+    const sequence = ++fetchSeqRef.current;
     try {
       const [listResult, countResult] = await Promise.all([
         supabase
@@ -85,6 +96,7 @@ export default function useNotifications({ username, onOpenVerifier }) {
         supabase.rpc("notification_unread_count", { p_username: reader }),
       ]);
 
+      if (sequence !== fetchSeqRef.current) return;
       if (listResult.error) throw listResult.error;
       if (countResult.error) throw countResult.error;
 
@@ -105,26 +117,46 @@ export default function useNotifications({ username, onOpenVerifier }) {
         return { ...n, is_read: p.is_read };
       });
 
-      setNotifications(merged);
+      setNotifications((previous) => retainUnchangedNotifications(previous, merged));
       setUnreadCount(Math.max(0, serverCount + adjust));
-
-      if (!clickedSeededRef.current) {
-        clickedSeededRef.current = true;
-        const seed = new Set(rows.filter((n) => n.is_read).map((n) => n.id));
-        saveClickedIds(seed);
-        setClickedIds(seed);
-      }
 
       setNotifStatus((prev) => (prev === "live" ? "live" : "connecting"));
     } catch (err) {
+      if (sequence !== fetchSeqRef.current) return;
       console.error("[Home] Could not load notifications:", err);
       setNotifStatus("error");
     } finally {
-      setNotifLoading(false);
+      if (sequence === fetchSeqRef.current) setNotifLoading(false);
     }
   }, [reader]);
 
   useEffect(() => {
+    let refetchTimer = null;
+    const scheduleRefetch = () => {
+      window.clearTimeout(refetchTimer);
+      refetchTimer = window.setTimeout(fetchNotifications, 400);
+    };
+
+    const handleReadChange = (payload) => {
+      const row = payload.eventType === "DELETE" ? payload.old : payload.new;
+      const pending = row && pendingRef.current.get(row.notification_id);
+      const isReadEvent = payload.eventType !== "DELETE";
+      const matchesPending = pending && (
+        (isReadEvent && pending.is_read) || (!isReadEvent && !pending.is_read)
+      );
+
+      if (
+        row?.username === reader &&
+        matchesPending &&
+        Date.now() - pending.ts <= PENDING_TTL_MS
+      ) {
+        pendingRef.current.delete(row.notification_id);
+        return;
+      }
+
+      scheduleRefetch();
+    };
+
     fetchNotifications();
 
     const channel = supabase
@@ -136,7 +168,10 @@ export default function useNotifications({ username, onOpenVerifier }) {
           setUnreadCount((c) => c + 1);
         } else if (payload.eventType === "UPDATE") {
           // Ignore the legacy global is_read/read_at/read_by; read state is per admin now.
-          const { is_read, read_at, read_by, ...rest } = payload.new;
+          const rest = { ...payload.new };
+          delete rest.is_read;
+          delete rest.read_at;
+          delete rest.read_by;
           setNotifications((prev) => prev.map((n) => (n.id === rest.id ? { ...n, ...rest } : n)));
         } else if (payload.eventType === "DELETE") {
           const row = payload.old;
@@ -145,18 +180,28 @@ export default function useNotifications({ username, onOpenVerifier }) {
           setNotifications((prev) => prev.filter((n) => n.id !== row.id));
         }
       })
-      // Read changes made in another tab/device: refetch (pending map protects local clicks).
-      .on("postgres_changes", { event: "*", schema: "public", table: READS_TABLE }, () => {
-        fetchNotifications();
-      })
+        // Read changes are per admin; ignore this client's confirmed optimistic writes.
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: READS_TABLE,
+          filter: `username=eq.${reader}`,
+        }, handleReadChange)
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") setNotifStatus("live");
-        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setNotifStatus("error");
-        else setNotifStatus("connecting");
+          if (status === "SUBSCRIBED") {
+            statusRef.current = "live";
+            setNotifStatus("live");
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            statusRef.current = "error";
+            setNotifStatus("error");
+          } else {
+            statusRef.current = "connecting";
+            setNotifStatus("connecting");
+          }
       });
 
     const poll = setInterval(() => {
-      if (!document.hidden) fetchNotifications();
+        if (!document.hidden && statusRef.current !== "live") fetchNotifications();
     }, NOTIF_POLL_MS);
 
     const onVisible = () => {
@@ -166,10 +211,15 @@ export default function useNotifications({ username, onOpenVerifier }) {
 
     return () => {
       clearInterval(poll);
+      window.clearTimeout(refetchTimer);
       document.removeEventListener("visibilitychange", onVisible);
       supabase.removeChannel(channel);
     };
-  }, [fetchNotifications]);
+  }, [fetchNotifications, reader]);
+
+  useEffect(() => {
+    if (notifOpen) fetchNotifications();
+  }, [notifOpen, fetchNotifications]);
 
   useEffect(() => {
     if (!notifOpen) return undefined;
@@ -222,12 +272,7 @@ export default function useNotifications({ username, onOpenVerifier }) {
     setOpenActionMenuId((prev) => (prev === id ? null : id));
   }, []);
 
-  const toggleNotifDropdown = useCallback(() => {
-    setNotifOpen((prev) => {
-      if (!prev) fetchNotifications();
-      return !prev;
-    });
-  }, [fetchNotifications]);
+  const toggleNotifDropdown = useCallback(() => setNotifOpen((prev) => !prev), []);
 
   // Saves "read" rows for this admin. Verifies rows were actually written.
   const saveReads = useCallback(
@@ -354,13 +399,6 @@ export default function useNotifications({ username, onOpenVerifier }) {
 
   const markNotificationClicked = useCallback(
     (id) => {
-      setClickedIds((prev) => {
-        if (prev.has(id)) return prev;
-        const next = new Set(prev);
-        next.add(id);
-        saveClickedIds(next);
-        return next;
-      });
       const notif = notificationsRef.current.find((n) => n.id === id);
       if (notif) markNotificationRead(notif);
     },
@@ -416,8 +454,6 @@ export default function useNotifications({ username, onOpenVerifier }) {
     setNotifLoading,
     notifStatus,
     setNotifStatus,
-    clickedIds,
-    setClickedIds,
     openActionMenuId,
     setOpenActionMenuId,
     notifWrapperRef,

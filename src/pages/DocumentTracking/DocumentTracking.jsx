@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { usePermissions } from "../../context/PermissionContext";
 import { supabase } from "../../services/supabaseClient";
 import "./DocumentTracking.css";
@@ -14,6 +14,10 @@ const API = import.meta.env.VITE_API_BASE_URL || "";
 // document_assignments -> update documents in the same action)
 // collapses into a single refetch instead of one per row changed.
 const REALTIME_DEBOUNCE_MS = 300;
+const DOCUMENT_PAGE_SIZE = 50;
+const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
+  month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+});
 
 // PER-STAGE HANDLER FIX: the exact wording shown for a stage that has
 // nobody assigned to it. Kept as one constant so every place that
@@ -130,9 +134,7 @@ function formatDate(value) {
   }
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return value; // already a display string
-  return d.toLocaleString(undefined, {
-    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-  });
+  return dateTimeFmt.format(d);
 }
 
 function initialsFor(name) {
@@ -242,38 +244,6 @@ async function apiFetch(path, options = {}) {
   return body;
 }
 
-// Small inline icon set (kept local so this file has no new dependency).
-function ChevronIcon({ open }) {
-  return (
-    <svg
-      width="12" height="12" viewBox="0 0 24 24" fill="none"
-      style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 120ms ease", flexShrink: 0 }}
-    >
-      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-      <path d="M4 12.5l5 5L20 6" stroke="#2c7a4b" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// Used on the "remove this person" control in the Add-person dropdown.
-function TrashIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-      <path
-        d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m3 0v13a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12zM10 11v6M14 11v6"
-        stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export default function DocumentTracking() {
   // ROLE POLICY (strict):
   //   - Administrator: VIEW-ONLY on document status/stages, plus the
@@ -317,26 +287,11 @@ export default function DocumentTracking() {
   //   "forwards" the document to the next role's queue, gated by that
   //   next stage's own permission the same way.
   //
-  //   can_manage_personnel: a separately-named flag for the personnel/
-  //   assignment concern specifically (adding a full name to the
-  //   handler pool, assigning who handles a document). Today
-  //   Administrator is the only role that gets it. Reading it under
-  //   its own name here — instead of every personnel-related check
-  //   reaching for is_admin directly — is what keeps "who can manage
-  //   personnel" and "who is an admin" distinct in the code, matching
-  //   how they're distinct as concepts.
-  const { is_admin, can_manage_personnel, hasAccess } = usePermissions();
+  const { is_admin, hasAccess } = usePermissions();
 
   const [documents, setDocuments] = useState([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState(null);
-
-  // Who Document Tracking can offer as a handler in the "currently
-  // handling" dropdown — loaded once, independent of which document is
-  // selected. Admins can grow this pool via the "Add person" combobox
-  // below, and pick from it to assign a document via the dropdown in
-  // the detail panel.
-  const [handlers, setHandlers] = useState([]);
 
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -344,6 +299,8 @@ export default function DocumentTracking() {
   const [detailError, setDetailError] = useState(null);
 
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [visibleCount, setVisibleCount] = useState(DOCUMENT_PAGE_SIZE);
   const [filter, setFilter] = useState("All");
   const [openStage, setOpenStage] = useState(null);
   const [draftComment, setDraftComment] = useState("");
@@ -356,33 +313,6 @@ export default function DocumentTracking() {
   const [busy, setBusy] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const saveTimer = useRef(null);
-
-  // "Add person" — a dropdown/combobox (not a modal): typing filters
-  // the existing handler pool live, an exact match shows a checkmark
-  // (so you can see at a glance the name is already in the list
-  // instead of adding a duplicate), and an "+ Add "…"" row submits a
-  // brand-new name. This is a name-only entry into the handler pool —
-  // it is NOT creating a user account or login, same as before; only
-  // the UI changed. Always visible in the Documents list header
-  // (admin-only) so it works even with no document selected.
-  const [addOpen, setAddOpen] = useState(false);
-  const [addValue, setAddValue] = useState("");
-  const [addBusy, setAddBusy] = useState(false);
-  const [addError, setAddError] = useState(null);
-  const addBoxRef = useRef(null);
-
-  // Which handler-pool entry (by id) is currently being removed, so
-  // just that row can show a disabled/busy state on its remove button
-  // instead of freezing the whole dropdown.
-  const [removeBusyId, setRemoveBusyId] = useState(null);
-
-  // "Add new name" mode: clicking the "+ Add new name" row switches the
-  // dropdown from "browse/search personnel" into a dedicated add-a-person
-  // view with its own input and a Confirm button, instead of requiring the
-  // person to type into the top search box before the row does anything.
-  const [addingNew, setAddingNew] = useState(false);
-  const [newNameValue, setNewNameValue] = useState("");
-  const newNameInputRef = useRef(null);
 
   // NEW — "New Document" modal: lets any logged-in user create a
   // document/request record (POST /api/documents). This is what was
@@ -436,12 +366,10 @@ export default function DocumentTracking() {
   // separate session/reload) already reflected the correct, current
   // handler.
   //
-  // MULTI-DOCUMENT HANDLERS FIX (NEW): loadHandlers() now gets the same
-  // treatment via handlersRequestIdRef below — see loadHandlers() for
-  // why.
   const listRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
-  const handlersRequestIdRef = useRef(0);
+  const listRefreshTimerRef = useRef(null);
+  const detailRefreshTimerRef = useRef(null);
 
   // SILENT-REFRESH FIX (NEW): mirrors the `detail` state so loadDetail()
   // (a stable useCallback with no deps) can check whether the document
@@ -575,31 +503,7 @@ export default function DocumentTracking() {
     }
   }, []);
 
-  const loadHandlers = useCallback(async () => {
-    // MULTI-DOCUMENT HANDLERS FIX (NEW): the same
-    // "supersede-if-not-newest" guard loadList()/loadDetail() already
-    // use above, now applied to the shared handler pool too. Without a
-    // ticket here, two overlapping loadHandlers() calls — e.g. the
-    // initial mount fetch racing a realtime-triggered refetch right
-    // after an admin adds/removes a person, or two quick
-    // additions/removals in succession — could resolve out of order,
-    // and the older (but slower) response would overwrite the newer
-    // one, briefly showing a stale handler pool (a just-removed person
-    // still selectable, or a just-added one missing) in the "currently
-    // handling" / assignment dropdowns across every open document.
-    const requestId = ++handlersRequestIdRef.current;
-    try {
-      const rows = await apiFetch("/api/documents/handlers");
-      if (handlersRequestIdRef.current !== requestId) return; // superseded by a newer call
-      setHandlers(rows || []);
-    } catch (e) {
-      if (handlersRequestIdRef.current !== requestId) return; // superseded by a newer call
-      console.warn("[DocumentTracking] Failed to load handlers:", e);
-    }
-  }, []);
-
   useEffect(() => { loadList(); }, [loadList]);
-  useEffect(() => { loadHandlers(); }, [loadHandlers]);
   useEffect(() => {
     setOpenStage(null);
     setDraftComment("");
@@ -630,50 +534,41 @@ export default function DocumentTracking() {
   // realtime events too, so without read access no event ever arrives
   // even though the subscription itself succeeds silently.
   useEffect(() => {
-    let listTimer = null;
-    let detailTimer = null;
-    let handlersTimer = null;
-
     const scheduleList = () => {
-      clearTimeout(listTimer);
+      clearTimeout(listRefreshTimerRef.current);
       // SILENT-REFRESH FIX: a realtime event is someone else's write (or
       // our own echoed back) — refresh in the background, never with a
       // loading state, so no session sees another user's loading flash.
-      listTimer = setTimeout(() => loadList({ silent: true }), REALTIME_DEBOUNCE_MS);
+      listRefreshTimerRef.current = setTimeout(() => loadList({ silent: true }), REALTIME_DEBOUNCE_MS);
     };
     const scheduleDetail = () => {
-      clearTimeout(detailTimer);
-      detailTimer = setTimeout(() => {
+      clearTimeout(detailRefreshTimerRef.current);
+      detailRefreshTimerRef.current = setTimeout(() => {
         // SILENT-REFRESH FIX: see loadDetail() — the open panel stays
         // mounted and updates in place; only a document that isn't on
         // screen yet gets the loading state.
         if (selectedIdRef.current != null) loadDetail(selectedIdRef.current, { silent: true });
       }, REALTIME_DEBOUNCE_MS);
     };
-    const scheduleHandlers = () => {
-      clearTimeout(handlersTimer);
-      handlersTimer = setTimeout(loadHandlers, REALTIME_DEBOUNCE_MS);
-    };
+    const idOf = (payload, key) => payload.new?.[key] ?? payload.old?.[key] ?? null;
+    const isSelected = (id) => id == null || id === selectedIdRef.current;
 
     const channel = supabase
       .channel("document-tracking-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, (payload) => {
         scheduleList();
-        scheduleDetail();
+        if (isSelected(idOf(payload, "id"))) scheduleDetail();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "document_stages" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "document_stages" }, (payload) => {
         scheduleList();
-        scheduleDetail();
+        if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "document_comments" }, () => {
-        scheduleDetail();
+      .on("postgres_changes", { event: "*", schema: "public", table: "document_comments" }, (payload) => {
+        if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "document_assignments" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "document_assignments" }, (payload) => {
         scheduleList();
-        scheduleDetail();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "document_personnel" }, () => {
-        scheduleHandlers();
+        if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
       })
       .subscribe((status, err) => {
         // Realtime failures are otherwise completely silent — no
@@ -691,12 +586,11 @@ export default function DocumentTracking() {
       });
 
     return () => {
-      clearTimeout(listTimer);
-      clearTimeout(detailTimer);
-      clearTimeout(handlersTimer);
+      clearTimeout(listRefreshTimerRef.current);
+      clearTimeout(detailRefreshTimerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [loadList, loadDetail, loadHandlers]);
+  }, [loadList, loadDetail]);
 
   const flashSaved = () => {
     setJustSaved(true);
@@ -704,33 +598,6 @@ export default function DocumentTracking() {
     saveTimer.current = setTimeout(() => setJustSaved(false), 1200);
   };
   useEffect(() => () => clearTimeout(saveTimer.current), []);
-
-  // Close the "Add person" dropdown on outside click, same behavior
-  // any select/combobox is expected to have. Also resets the dedicated
-  // "add new name" mode so reopening the dropdown starts fresh on the
-  // browse/search view rather than staying stuck mid-add.
-  useEffect(() => {
-    if (!addOpen) return;
-    const handleClickOutside = (e) => {
-      if (addBoxRef.current && !addBoxRef.current.contains(e.target)) {
-        setAddOpen(false);
-        setAddingNew(false);
-        setAddValue("");
-        setNewNameValue("");
-        setAddError(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [addOpen]);
-
-  // Autofocus the dedicated "type a name" input the moment "+ Add new
-  // name" is clicked, so typing can start immediately with no extra click.
-  useEffect(() => {
-    if (addingNew && newNameInputRef.current) {
-      newNameInputRef.current.focus();
-    }
-  }, [addingNew]);
 
   // Autofocus the "New Document" number field the moment that modal opens
   // — it's now the first field, since the tracking number is typed in
@@ -768,7 +635,7 @@ export default function DocumentTracking() {
   const filtered = useMemo(() => {
     return documents.filter((doc) => {
       const matchesFilter = filter === "All" || doc.status === filter;
-      const q = query.trim().toLowerCase();
+      const q = deferredQuery.trim().toLowerCase();
       const matchesQuery =
         !q ||
         doc.title.toLowerCase().includes(q) ||
@@ -777,7 +644,9 @@ export default function DocumentTracking() {
         doc.owner.toLowerCase().includes(q);
       return matchesFilter && matchesQuery;
     });
-  }, [documents, query, filter]);
+  }, [documents, deferredQuery, filter]);
+
+  const visibleDocuments = filtered.slice(0, visibleCount);
 
   // Wraps a mutating call: runs it, refreshes the detail panel + list
   // (status/updated/comment counts all change server-side), and surfaces
@@ -787,6 +656,8 @@ export default function DocumentTracking() {
     setActionError(null);
     try {
       await fn();
+      clearTimeout(listRefreshTimerRef.current);
+      clearTimeout(detailRefreshTimerRef.current);
       // SILENT-REFRESH FIX: refresh in place, no "Loading document…"
       // swap. The only in-progress signal left is `busy` above, which
       // is this component's own local state — it disables and dims the
@@ -847,52 +718,6 @@ export default function DocumentTracking() {
   const rejectDoc = () =>
     runAction(() => apiFetch(`/api/documents/${selectedId}/reject`, { method: "POST" }));
 
-  // Admin-only server-side (see routes/document.py: assign_handler now
-  // requires admin, and additionally refuses to run once the document
-  // has any completed stage — see the HANDLER-LOCK FIX there, and the
-  // REASSIGN-AFTER-DELETE EXCEPTION that lifts that lock specifically
-  // when the document was left unassigned by a personnel deletion; per
-  // the ADMIN FULL-REASSIGN FIX, that exception now accepts ANY active
-  // handler, not just the exact deleted person — see the notes on
-  // assign_handler() in document.py).
-  // Picks who handles the currently selected document out of the
-  // handler pool loaded into `handlers`.
-  //
-  // RESTORE FIX: this same function is also used for the "Restore to
-  // <name>" recovery option below, which passes the deleted person's
-  // id even though they no longer appear in `handlers` — the backend
-  // (assign_handler() in document.py) is what validates that this is
-  // exactly the right person for exactly this document before
-  // accepting it.
-  //
-  // PER-STAGE HANDLER FIX: this is the DOCUMENT-level assignment and
-  // is unchanged. Who shows as "Currently handling" on an individual
-  // step now comes from assignStageHandler() below instead, and is
-  // never derived from this value.
-  const assignHandler = (handlerId) =>
-    runAction(() => apiFetch(`/api/documents/${selectedId}/assign`, {
-      method: "POST",
-      body: JSON.stringify({ handler_id: handlerId }),
-    }));
-
-  // PER-STAGE HANDLER FIX (NEW): sets the person who handles ONE
-  // specific stage of this document (POST .../stages/<order>/assign in
-  // routes/document.py — admin-only there, and only rendered for
-  // can_manage_personnel here). Passing null clears that stage's
-  // handler, putting it back to "Unsigned".
-  //
-  // Routed through the same runAction() helper as every other action
-  // on this screen, so errors surface via actionError and the detail
-  // panel refreshes on success the same way. It writes only
-  // document_stages.assigned_handler_id, so no other behaviour (the
-  // document-level handler lock, the restore-after-delete recovery,
-  // stage permissions, workflow gating) is touched by it.
-  const assignStageHandler = (stageOrder, handlerId) =>
-    runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/assign`, {
-      method: "POST",
-      body: JSON.stringify({ handler_id: handlerId }),
-    }));
-
   const addComment = (stageOrder, text) => {
     if (!text.trim()) return;
     return runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/comments`, {
@@ -933,112 +758,6 @@ export default function DocumentTracking() {
     runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/posting-period`, {
       method: "POST",
     }));
-
-  // Trimmed/lowercased once per render for the combobox's filtering +
-  // duplicate-detection below.
-  const trimmedAddValue = addValue.trim();
-  const addValueLower = trimmedAddValue.toLowerCase();
-
-  const filteredHandlerOptions = useMemo(() => {
-    if (!trimmedAddValue) return handlers;
-    return handlers.filter((h) => h.name.toLowerCase().includes(addValueLower));
-  }, [handlers, trimmedAddValue, addValueLower]);
-
-  const isExactDuplicate = Boolean(
-    trimmedAddValue && handlers.some((h) => h.name.toLowerCase() === addValueLower)
-  );
-
-  // Admin-only: add a brand-new person (e.g. "John Doe") into the
-  // handler pool. They immediately become selectable in the "currently
-  // handling" dropdown for everyone else — no page reload needed since
-  // we merge the new handler straight into local state. This is a
-  // name-only entry (posts to the same admin-only
-  // POST /api/documents/handlers endpoint as before); it does not
-  // create a user account or system login.
-  //
-  // NOTE: this only works instantly if the backend actually returns the
-  // inserted row. See document.py's add_handler() — it now chains
-  // .select("id, full_name") onto the insert so res.data[0] is always
-  // populated; previously it could come back empty even on a successful
-  // write, which made this promise reject and the name only show up
-  // after the next full page load.
-  const submitNewPerson = () => {
-    const name = newNameValue.trim();
-    if (!name) {
-      setAddError("Full name is required.");
-      return;
-    }
-    if (handlers.some((h) => h.name.toLowerCase() === name.toLowerCase())) {
-      setAddError("This person is already in the list.");
-      return;
-    }
-    setAddError(null);
-    setAddBusy(true);
-    apiFetch("/api/documents/handlers", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    })
-      .then((newHandler) => {
-        setHandlers((prev) =>
-          [...prev, newHandler].sort((a, b) => a.name.localeCompare(b.name))
-        );
-        // FIX: this trigger is a standalone "manage personnel" control in
-        // the Documents list header — it is not tied to any document or
-        // selection. Leaving the last-added name sitting in it (as done
-        // previously) made the button look like a pre-filled assignment
-        // select (e.g. "Jamaica L Camoro") instead of a neutral "Add
-        // person" action, which read as if something was stuck selected.
-        // Reset it back to empty so the button always shows "Add person"
-        // again once the dropdown closes.
-        setAddValue("");
-        setNewNameValue("");
-        setAddingNew(false);
-        setAddOpen(false);
-        flashSaved();
-      })
-      .catch((e) => {
-        console.error("[DocumentTracking] Failed to add person:", e);
-        setAddError(e.message || "Could not add this person.");
-      })
-      .finally(() => setAddBusy(false));
-  };
-
-  // Remove a person from the handler pool. Admin-only, wired to the
-  // small trash icon on each row in the "browse/search" dropdown view.
-  // Calls DELETE /api/documents/handlers/<id> (document.py's
-  // delete_handler()), which unassigns any documents currently
-  // pointing at this person before deleting the row, then drops them
-  // from local state so they disappear immediately — no reload
-  // needed. Any document that was showing them as "Currently
-  // handling" picks up "Unassigned" on its own via the existing
-  // realtime subscription on the `documents` table (and can be
-  // restored back to exactly this person via the "Restore to <name>"
-  // option that then appears in that document's handler dropdown —
-  // see document.py's delete_handler()/assign_handler() for how that
-  // recovery is scoped).
-  //
-  // PER-STAGE HANDLER FIX: delete_handler() also clears this person
-  // off any individual stage they were assigned to, so those stages
-  // go back to reading "Unsigned" rather than keeping a removed
-  // person's name.
-  const removeHandler = (handler) => {
-    setRemoveBusyId(handler.id);
-    setAddError(null);
-    apiFetch(`/api/documents/handlers/${handler.id}`, { method: "DELETE" })
-      .then(() => {
-        setHandlers((prev) => prev.filter((h) => h.id !== handler.id));
-        // If the name sitting in the search box was this person,
-        // clear it rather than leaving a stale value referring to
-        // someone no longer in the pool.
-        setAddValue((prev) => (prev.trim().toLowerCase() === handler.name.toLowerCase() ? "" : prev));
-        flashSaved();
-      })
-      .catch((e) => {
-        console.error("[DocumentTracking] Failed to remove person:", e);
-        setAddError(e.message || "Could not remove this person.");
-      })
-      .finally(() => setRemoveBusyId(null));
-  };
 
   // NEW — submit the "New Document" form. Creates the document/request
   // record (server generates doc_number as DOC-<year>-<00001> and
@@ -1137,73 +856,6 @@ export default function DocumentTracking() {
   const selected = detail;
   const activeIndex = selected ? getActiveIndex(selected.stages) : -1;
 
-  // DOCUMENT HANDLER DISPLAY FIX (NEW): the header's "Document
-  // handler" line reads `selected.owner`, which comes straight from
-  // documents.assigned_handler_id via _summarize_document() in
-  // document.py — i.e. only the old document-level "assign" action.
-  // It stays "Unassigned" whenever a document is instead being worked
-  // through a Document Tracking role (Role Management) — exactly what
-  // Registration / Civil Registrar / etc. roles are for — even though
-  // the active stage's own "Currently handling" (stageHandlerName,
-  // further below) is already correctly resolving that role-based
-  // assignment. That mismatch is what let the header show "Document
-  // handler: Unassigned" directly above a Registration step whose own
-  // "Currently handling" correctly showed jamaica.
-  //
-  // When there is no document-level handler, this falls back to
-  // whatever the active stage's own resolved handler name is (the
-  // same document_personnel-or-Role-Management name already used for
-  // that stage's "Currently handling"), so the header stays
-  // consistent with the timeline immediately below it. A document
-  // with a real document-level handler, or with no active stage left
-  // (fully processed / rejected), is completely unaffected and keeps
-  // showing selected.owner exactly as before.
-  const activeStageForHeader = selected && activeIndex !== -1 ? selected.stages[activeIndex] : null;
-  const documentHandlerDisplayName =
-    selected && selected.handlerId
-      ? selected.owner
-      : (activeStageForHeader?.assignedHandlerName || selected?.owner || "Unassigned");
-
-  // No handler assigned yet ("Currently handling: Unassigned") — the
-  // active stage can't be worked by anyone until someone is assigned.
-  // Admins can still ASSIGN a handler via the dropdown in the header
-  // above (that's administration, not "working" the document), but
-  // admins can never complete/flag/reject/comment on the active stage
-  // regardless of assignment state — see the strict role policy noted
-  // where `is_admin` / `can_manage_personnel` are pulled from
-  // usePermissions() above.
-  const isUnassigned = selected ? !selected.handlerId : false;
-
-  // HANDLER-LOCK FIX: once any stage has actually been completed, the
-  // assignment is locked — the backend refuses reassignment (see
-  // assign_handler() in document.py), and the dropdown here is
-  // disabled to match so there's no control that would ever hit that
-  // rejection in normal use.
-  const isHandlerLocked = selected ? Boolean(selected.stages?.some((s) => s.done)) : false;
-
-  // REASSIGN-AFTER-DELETE EXCEPTION: mirrors the backend carve-out in
-  // assign_handler() — if this document is unassigned specifically
-  // because its handler was removed (deletedHandlerId is set), the
-  // "Currently handling" dropdown stays usable even though the
-  // document has progressed, so it isn't stuck forever. Any other
-  // locked document (still assigned, or unassigned for a different
-  // reason) keeps the normal lock behavior.
-  const canReassignAfterDeletion = isUnassigned && Boolean(selected?.deletedHandlerId);
-
-  // ADMIN FULL-REASSIGN FIX: previously, an extra "RESTORE-ONLY LOCK"
-  // flag (isHandlerLocked && canReassignAfterDeletion) hid the active
-  // handler pool from the dropdown below, leaving "Restore to <name>"
-  // as the only choice whenever a progressed document had lost its
-  // handler to a deletion. Per updated requirements, an admin in this
-  // recovery state can now either restore the exact person who was
-  // removed OR assign the document to anyone else in the active pool —
-  // the dropdown always renders the full handler list, and
-  // assign_handler() in document.py no longer rejects a different
-  // active handler_id in this state (see the ADMIN FULL-REASSIGN FIX
-  // note there). The dropdown itself stays enabled in this state via
-  // the existing `isHandlerLocked && !canReassignAfterDeletion` check
-  // below — that part is unchanged.
-
   return (
     <div className="dt-root">
       <div className="dt-page">
@@ -1221,7 +873,10 @@ export default function DocumentTracking() {
               aria-selected={filter === f}
               className="dt-tab"
               data-active={filter === f}
-              onClick={() => setFilter(f)}
+              onClick={() => {
+                setVisibleCount(DOCUMENT_PAGE_SIZE);
+                setFilter(f);
+              }}
             >
               {f}
             </button>
@@ -1251,7 +906,7 @@ export default function DocumentTracking() {
             <div className="dt-card-head">
               <div>
                 <h2>Documents</h2>
-                <p>{listLoading ? "Loading…" : `${filtered.length} of ${documents.length} shown`}</p>
+                  <p>{listLoading ? "Loading…" : `${visibleDocuments.length} of ${filtered.length} shown`}</p>
               </div>
               {/* UI REFINEMENT: the inline-styled flex wrapper is now
                   .dt-toolbar, so "+ New Document" and the search box
@@ -1299,7 +954,10 @@ export default function DocumentTracking() {
                   placeholder="Search title, ID, owner"
                   aria-label="Search documents by title, ID or owner"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setVisibleCount(DOCUMENT_PAGE_SIZE);
+                    setQuery(e.target.value);
+                  }}
                 />
               </div>
             </div>
@@ -1327,7 +985,7 @@ export default function DocumentTracking() {
               {!listLoading && filtered.length === 0 && (
                 <div className="dt-empty">No documents match this search or filter.</div>
               )}
-              {filtered.map((doc) => {
+              {visibleDocuments.map((doc) => {
                 const style = STATUS_STYLES[doc.status] || STATUS_STYLES["In review"];
                 return (
                   <button
@@ -1363,6 +1021,15 @@ export default function DocumentTracking() {
                 );
               })}
             </div>
+            {filtered.length > visibleDocuments.length && (
+              <button
+                type="button"
+                className="dt-btn dt-btn-ghost"
+                onClick={() => setVisibleCount((count) => count + DOCUMENT_PAGE_SIZE)}
+              >
+                Show more ({filtered.length - visibleDocuments.length})
+              </button>
+            )}
           </div>
 
           {detailLoading && (
@@ -1567,22 +1234,8 @@ export default function DocumentTracking() {
                   // only on "Assign Registry Number".
                   const stagePermission = stagePermissionForLabel(stage.label);
                   const userHasStageAccess = !stagePermission || hasAccess(stagePermission);
-                  // PER-STAGE HANDLER FIX (NEW): this stage's OWN
-                  // personnel, read straight off the stage row and
-                  // nothing else. No fallback to selected.owner, to a
-                  // neighbouring stage, or to handlers[0] — when this
-                  // stage has nobody assigned, the name shown is
-                  // UNSIGNED_LABEL.
-                  const stageHandlerId = stage.assignedHandlerId ?? null;
+                  // This stage's handler comes only from the stage row.
                   const stageHandlerName = stage.assignedHandlerName || UNSIGNED_LABEL;
-                  // The assigned person may have been soft-deleted out of
-                  // the active pool, in which case there'd be no matching
-                  // <option> for the select's value and the browser would
-                  // silently show the first option instead — the exact
-                  // "shows another name" symptom being fixed. Rendering a
-                  // dedicated option for them keeps the select honest.
-                  const stageHandlerMissingFromPool =
-                    stageHandlerId != null && !handlers.some((h) => h.id === stageHandlerId);
                   // STAGE ASSIGNMENT FIX (NEW): whether THIS stage
                   // currently has nobody handling it. The blocked/action/
                   // admin panels below used to gate on the document-level
