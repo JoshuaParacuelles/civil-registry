@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { supabase } from "../../services/supabaseClient";
 import ChangePassword from "../AccountSettings/ChangePassword";
 import AuditLogs from "../AccountSettings/AuditLogs";
 import RoleManagement from "../AccountSettings/RoleManagement";
@@ -55,6 +56,12 @@ const BP_MOBILE_MAX = 767;
 
 const SESSION_FLAG_KEY = "homeSessionActive";
 
+const NOTIF_API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_REQUEST_API_URL) ||
+  "http://localhost:5001";
+
+const NOTIFICATION_TABLE = "notification";
+
 const NOTIF_TARGETS = {
   birth:    { menu: MENU_KEYS.BIRTH,    permission: "birth_verification" },
   marriage: { menu: MENU_KEYS.MARRIAGE, permission: "marriage_verification" },
@@ -65,7 +72,7 @@ const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "COMPLETED"];
 const REQUEST_STATUS_LABELS = {
   PENDING:    "Pending Review",
   PROCESSING: "Being Processed",
-  COMPLETED:  "Completed", // CHANGED: was "Complete"; matches the label the citizen is emailed
+  COMPLETED:  "Complete",
   REJECTED:   "Rejected",
 };
 
@@ -147,18 +154,14 @@ const SIGNATURE_BASE64_KEYS = [
   "signature",
 ];
 
-// CHANGED: the signature is now served by the session-gated main backend
-// (GET /api/requests/<id>/signature) on the same origin, so the login
-// cookie is sent automatically. It no longer points at the public
-// request.py service (which now requires an admin key).
-const getSignatureSrc = (snap, _type, recordId) => {
+const getSignatureSrc = (snap, type, recordId) => {
   for (const key of SIGNATURE_BASE64_KEYS) {
     const val = snap?.[key];
     if (typeof val === "string" && val.trim()) {
       return val.startsWith("data:") ? val : `data:image/png;base64,${val}`;
     }
   }
-  return `/api/requests/${recordId}/signature`;
+  return `${NOTIF_API_BASE}/api/${type}/${recordId}/signature`;
 };
 
 const getViewport = () => {
@@ -242,13 +245,6 @@ const Home = () => {
   const [statusSaving, setStatusSaving]   = useState(false);
   const [notifyVia, setNotifyVia]         = useState("email");
 
-  // NEW: full request row fetched from the session-gated backend. Kept in
-  // its own state (NOT merged into the notification / snapshot that is
-  // stored in the database) so requester details are never written back
-  // to the `notification` table.
-  const [requestDetail, setRequestDetail] = useState(null); // { notifId, data }
-  const activeNotifIdRef = useRef(null);
-
   const [statusToasts, setStatusToasts] = useState([]);
   const statusToastIdRef = useRef(0);
 
@@ -295,22 +291,6 @@ const Home = () => {
     return () => { document.body.style.overflow = ""; };
   }, [viewport, mobileMenuOpen]);
 
-  // Only notifications created from the public request website carry
-  // source === "online_request". For any other notification, record_id
-  // points at a different table, so it must NOT be looked up in
-  // civil_registry_request or have its status edited.
-  const isOnlineRequest = selectedNotif?.request_snapshot?.source === "online_request";
-
-  // The notification the modal displays = stored notification + live row.
-  const modalNotification = useMemo(() => {
-    if (!selectedNotif) return null;
-    const detail = requestDetail?.notifId === selectedNotif.id ? requestDetail.data : null;
-    if (!detail) return selectedNotif;
-    return {
-      ...selectedNotif,
-      request_snapshot: { ...(selectedNotif.request_snapshot || {}), ...detail },
-    };
-  }, [selectedNotif, requestDetail]);
 
   const handleNotifClick = async (notif) => {
     markNotificationClicked(notif.id);
@@ -320,49 +300,40 @@ const Home = () => {
     setSelectedNotif(notif);
     setNotifOpen(false);
     setStatusNote("");
-    setRequestDetail(null);
-    activeNotifIdRef.current = notif.id;
 
     const snap = notif.request_snapshot || {};
-    setStatusDraft((snap.status || "PENDING").toUpperCase());
     setNotifyVia((snap.requester_email || "").trim() ? "email" : "none");
+    setStatusDraft((snap.status || "PENDING").toUpperCase());
 
-    if (!notif.record_id || snap.source !== "online_request") return;
+    if (!notif.record_id) return;
 
     try {
       const res = await fetch(`/api/requests/${notif.record_id}`, { credentials: "include" });
       if (!res.ok) return;
       const data = await res.json().catch(() => null);
-      if (!data) return;
-      // The admin may have closed this popup or opened another one meanwhile.
-      if (activeNotifIdRef.current !== notif.id) return;
+      const liveStatus = (data?.status || "").toUpperCase();
+      if (!liveStatus) return;
 
-      setRequestDetail({ notifId: notif.id, data });
-
-      // FIX: default to emailing the citizen whenever an address is on file
-      // (the snapshot never contained the email, so this used to be "none").
-      setNotifyVia((data.requester_email || "").trim() ? "email" : "none");
-
-      const liveStatus = (data.status || "").toUpperCase();
-      if (liveStatus) {
-        setStatusDraft(liveStatus);
-        setNotifications((prev) =>
-          prev.map((n) =>
-            n.id === notif.id
-              ? { ...n, request_snapshot: { ...(n.request_snapshot || {}), status: liveStatus } }
-              : n
-          )
-        );
-      }
+      setStatusDraft(liveStatus);
+      setSelectedNotif((prev) =>
+        prev && prev.id === notif.id
+          ? { ...prev, request_snapshot: { ...(prev.request_snapshot || {}), status: liveStatus } }
+          : prev
+      );
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notif.id
+            ? { ...n, request_snapshot: { ...(n.request_snapshot || {}), status: liveStatus } }
+            : n
+        )
+      );
     } catch (err) {
-      console.error("[Home] Could not load request details:", err);
+      console.error("[Home] Could not load live request status:", err);
     }
   };
 
   const closeNotifDetails = useCallback(() => {
-    activeNotifIdRef.current = null;
     setSelectedNotif(null);
-    setRequestDetail(null);
     setSigZoomed(false);
     setStatusDraft("");
     setStatusNote("");
@@ -370,7 +341,7 @@ const Home = () => {
   }, []);
 
   const updateRequestStatus = async () => {
-    if (!selectedNotif?.record_id || !isOnlineRequest) return;
+    if (!selectedNotif?.record_id) return;
     setStatusSaving(true);
     try {
       const res = await fetch(`/api/requests/${selectedNotif.record_id}/status`, {
@@ -387,6 +358,7 @@ const Home = () => {
       if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`);
 
       const savedStatus = (data.status || statusDraft).toUpperCase();
+      const updatedSnapshot = { ...(selectedNotif.request_snapshot || {}), status: savedStatus };
 
       const notifiedByEmail = Boolean(data.email_sent);
       showStatusToast(
@@ -397,25 +369,20 @@ const Home = () => {
 
       setStatusDraft(savedStatus);
       setStatusNote("");
-
-      // Update local state only. CHANGED: the status is no longer written
-      // from the browser into notification.request_snapshot; the live
-      // status is re-read from the backend each time a popup is opened.
-      setRequestDetail((prev) =>
-        prev && prev.notifId === selectedNotif.id
-          ? { ...prev, data: { ...prev.data, status: savedStatus } }
-          : prev
-      );
-      setSelectedNotif((prev) =>
-        prev ? { ...prev, request_snapshot: { ...(prev.request_snapshot || {}), status: savedStatus } } : prev
-      );
+      setSelectedNotif((prev) => (prev ? { ...prev, request_snapshot: updatedSnapshot } : prev));
       setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === selectedNotif.id
-            ? { ...n, request_snapshot: { ...(n.request_snapshot || {}), status: savedStatus } }
-            : n
-        )
+        prev.map((n) => (n.id === selectedNotif.id ? { ...n, request_snapshot: updatedSnapshot } : n))
       );
+
+      try {
+        const { error: snapshotError } = await supabase
+          .from(NOTIFICATION_TABLE)
+          .update({ request_snapshot: updatedSnapshot })
+          .eq("id", selectedNotif.id);
+        if (snapshotError) throw snapshotError;
+      } catch (snapshotErr) {
+        console.error("[Home] Status saved, but could not persist it to the notification snapshot:", snapshotErr);
+      }
     } catch (err) {
       showStatusToast("Error", err.message || "Could not update status.", "error");
     } finally {
@@ -432,7 +399,7 @@ const Home = () => {
       try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
       if (viewport === "mobile") setMobileMenuOpen(false);
     }
-    closeNotifDetails();
+    setSelectedNotif(null);
   };
 
   const openRecordPage = useCallback(
@@ -668,8 +635,7 @@ const Home = () => {
       </div>
 
       <NotificationDetailModal
-        notification={modalNotification}
-        isOnlineRequest={isOnlineRequest}
+        notification={selectedNotif}
         onClose={closeNotifDetails}
         onOpenInVerifier={openInVerifier}
         canAccess={canAccess}
@@ -684,8 +650,6 @@ const Home = () => {
         setStatusNote={setStatusNote}
         statusSaving={statusSaving}
         updateRequestStatus={updateRequestStatus}
-        notifyVia={notifyVia}
-        setNotifyVia={setNotifyVia}
         NOTIF_TARGETS={NOTIF_TARGETS}
         TYPE_SECTIONS={TYPE_SECTIONS}
         COMMON_SECTIONS={COMMON_SECTIONS}
