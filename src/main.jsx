@@ -1,13 +1,16 @@
 // src/main.jsx
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
 import { PermissionProvider } from "./context/PermissionContext";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import Login from "./pages/Auth/Login";
-import Home from "./pages/Home/Home";
 import AccessDenied from "./pages/AccountSettings/AccessDenied";
+
+// Home is the shell for every dashboard page (charts, maps, tables). Loading it
+// lazily keeps all of that out of the initial bundle the login page downloads.
+const Home = lazy(() => import("./pages/Home/Home"));
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -24,7 +27,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             path="/dashboard/*"
             element={
               <ProtectedRoute module="dashboard">
-                <Home />
+                <Suspense fallback={null}>
+                  <Home />
+                </Suspense>
               </ProtectedRoute>
             }
           />
