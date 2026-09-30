@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import AccessDenied from "../AccountSettings/AccessDenied";
 import LoadingScreen from "../../routes/LoadingScreen";
 
@@ -50,6 +51,25 @@ const MENU_KEYS = {
 
 const VITAL_CHILDREN    = [MENU_KEYS.BIRTH, MENU_KEYS.MARRIAGE, MENU_KEYS.DEATH, MENU_KEYS.SCIMS];
 const SETTINGS_CHILDREN = [MENU_KEYS.ACCOUNT, MENU_KEYS.AUDIT, MENU_KEYS.ROLE_MANAGEMENT];
+
+// ROUTING: each page has its own URL. The URL is the source of truth for
+// which page is active.
+const MENU_ROUTES = {
+  [MENU_KEYS.DASHBOARD]:         "/dashboard",
+  [MENU_KEYS.BIRTH]:             "/dashboard/vital-records/birth",
+  [MENU_KEYS.MARRIAGE]:          "/dashboard/vital-records/marriage",
+  [MENU_KEYS.DEATH]:             "/dashboard/vital-records/death",
+  [MENU_KEYS.SCIMS]:             "/dashboard/vital-records/scims-lookup",
+  [MENU_KEYS.HEATMAPS]:          "/dashboard/heatmaps",
+  [MENU_KEYS.DOCUMENT_TRACKING]: "/dashboard/document-tracking",
+  [MENU_KEYS.ACCOUNT]:           "/dashboard/settings/update-account",
+  [MENU_KEYS.AUDIT]:             "/dashboard/settings/audit-logs",
+  [MENU_KEYS.ROLE_MANAGEMENT]:   "/dashboard/settings/role-management",
+};
+
+const ROUTE_TO_MENU = Object.fromEntries(
+  Object.entries(MENU_ROUTES).map(([menu, path]) => [path, menu])
+);
 
 const BP_TABLET_MAX = 1024;
 const BP_MOBILE_MAX = 767;
@@ -198,8 +218,21 @@ const Home = () => {
     [isAdminUser, hasAccess]
   );
 
-  const [activeSubMenu, setActiveSubMenu] = useState(MENU_KEYS.DASHBOARD);
-  const [verifierEntry, setVerifierEntry] = useState(null); // "archive" | null
+  // ROUTING: the URL is now the single source of truth for the active page.
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const currentPath = location.pathname.replace(/\/+$/, "").toLowerCase() || "/";
+  const activeSubMenu = ROUTE_TO_MENU[currentPath] || MENU_KEYS.DASHBOARD;
+  // "archive" | null. Carried in the navigation state so it survives refresh.
+  const verifierEntry = location.state?.verifierEntry ?? null;
+
+  const goTo = useCallback((menu, state) => {
+    const path = MENU_ROUTES[menu];
+    if (!path) return;
+    navigate(path, state ? { state } : undefined);
+  }, [navigate]);
+
   const [settingsOpen, setSettingsOpen] = useState(() => getPersistedSubmenuState("settingsOpen"));
   const [vitalRecordsOpen, setVitalRecordsOpen] = useState(() => getPersistedSubmenuState("vitalRecordsOpen"));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -271,6 +304,25 @@ const Home = () => {
         ],
     [isAdminUser, canAccess]
   );
+
+  // ROUTING: unknown URL under /dashboard -> go to the dashboard.
+  useEffect(() => {
+    if (!ROUTE_TO_MENU[currentPath]) {
+      navigate(MENU_ROUTES[MENU_KEYS.DASHBOARD], { replace: true });
+    }
+  }, [currentPath, navigate]);
+
+  // ROUTING: keep the parent submenu open when the URL points at a child
+  // (also covers refresh / direct links).
+  useEffect(() => {
+    if (VITAL_CHILDREN.includes(activeSubMenu)) {
+      setVitalRecordsOpen(true);
+      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
+    } else if (SETTINGS_CHILDREN.includes(activeSubMenu)) {
+      setSettingsOpen(true);
+      try { localStorage.setItem("settingsOpen", "true"); } catch {}
+    }
+  }, [activeSubMenu]);
 
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_FLAG_KEY, "true"); } catch {}
@@ -434,8 +486,7 @@ const Home = () => {
   const openInVerifier = (notif) => {
     const target = NOTIF_TARGETS[notif.record_type];
     if (target && canAccess(target.permission)) {
-      setVerifierEntry(null);
-      setActiveSubMenu(target.menu);
+      goTo(target.menu);
       setVitalRecordsOpen(true);
       try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
       if (viewport === "mobile") setMobileMenuOpen(false);
@@ -447,13 +498,12 @@ const Home = () => {
     (type) => {
       const target = NOTIF_TARGETS[type];
       if (!target || !canAccess(target.permission)) return;
-      setVerifierEntry("archive");
-      setActiveSubMenu(target.menu);
+      goTo(target.menu, { verifierEntry: "archive" });
       setVitalRecordsOpen(true);
       try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
       if (viewport === "mobile") setMobileMenuOpen(false);
     },
-    [canAccess, viewport]
+    [canAccess, viewport, goTo]
   );
 
   const recordLinks = {
@@ -492,7 +542,6 @@ const Home = () => {
   }, [viewport]);
 
   const handleMenuClick = useCallback((menu) => {
-    setVerifierEntry(null);
     if (menu === MENU_KEYS.VITAL) {
       setVitalRecordsOpen((prev) => {
         const next = !prev;
@@ -509,13 +558,12 @@ const Home = () => {
       });
       return;
     }
-    setActiveSubMenu(menu);
+    goTo(menu);
     closeMobileMenu();
-  }, [closeMobileMenu]);
+  }, [closeMobileMenu, goTo]);
 
   const handleSubMenuClick = useCallback((submenu, parent) => {
-    setVerifierEntry(null);
-    setActiveSubMenu(submenu);
+    goTo(submenu);
     if (parent === MENU_KEYS.VITAL) {
       setVitalRecordsOpen(true);
       localStorage.setItem("vitalRecordsOpen", "true");
@@ -525,7 +573,7 @@ const Home = () => {
       localStorage.setItem("settingsOpen", "true");
     }
     closeMobileMenu();
-  }, [closeMobileMenu]);
+  }, [closeMobileMenu, goTo]);
 
   const handleConfirmLogout = async () => {
     setLoggingOut(true);
