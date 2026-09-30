@@ -1,16 +1,17 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import ChangePassword from "../AccountSettings/ChangePassword";
-import AuditLogs from "../AccountSettings/AuditLogs";
-import RoleManagement from "../AccountSettings/RoleManagement";
+import React, { Suspense, lazy, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import AccessDenied from "../AccountSettings/AccessDenied";
+import LoadingScreen from "../../routes/LoadingScreen";
 
-import UnifiedBirthRegistry from "../VitalRecords/Birth/BirthVerifier";
-import UnifiedMarriageRegistry from "../VitalRecords/Marriage/MarriageVerifier";
-import DeathVerifier from "../VitalRecords/Death/DeathVerifier";
-import PaymentInventory from "../Dashboard/Dashboard";
-import Heatmaps from "../Heatmaps/Heatmaps";
-import ExternalIndividualsLookup from "../ExternalIndividuals/ExternalIndividualsLookup";
-import DocumentTracking from "../DocumentTracking/DocumentTracking";
+const ChangePassword = lazy(() => import("../AccountSettings/ChangePassword"));
+const AuditLogs = lazy(() => import("../AccountSettings/AuditLogs"));
+const RoleManagement = lazy(() => import("../AccountSettings/RoleManagement"));
+const UnifiedBirthRegistry = lazy(() => import("../VitalRecords/Birth/BirthVerifier"));
+const UnifiedMarriageRegistry = lazy(() => import("../VitalRecords/Marriage/MarriageVerifier"));
+const DeathVerifier = lazy(() => import("../VitalRecords/Death/DeathVerifier"));
+const PaymentInventory = lazy(() => import("../Dashboard/Dashboard"));
+const Heatmaps = lazy(() => import("../Heatmaps/Heatmaps"));
+const ExternalIndividualsLookup = lazy(() => import("../ExternalIndividuals/ExternalIndividualsLookup"));
+const DocumentTracking = lazy(() => import("../DocumentTracking/DocumentTracking"));
 
 import { usePermissions } from "../../context/PermissionContext";
 
@@ -670,7 +671,11 @@ const Home = () => {
           />
         </Topbar>
 
-        <main className="main-content">{renderContent()}</main>
+        <main className="main-content">
+          <Suspense fallback={<LoadingScreen />}>
+            {renderContent()}
+          </Suspense>
+        </main>
       </div>
 
       <NotificationDetailModal

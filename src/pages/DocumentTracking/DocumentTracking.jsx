@@ -102,9 +102,6 @@ function stagePermissionForLabel(label) {
   return null;
 }
 
-const totalComments = (doc) =>
-  (doc.stages || []).reduce((sum, s) => sum + (s.comments?.length || 0), 0);
-
 function formatDate(value) {
   if (!value) return "Pending";
   // TIMEZONE FIX: document_stages.completed_at and
@@ -225,6 +222,63 @@ function getActiveIndex(stages) {
   return stages.findIndex((s) => !s.done || s.flag);
 }
 
+const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect }) {
+  const style = STATUS_STYLES[doc.status] || STATUS_STYLES["In review"];
+  return (
+    <button
+      className="dt-row"
+      data-selected={selected}
+      onClick={() => onSelect(doc.id)}
+    >
+      <div className="dt-row-main">
+        <span className="dt-row-id">
+          <span className="dt-row-num">{doc.docNumber}</span>
+          <span className="dt-row-type">{doc.type}</span>
+        </span>
+        <span className="dt-row-title">{doc.title}</span>
+        <span className="dt-row-meta">
+          <span>Handling <strong>{doc.owner}</strong></span>
+          <span>Updated {doc.updated}</span>
+        </span>
+      </div>
+      <div className="dt-row-side">
+        <span className="dt-badge" style={{ color: style.fg, background: style.bg }}>
+          {doc.status}
+        </span>
+      </div>
+    </button>
+  );
+});
+
+const CommentForm = memo(function CommentForm({ id, stageOrder, busy, onSubmit }) {
+  const [text, setText] = useState("");
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!text.trim()) return;
+    onSubmit(stageOrder, text);
+    setText("");
+  };
+
+  return (
+    <form className="dt-comment-form" onSubmit={handleSubmit}>
+      <textarea
+        id={id}
+        name="comment"
+        className="dt-comment-textarea"
+        placeholder="Add a comment on this step…"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+      />
+      <div className="dt-action-row">
+        <button type="submit" className="dt-btn dt-btn-ghost" disabled={busy}>
+          Add comment
+        </button>
+      </div>
+    </form>
+  );
+});
+
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${API}${path}`, {
     credentials: "include",
@@ -303,7 +357,6 @@ export default function DocumentTracking() {
   const [visibleCount, setVisibleCount] = useState(DOCUMENT_PAGE_SIZE);
   const [filter, setFilter] = useState("All");
   const [openStage, setOpenStage] = useState(null);
-  const [draftComment, setDraftComment] = useState("");
   // WORKFLOW FIX: local input state for the two data-entry stages
   // (Assign Registry Number / Releasing). Cleared whenever the
   // selected document changes, same as draftComment above.
@@ -592,11 +645,11 @@ export default function DocumentTracking() {
     };
   }, [loadList, loadDetail]);
 
-  const flashSaved = () => {
+  const flashSaved = useCallback(() => {
     setJustSaved(true);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => setJustSaved(false), 1200);
-  };
+  }, []);
   useEffect(() => () => clearTimeout(saveTimer.current), []);
 
   // Autofocus the "New Document" number field the moment that modal opens
@@ -651,7 +704,7 @@ export default function DocumentTracking() {
   // Wraps a mutating call: runs it, refreshes the detail panel + list
   // (status/updated/comment counts all change server-side), and surfaces
   // any error inline instead of failing silently.
-  const runAction = async (fn) => {
+  const runAction = useCallback(async (fn) => {
     setBusy(true);
     setActionError(null);
     try {
@@ -670,16 +723,10 @@ export default function DocumentTracking() {
     } finally {
       setBusy(false);
     }
-  };
+  }, [selectedId, loadDetail, loadList, flashSaved]);
 
   const advanceStage = (stageOrder) =>
     runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/complete`, { method: "POST" }));
-
-  const flagStage = (stageOrder, note) =>
-    runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/flag`, {
-      method: "POST",
-      body: JSON.stringify({ note }),
-    }));
 
   // Submits the "Request changes" modal: validates the note, then
   // calls the flag endpoint directly (rather than through runAction,
@@ -718,13 +765,13 @@ export default function DocumentTracking() {
   const rejectDoc = () =>
     runAction(() => apiFetch(`/api/documents/${selectedId}/reject`, { method: "POST" }));
 
-  const addComment = (stageOrder, text) => {
+  const addComment = useCallback((stageOrder, text) => {
     if (!text.trim()) return;
     return runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/comments`, {
       method: "POST",
       body: JSON.stringify({ body: text.trim() }),
     }));
-  };
+  }, [selectedId, runAction]);
 
   // WORKFLOW FIX: saves the Registry Number / release destination for
   // their respective stages (POST .../registry-number and

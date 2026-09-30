@@ -159,22 +159,128 @@ const useContainerWidth = (fallback = 560) => {
 };
 
 /* ══ SVG LINE CHART ══════════════════════════════════════════════════════════ */
+const LineChartStaticLayer = memo(function LineChartStaticLayer({ chartLabels, chartSeries, W, H, PAD, gradientPrefix }) {
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top - PAD.bottom;
+  const allValues = chartSeries.flatMap((item) => safeArr(item.data));
+  const maxVal = Math.max(...allValues, 1);
+  const minVal = Math.min(...allValues, 0);
+  const range = maxVal - minVal || 1;
+  const xScale = (index) => chartLabels.length <= 1
+    ? PAD.left + innerW / 2
+    : PAD.left + (index / (chartLabels.length - 1)) * innerW;
+  const yScale = (value) => PAD.top + innerH - ((value - minVal) / range) * innerH;
+  const pathD = (points) => {
+    if (points.length < 2) return "";
+    const result = [`M ${xScale(0)} ${yScale(points[0])}`];
+    for (let i = 1; i < points.length; i++) {
+      const x0 = xScale(i - 1), y0 = yScale(points[i - 1]);
+      const x1 = xScale(i), y1 = yScale(points[i]);
+      const controlX = (x0 + x1) / 2;
+      result.push(`C ${controlX} ${y0} ${controlX} ${y1} ${x1} ${y1}`);
+    }
+    return result.join(" ");
+  };
+  const areaD = (points) => {
+    if (points.length < 2) return "";
+    const base = yScale(minVal);
+    return `${pathD(points)} L ${xScale(points.length - 1)} ${base} L ${xScale(0)} ${base} Z`;
+  };
+  const tickVals = Array.from({ length: 5 }, (_, index) =>
+    Math.round(minVal + (range / 4) * index)
+  );
+  const charWidth = 5.6;
+  const longestLabelLen = Math.max(1, ...chartLabels.map((label) => (label || "").length));
+  const estimatedLabelWidth = longestLabelLen * charWidth + 10;
+  const spacingPerIndex = chartLabels.length > 1 ? innerW / (chartLabels.length - 1) : innerW;
+  const maxLabelsThatFit = Math.max(1, Math.floor(innerW / estimatedLabelWidth) + 1);
+  const step = Math.max(1, Math.ceil(chartLabels.length / maxLabelsThatFit));
+  const lastRegularIdx = Math.floor((chartLabels.length - 1) / step) * step;
+  const shouldShowLabel = (index) => {
+    if (!chartLabels[index]) return false;
+    if (index % step === 0) return true;
+    if (index === chartLabels.length - 1) {
+      return (index - lastRegularIdx) * spacingPerIndex >= estimatedLabelWidth;
+    }
+    return false;
+  };
+
+  return (
+    <>
+      <defs>
+        {chartSeries.map((item, index) => (
+          <linearGradient key={index} id={`${gradientPrefix}-grad-${index}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={item.color} stopOpacity="0.16" />
+            <stop offset="100%" stopColor={item.color} stopOpacity="0.01" />
+          </linearGradient>
+        ))}
+      </defs>
+      {tickVals.map((value, index) => (
+        <g key={index}>
+          <line
+            x1={PAD.left} y1={yScale(value)}
+            x2={W - PAD.right} y2={yScale(value)}
+            stroke="var(--an-border, rgba(0,0,0,0.08))"
+            strokeWidth="0.5"
+          />
+          <text
+            x={PAD.left - 6} y={yScale(value) + 4}
+            textAnchor="end" fontSize="9"
+            fill="var(--an-text-muted, #94a3b8)"
+          >
+            {fmtNum(value)}
+          </text>
+        </g>
+      ))}
+      {chartLabels.map((label, index) => (
+        shouldShowLabel(index) ? (
+          <text
+            key={index} x={xScale(index)} y={H - 4}
+            textAnchor="middle" fontSize="9"
+            fill="var(--an-text-muted, #94a3b8)"
+          >
+            {label}
+          </text>
+        ) : null
+      ))}
+      {chartSeries.map((item, index) => (
+        <path key={`area-${index}`} d={areaD(safeArr(item.data))} fill={`url(#${gradientPrefix}-grad-${index})`} />
+      ))}
+      {chartSeries.map((item, index) => (
+        <path
+          key={`line-${index}`}
+          d={pathD(safeArr(item.data))}
+          fill="none"
+          stroke={item.color}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </>
+  );
+});
+
 const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }) => {
   const [hoverIdx, setHoverIdx] = useState(null);
+  const gradientPrefix = useId().replace(/:/g, "");
   const svgRef = useRef(null);
   const [wrapRef, W] = useContainerWidth();
   const compact = W < 420;
   const H = compact ? Math.min(height, 180) : height;
-  const PAD = compact
+  const PAD = useMemo(() => compact
     ? { top: 12, right: 10, bottom: 28, left: 34 }
-    : { top: 16, right: 16, bottom: 32, left: 44 };
+    : { top: 16, right: 16, bottom: 32, left: 44 }, [compact]);
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
 
   // Normalize single-point data into a real 2-point ascending line
   // (0 → value) so it always reads as a line graph, never a lone dot.
   const isSinglePoint = labels.length === 1;
-  const chartLabels = isSinglePoint ? ["", labels[0]] : labels;
+  const chartLabels = useMemo(
+    () => isSinglePoint ? ["", labels[0]] : labels,
+    [isSinglePoint, labels]
+  );
   const chartSeries = useMemo(
     () =>
       isSinglePoint
@@ -194,30 +300,6 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
       : PAD.left + (i / (chartLabels.length - 1)) * innerW;
 
   const yScale = (v) => PAD.top + innerH - ((v - minVal) / range) * innerH;
-
-  const ticks = 4;
-  const tickVals = Array.from({ length: ticks + 1 }, (_, i) =>
-    Math.round(minVal + (range / ticks) * i)
-  );
-
-  const pathD = (points) => {
-    if (points.length < 2) return "";
-    const result = [`M ${xScale(0)} ${yScale(points[0])}`];
-    for (let i = 1; i < points.length; i++) {
-      const x0 = xScale(i - 1), y0 = yScale(points[i - 1]);
-      const x1 = xScale(i),     y1 = yScale(points[i]);
-      const cpx = (x0 + x1) / 2;
-      result.push(`C ${cpx} ${y0} ${cpx} ${y1} ${x1} ${y1}`);
-    }
-    return result.join(" ");
-  };
-
-  const areaD = (points) => {
-    if (points.length < 2) return "";
-    const base = yScale(minVal);
-    const line = pathD(points);
-    return `${line} L ${xScale(points.length - 1)} ${base} L ${xScale(0)} ${base} Z`;
-  };
 
   const handleMouseMove = useCallback((e) => {
     if (isSinglePoint) {
@@ -239,24 +321,6 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
   // Thin labels based on actual available pixel space, not a fixed
   // "every Nth index" rule, so long labels like "Aug 2026"/"Sep 2026"
   // never overlap.
-  const estCharWidth = 5.6; // approx glyph width in px at fontSize 9
-  const longestLabelLen = Math.max(1, ...chartLabels.map((l) => (l || "").length));
-  const estLabelWidth = longestLabelLen * estCharWidth + 10; // + breathing room
-  const spacingPerIndex = chartLabels.length > 1 ? innerW / (chartLabels.length - 1) : innerW;
-  const maxLabelsThatFit = Math.max(1, Math.floor(innerW / estLabelWidth) + 1);
-  const step = Math.max(1, Math.ceil(chartLabels.length / maxLabelsThatFit));
-  const lastRegularIdx = Math.floor((chartLabels.length - 1) / step) * step;
-
-  const shouldShowLabel = (i) => {
-    if (!chartLabels[i]) return false; // skip the synthetic blank leading label
-    if (i % step === 0) return true;
-    if (i === chartLabels.length - 1) {
-      const pixelGap = (i - lastRegularIdx) * spacingPerIndex;
-      return pixelGap >= estLabelWidth;
-    }
-    return false;
-  };
-
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
       <svg
@@ -269,60 +333,14 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
         onMouseLeave={() => setHoverIdx(null)}
         onTouchEnd={() => setHoverIdx(null)}
       >
-        <defs>
-          {chartSeries.map((s, si) => (
-            <linearGradient key={si} id={`grad-${si}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor={s.color} stopOpacity="0.16" />
-              <stop offset="100%" stopColor={s.color} stopOpacity="0.01" />
-            </linearGradient>
-          ))}
-        </defs>
-
-        {tickVals.map((tv, i) => (
-          <g key={i}>
-            <line
-              x1={PAD.left} y1={yScale(tv)}
-              x2={W - PAD.right} y2={yScale(tv)}
-              stroke="var(--an-border, rgba(0,0,0,0.08))"
-              strokeWidth="0.5"
-            />
-            <text
-              x={PAD.left - 6} y={yScale(tv) + 4}
-              textAnchor="end" fontSize="9"
-              fill="var(--an-text-muted, #94a3b8)"
-            >
-              {fmtNum(tv)}
-            </text>
-          </g>
-        ))}
-
-        {chartLabels.map((lbl, i) =>
-          shouldShowLabel(i) ? (
-            <text
-              key={i} x={xScale(i)} y={H - 4}
-              textAnchor="middle" fontSize="9"
-              fill="var(--an-text-muted, #94a3b8)"
-            >
-              {lbl}
-            </text>
-          ) : null
-        )}
-
-        {chartSeries.map((s, si) => (
-          <path key={`area-${si}`} d={areaD(safeArr(s.data))} fill={`url(#grad-${si})`} />
-        ))}
-
-        {chartSeries.map((s, si) => (
-          <path
-            key={`line-${si}`}
-            d={pathD(safeArr(s.data))}
-            fill="none"
-            stroke={s.color}
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
+        <LineChartStaticLayer
+          chartLabels={chartLabels}
+          chartSeries={chartSeries}
+          W={W}
+          H={H}
+          PAD={PAD}
+          gradientPrefix={gradientPrefix}
+        />
 
         {hoverIdx != null && (
           <line
@@ -443,11 +461,11 @@ const DonutChart = ({ slices = [], size = 130 }) => {
   if (!total) return <div className="an-empty-small">No data</div>;
 
   const r = 46, ir = 30, cx = size / 2, cy = size / 2;
-  let angle = -Math.PI / 2;
-
-  const arcs = slices
-    .filter((sl) => Number(sl.count || 0) > 0)
-    .map((sl, i) => {
+  const visibleSlices = slices.filter((slice) => Number(slice.count || 0) > 0);
+  const arcs = visibleSlices.map((sl, i) => {
+      const angle = -Math.PI / 2 + visibleSlices
+        .slice(0, i)
+        .reduce((sum, slice) => sum + (Number(slice.count || 0) / total) * Math.PI * 2, 0);
       const val   = Number(sl.count || 0);
       const sweep = (val / total) * Math.PI * 2;
       const end   = angle + sweep;
@@ -465,7 +483,6 @@ const DonutChart = ({ slices = [], size = 130 }) => {
         count: val,
         pct:   Math.round((val / total) * 100),
       };
-      angle = end;
       return arc;
     });
 
@@ -643,7 +660,10 @@ const Empty = ({ msg = "No data available" }) => (
 /* ══ TOP MUNICIPALITIES TABLE ════════════════════════════════════════════════ */
 const MunicipalityTable = ({ rows = [] }) => {
   const [sortBy, setSortBy] = useState("cnt");
-  const sorted = [...rows].sort((a, b) => Number(b[sortBy] || 0) - Number(a[sortBy] || 0));
+  const sorted = useMemo(
+    () => [...rows].sort((a, b) => Number(b[sortBy] || 0) - Number(a[sortBy] || 0)),
+    [rows, sortBy]
+  );
   const max    = sorted[0]?.[sortBy] || 1;
 
   const cols = [
@@ -1140,7 +1160,9 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
               <MemoDonutChart slices={donutSlices} size={130} />
             </Panel>
             <Panel title="Seasonal patterns" sub="Record & request volume by month of year">
-              <MonthHeatmap byMonth={byMonth} reqByMonth={reqMonth} />
+              {data.byMonth === undefined || data.reqByMonth === undefined
+                ? <Skeleton h={180} />
+                : <MonthHeatmap byMonth={byMonth} reqByMonth={reqMonth} />}
             </Panel>
           </div>
 
@@ -1149,7 +1171,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             title="Records uploaded per year"
             sub={heroPeriod ? `Historical civil registry growth, ${heroPeriod}` : "Historical civil registry growth"}
           >
-            {byYear.length ? (
+            {data.byYear === undefined ? <Skeleton h={200} /> : byYear.length ? (
               <MemoLineChart series={byYearSeries} labels={yearLabels} height={200} showLegend={false} />
             ) : (
               <Empty msg="No year data" />
@@ -1169,7 +1191,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
                 : "Birth, marriage, and death certificate requests over time"
             }
           >
-            {growthSeries.length ? (
+            {data.growthRate === undefined ? <Skeleton h={220} /> : growthSeries.length ? (
               <MemoLineChart series={growthSeries} labels={growthLabels} height={220} showLegend />
             ) : (
               <Empty msg="No trend data" />
@@ -1178,7 +1200,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
           <div className="an-two-col">
             <Panel title="Records registered per year" sub="Total civil records entered into the system">
-              {byYear.length ? (
+              {data.byYear === undefined ? <Skeleton h={180} /> : byYear.length ? (
                 <MemoBarChart
                   rows={byYearRows}
                   colorKey="color" valueKey="count" labelKey="label"
@@ -1186,7 +1208,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
               ) : <Empty />}
             </Panel>
             <Panel title="Certificate requests per year" sub="Requests across all document types">
-              {reqYear.length ? (
+              {data.reqByYear === undefined ? <Skeleton h={180} /> : reqYear.length ? (
                 <MemoBarChart
                   rows={requestYearRows}
                   colorKey="color" valueKey="count" labelKey="label"
@@ -1196,7 +1218,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
           </div>
 
           <Panel full title="Monthly seasonality — records" sub="Which months see the highest registration activity">
-            {byMonth.length ? (
+            {data.byMonth === undefined ? <Skeleton h={180} /> : byMonth.length ? (
               <MemoBarChart
                 rows={byMonthRows}
                 colorKey="color" valueKey="count" labelKey="label"
@@ -1205,7 +1227,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
           </Panel>
 
           <Panel full title="Monthly seasonality — requests" sub="Certificate request demand by month">
-            {reqMonth.length ? (
+            {data.reqByMonth === undefined ? <Skeleton h={180} /> : reqMonth.length ? (
               <MemoBarChart
                 rows={requestMonthRows}
                 colorKey="color" valueKey="count" labelKey="label"
@@ -1222,7 +1244,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             title="Top municipalities & barangays"
             sub="Ranked by record volume — click a sort key to reorder"
           >
-            {munis.length ? (
+            {data.topMunicipalities === undefined ? <Skeleton h={300} /> : munis.length ? (
               <>
                 <MemoStackedBar rows={topMunicipalityRows} />
                 <div style={{ marginTop: "1.25rem" }}>
@@ -1234,7 +1256,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             )}
           </Panel>
 
-          {munis.length > 0 && (
+          {data.topMunicipalities !== undefined && munis.length > 0 && (
             /* FIX: this row was previously forced to a hardcoded 3-column
                inline style, which always overrides CSS and therefore
                ignored every responsive breakpoint. That squeezed each
@@ -1306,7 +1328,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
                 : "All civil registry request types combined with per-type breakdown"
             }
           >
-            {growthSeries.length ? (
+            {data.growthRate === undefined ? <Skeleton h={240} /> : growthSeries.length ? (
               <MemoLineChart series={growthSeries} labels={growthLabels} height={240} showLegend />
             ) : <Empty />}
           </Panel>
@@ -1316,7 +1338,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             title={last12Period ? `Month-over-month growth rate — ${last12Period}` : "Month-over-month growth rate"}
             sub="Positive = more requests than previous month · negative = fewer requests"
           >
-            {growth.length ? <GrowthTable rows={growth} /> : <Empty />}
+            {data.growthRate === undefined ? <Skeleton h={260} /> : growth.length ? <GrowthTable rows={growth} /> : <Empty />}
           </Panel>
         </div>
       )}
@@ -1324,10 +1346,10 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       {tab === "today" && (
         <div className="an-tab-content">
           <Panel full title="Today's activity" sub="Current business day window (6 AM rollover)">
-            <TodayPanel today={today} />
+            {data.today === undefined ? <Skeleton h={240} /> : <TodayPanel today={today} />}
           </Panel>
 
-          {today.requests_breakdown?.length > 0 && (
+          {data.today === undefined ? <Skeleton h={220} /> : today.requests_breakdown?.length > 0 && (
             <div className="an-two-col">
               <Panel title="Requests breakdown" sub="Certificate types requested today">
                 <MemoBarChart
