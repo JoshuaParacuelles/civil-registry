@@ -22,12 +22,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <PermissionProvider>
         <Routes>
           {/* Public routes */}
-          <Route path="/" element={<><Login /><HomePreloader /></>} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<><Login /><HomePreloader /></>} />
           <Route path="/access-denied" element={<AccessDenied />} />
 
-          {/* Protected shell — all nested pages live inside Home */}
+          {/* Protected shell. One pathless layout route keeps Home mounted
+              while you move between pages; Home reads the URL itself to
+              decide which page to show. */}
           <Route
-            path="/dashboard/*"
             element={
               <ProtectedRoute module="dashboard">
                 <Suspense fallback={<LoadingScreen />}>
@@ -35,10 +37,16 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                 </Suspense>
               </ProtectedRoute>
             }
-          />
+          >
+            <Route path="dashboard" />
+            <Route path="vital-records/*" />
+            <Route path="heatmaps" />
+            <Route path="document-tracking" />
+            <Route path="settings/*" />
+          </Route>
 
           {/* Catch-all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </PermissionProvider>
     </Router>

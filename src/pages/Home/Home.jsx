@@ -56,15 +56,15 @@ const SETTINGS_CHILDREN = [MENU_KEYS.ACCOUNT, MENU_KEYS.AUDIT, MENU_KEYS.ROLE_MA
 // which page is active.
 const MENU_ROUTES = {
   [MENU_KEYS.DASHBOARD]:         "/dashboard",
-  [MENU_KEYS.BIRTH]:             "/dashboard/vital-records/birth",
-  [MENU_KEYS.MARRIAGE]:          "/dashboard/vital-records/marriage",
-  [MENU_KEYS.DEATH]:             "/dashboard/vital-records/death",
-  [MENU_KEYS.SCIMS]:             "/dashboard/vital-records/scims-lookup",
-  [MENU_KEYS.HEATMAPS]:          "/dashboard/heatmaps",
-  [MENU_KEYS.DOCUMENT_TRACKING]: "/dashboard/document-tracking",
-  [MENU_KEYS.ACCOUNT]:           "/dashboard/settings/update-account",
-  [MENU_KEYS.AUDIT]:             "/dashboard/settings/audit-logs",
-  [MENU_KEYS.ROLE_MANAGEMENT]:   "/dashboard/settings/role-management",
+  [MENU_KEYS.BIRTH]:             "/vital-records/birth",
+  [MENU_KEYS.MARRIAGE]:          "/vital-records/marriage",
+  [MENU_KEYS.DEATH]:             "/vital-records/death",
+  [MENU_KEYS.SCIMS]:             "/vital-records/scims-lookup",
+  [MENU_KEYS.HEATMAPS]:          "/heatmaps",
+  [MENU_KEYS.DOCUMENT_TRACKING]: "/document-tracking",
+  [MENU_KEYS.ACCOUNT]:           "/settings/update-account",
+  [MENU_KEYS.AUDIT]:             "/settings/audit-logs",
+  [MENU_KEYS.ROLE_MANAGEMENT]:   "/settings/role-management",
 };
 
 const ROUTE_TO_MENU = Object.fromEntries(
