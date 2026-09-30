@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue } from "react";
+import { useState, useMemo, memo, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { usePermissions } from "../../context/PermissionContext";
 import { supabase } from "../../services/supabaseClient";
 import "./DocumentTracking.css";
@@ -362,6 +362,7 @@ export default function DocumentTracking() {
   // selected document changes, same as draftComment above.
   const [registryNumberInput, setRegistryNumberInput] = useState("");
   const [releaseDestinationInput, setReleaseDestinationInput] = useState("");
+  const [draftComment, setDraftComment] = useState("");   // <-- add this
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -566,14 +567,7 @@ export default function DocumentTracking() {
     loadDetail(selectedId);
   }, [selectedId, loadDetail]);
 
-  // Kept in sync with the current selectedId without forcing the
-  // realtime subscription effect below to tear down and resubscribe
-  // every time the selection changes.
-  const selectedIdRef = useRef(selectedId);
-  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
-  // SILENT-REFRESH FIX (NEW): keeps detailRef (declared with the
-  // request-id refs above) equal to the detail currently rendered.
   useEffect(() => { detailRef.current = detail; }, [detail]);
 
   // Realtime — replaces manual refresh. Subscribes once to Postgres
@@ -589,9 +583,9 @@ export default function DocumentTracking() {
   useEffect(() => {
     const scheduleList = () => {
       clearTimeout(listRefreshTimerRef.current);
-      // SILENT-REFRESH FIX: a realtime event is someone else's write (or
-      // our own echoed back) — refresh in the background, never with a
-      // loading state, so no session sees another user's loading flash.
+   const detailRef = useRef(null);
+const selectedIdRef = useRef(selectedId);
+selectedIdRef.current = selectedId;
       listRefreshTimerRef.current = setTimeout(() => loadList({ silent: true }), REALTIME_DEBOUNCE_MS);
     };
     const scheduleDetail = () => {
