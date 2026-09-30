@@ -3,8 +3,8 @@ import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
 import lcrLogo from "../../../assets/images/lcr.jpg";
-import ToastContainer from "../../../components/VitalToastContainer";
-import { useShowNotif } from "../../../hooks/useVitalToasts";
+import ToastContainer from "../../../components/ToastContainer";
+import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
 
@@ -15,7 +15,19 @@ import { computeAccuracy } from "../../../utils/matchAccuracy";
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/birth`;
 const FEE = 75;
 const MAX_UPLOAD = 5;
-
+// Adapter: keeps showNotif("message", "success" | "error") working
+// on top of the shared toastService (which uses success: true/false).
+function useShowNotif() {
+  return (message, type = "success") => {
+    const ok = type === "success";
+    pushToast({
+      title: ok ? "Success" : "Error",
+      message,
+      success: ok,
+      duration: 5000,
+    });
+  };
+}
 // ── Office details ─────────────────────────────────────────────────────────
 const OFFICE_CONFIG = {
   cityMunicipality: "this city/municipality",
