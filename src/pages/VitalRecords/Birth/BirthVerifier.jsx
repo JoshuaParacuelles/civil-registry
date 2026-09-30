@@ -3,6 +3,9 @@ import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
 import lcrLogo from "../../../assets/images/lcr.jpg";
+// ADDED: accuracy percentage feature
+import AccuracyBadge from "../../../components/AccuracyBadge";
+import { computeAccuracy } from "../../../utils/matchAccuracy";
 
 // Relative by default — resolves against whatever origin loaded the page
 // (localhost, LAN IP, or an HTTPS devtunnel) and goes through Vite's
@@ -27,11 +30,7 @@ const OFFICE_CONFIG = {
 };
 
 // ── Logo config ──────────────────────────────────────────────────────────
-// Uses the imported scc.png / lcr.jpg from src/assets. Leave blank ("") to
-// fall back to the placeholder seal drawn below for the primary logo.
 const LOGO_SRC = sccLogo;
-// FIX: second logo shown beside the primary logo (lcr.jpg). Leave blank ("")
-// to render only the primary logo, same as before.
 const LOGO_SRC_2 = lcrLogo;
 
 const STEPS = [
@@ -152,12 +151,7 @@ function getMotherDisplayName(record) {
   );
 }
 
-// FIX: identifies "the same person" across the active and archived
-// tables. The two tables have independent auto-increment ids, so the
-// same person can end up with a matching id purely by coincidence
-// (causing both rows to appear "selected" in the UI) or can appear
-// twice in search results if a restore left a stale archive copy
-// behind. We key on name + parents rather than id.
+// Identifies "the same person" across the active and archived tables.
 function getRecordIdentityKey(record) {
   const name   = getRecordDisplayName(record).trim().toUpperCase();
   const father = getFatherDisplayName(record).trim().toUpperCase();
@@ -201,24 +195,25 @@ function getRecordFirstName(record) {
   return "";
 }
 
+// ADDED: first + middle name, used only for the accuracy score so a search
+// like "anna marie santos" can match "Anna" + middle "Marie Santos".
+function getRecordGivenNames(record) {
+  const first  = cleanNamePart(record?.child_first_name);
+  const middle = cleanNamePart(record?.child_middle_name);
+  if (first) return [first, middle].filter(Boolean).join(" ");
+
+  // Fallback: only a full name is stored. Everything before the last word.
+  const parts = cleanNamePart(record?.child_full_name).split(/\s+/).filter(Boolean);
+  if (parts.length > 1) return parts.slice(0, -1).join(" ");
+  return parts[0] || "";
+}
+
 // ─────────────────────────────────────────────────────────────────────────
-// PDF DECODING — THE ACTUAL FIX
-//
-// Symptom: the in-app viewer showed Chrome's native
-// "Failed to load PDF document." error instead of the certificate.
-//
-// Root cause: `pdf_data` occasionally comes back DOUBLE base64-encoded
-// (see the matching comment in birth.py / _to_base64_pdf). Decoding it
-// only once with atob() produced garbage bytes that "looked like" a
-// valid Blob to the browser but weren't a real PDF, so the PDF.js
-// viewer choked on it.
-//
-// Fix: decode to raw bytes, check for the "%PDF" magic number before
-// trusting them. If it's not there, try peeling off one more layer of
-// base64 (self-healing old/corrupted rows). If it's still not a real
-// PDF after that, return null so the UI shows its own friendly
-// "Unable to display PDF" state instead of letting the browser's
-// built-in viewer throw a confusing native error.
+// PDF DECODING
+// `pdf_data` occasionally comes back DOUBLE base64-encoded. We decode to
+// raw bytes, check for the "%PDF" magic number, and if missing try peeling
+// off one more layer of base64. If still not a real PDF, return null so
+// the UI shows its own friendly state.
 // ─────────────────────────────────────────────────────────────────────────
 
 function bytesFromBase64(b64) {
@@ -271,9 +266,7 @@ function createPdfBlobFromData(pdfData) {
       return null;
     }
 
-    // Self-heal double base64-encoded data: if the first decode
-    // doesn't look like a PDF, the decoded bytes might just be the
-    // ASCII text of ANOTHER base64 string — try decoding once more.
+    // Self-heal double base64-encoded data.
     if (!looksLikePdf(bytes)) {
       try {
         const innerText  = new TextDecoder("ascii").decode(bytes).trim();
@@ -351,14 +344,6 @@ function printPdfFromData(pdfData) {
 }
 
 // ── Office Logo ─────────────────────────────────────────────────────────
-// Renders the real logo(s) if LOGO_SRC / LOGO_SRC_2 are set, otherwise a
-// placeholder seal.
-// FIX: now renders BOTH logos side by side (LOGO_SRC first, then
-// LOGO_SRC_2 next to it) when both are provided, using the same
-// className on each <img> so existing sizing CSS (.neg-cert-doc__logo,
-// .neg-print-logo, etc.) still applies unchanged to each logo image.
-// If only LOGO_SRC is set (LOGO_SRC_2 blank), behavior is identical to
-// before — a single logo image is rendered.
 const OfficeLogo = ({ className = "" }) => {
   if (LOGO_SRC || LOGO_SRC_2) {
     return (
@@ -510,8 +495,6 @@ function printNegativeCertificate(certData) {
   .neg-print-payment-value { flex: 1; font-size: 12pt; color: #000; }
   .neg-print-payment-blank { flex: 1; min-width: 100pt; height: 14pt; display: inline-block; }
 
-  /* FIX: father / mother / requestor names now print BOLD BLACK
-     (previously color: #1a3c6e — navy blue) */
   .neg-cert-doc__highlight { font-weight: bold; color: #000; }
 </style>
 </head>
@@ -653,7 +636,7 @@ const FileIconSm = () => (
 );
 
 // ─────────────────────────────────────────────────────────────
-// TOAST SYSTEM (ported from request.jsx)
+// TOAST SYSTEM
 // ─────────────────────────────────────────────────────────────
 let _toastSetters = [];
 
@@ -1708,25 +1691,8 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
     showNotif("Document reviewed. Proceeding to release.", "success");
   };
 
-  // ─────────────────────────────────────────────────────────────────────
-  // FIX: THE ACTUAL PAYMENT BUG
-  //
-  // This call used to be fire-and-forget: `await fetch(...)` sat inside a
-  // `try { ... } catch {}` with nothing that ever inspected the response.
-  // fetch() only rejects on a network failure — it resolves normally even
-  // when the server returns 4xx/5xx — so a rejected/failed transaction on
-  // the backend (validation error, failed insert, etc.) was completely
-  // indistinguishable from a real success here. The code fell straight
-  // through to `showNotif("Transaction completed successfully!", ...)`
-  // and then reset the form, discarding the in-progress transaction even
-  // though nothing had been written to birth_payments.
-  //
-  // Fix: read the JSON body, check `res.ok` / `data.error`, only report
-  // success when the server actually confirms the write, and return a
-  // boolean so the caller only resets the transaction on confirmed
-  // success — otherwise the admin sees a real error and can retry without
-  // losing the selected record / entered O.R. number.
-  // ─────────────────────────────────────────────────────────────────────
+  // Only report success when the server actually confirms the write, and
+  // return a boolean so the caller only resets on confirmed success.
   const handleCompleteTransaction = async () => {
     setProcessing(true);
     try {
@@ -1936,6 +1902,13 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
                                     selectedRecord?.id === r.id &&
                                     !!selectedRecord?._isArchived === !!r._isArchived;
 
+                                  // UPDATED: accuracy % of this record vs. what was searched.
+                                  // Uses first + middle name so multi-word first names match.
+                                  const accuracy = computeAccuracy(
+                                    { lastName: srchLastName, firstName: srchFirstName },
+                                    { lastName: getRecordLastName(r), firstName: getRecordGivenNames(r) }
+                                  );
+
                                   return (
                                     <div
                                       key={`${r._isArchived ? "arc" : "act"}-${r.id}`}
@@ -1949,6 +1922,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
                                         <div className="result-row__card-title">
                                           <span className="result-row__card-name">{display}</span>
                                           {r._isArchived && <span className="archived-badge">Archived</span>}
+                                          <AccuracyBadge value={accuracy} />
                                         </div>
                                         <div className="result-row__chips">
                                           {father && <span className="result-chip result-chip--father">{father}</span>}
@@ -2079,11 +2053,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
                       >
                         ← Back
                       </button>
-                      {/* FIX: only reset (i.e. clear the transaction and
-                          go back to Step 1) if the completion actually
-                          succeeded on the server — otherwise the admin
-                          would lose the selected record / negative-cert
-                          info for a payment that was never saved. */}
+                      {/* Only reset if the completion actually succeeded on the server. */}
                       <button
                         className="btn btn-primary btn-primary--wide btn-thick"
                         onClick={async () => {

@@ -1,0 +1,12 @@
+.accuracy-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.accuracy-high   { background: #dcfce7; color: #15803d; }
+.accuracy-medium { background: #fef3c7; color: #b45309; }
+.accuracy-low    { background: #fee2e2; color: #b91c1c; }

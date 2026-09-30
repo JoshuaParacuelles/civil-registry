@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
-// FIX: added the same second logo import used in the Birth section so
-// the Death registry shows both seals side by side, identical to Birth.
 import lcrLogo from "../../../assets/images/lcr.jpg";
+// ADDED: accuracy percentage feature
+import AccuracyBadge from "../../../components/AccuracyBadge";
+import { computeAccuracy } from "../../../utils/matchAccuracy";
 
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/death`;
 const FEE = 75;
@@ -25,8 +26,6 @@ const OFFICE_CONFIG = {
 };
 
 const LOGO_SRC = sccLogo;
-// FIX: second logo shown beside the primary logo (lcr.jpg), same as Birth.
-// Leave blank ("") to render only the primary logo, same as before.
 const LOGO_SRC_2 = lcrLogo;
 
 const STEPS = [
@@ -281,12 +280,6 @@ function printPdfFromData(pdfData) {
 }
 
 // ── Office Logo ─────────────────────────────────────────────────────────
-// FIX: now renders BOTH logos side by side (LOGO_SRC first, then
-// LOGO_SRC_2 next to it) when both are provided, using the same
-// className on each <img> so existing sizing CSS still applies unchanged
-// to each logo image — identical implementation to the Birth section.
-// If only LOGO_SRC is set (LOGO_SRC_2 blank), behavior is identical to
-// before — a single logo image is rendered.
 const OfficeLogo = ({ className = "" }) => {
   if (LOGO_SRC || LOGO_SRC_2) {
     return (
@@ -1511,6 +1504,13 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
       })
     : [];
 
+  // ADDED: accuracy of a record vs. what was searched (used for the badge and the sort tiebreaker)
+  const getAccuracy = (r) =>
+    computeAccuracy(
+      { lastName: srchLastName, firstName: srchFirstName },
+      { lastName: getRecordLastName(r), firstName: getRecordFirstName(r) }
+    );
+
   const sortedResults = [...searchResults].sort((a, b) => {
     const aFN = getRecordFirstName(a); const bFN = getRecordFirstName(b);
     if (!a._isArchived && b._isArchived) return -1;
@@ -1519,15 +1519,16 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     const bExact = searchFN && bFN === searchFN;
     if (aExact && !bExact) return -1;
     if (!aExact && bExact) return 1;
+
+    // ADDED: tiebreaker — higher accuracy first, then alphabetical
+    const diff = getAccuracy(b) - getAccuracy(a);
+    if (diff !== 0) return diff;
     return aFN.localeCompare(bFN);
   });
 
-  // FIX: selecting a record — whether active or archived — is purely a
-  // local/UI action. It only sets which record is chosen for this
-  // transaction; it never calls the backend and never changes the
-  // record's real is_archived status in the database. Archived records
-  // stay archived until an admin explicitly clicks "Restore" in the
-  // Archive tab (see restoreRecord/handleRestoreClick above).
+  // Selecting a record — whether active or archived — is purely a
+  // local/UI action. It never calls the backend and never changes the
+  // record's real is_archived status in the database.
   const handleSelectFromSearch = (record) => {
     const displayName = getRecordDisplayName(record);
 
@@ -1830,6 +1831,9 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                                     selectedRecord?.id === r.id &&
                                     !!selectedRecord?._isArchived === !!r._isArchived;
 
+                                  // ADDED: accuracy % of this record vs. what was searched
+                                  const accuracy = getAccuracy(r);
+
                                   return (
                                     <div
                                       key={`${r._isArchived ? "arc" : "act"}-${r.id}`}
@@ -1843,6 +1847,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                                         <div className="result-row__card-title">
                                           <span className="result-row__card-name">{display}</span>
                                           {r._isArchived && <span className="archived-badge">Archived</span>}
+                                          <AccuracyBadge value={accuracy} />
                                         </div>
                                         <div className="result-row__chips">
                                           {father && <span className="result-chip result-chip--father">{father}</span>}
