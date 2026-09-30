@@ -3,7 +3,8 @@ import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
 import lcrLogo from "../../../assets/images/lcr.jpg";
-// ADDED: accuracy percentage feature
+import ToastContainer from "../../../components/VitalToastContainer";
+import { useShowNotif } from "../../../hooks/useVitalToasts";
 import AccuracyBadge from "../../../components/AccuracyBadge";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
 
@@ -658,126 +659,6 @@ const FileIconSm = () => (
     <polyline points="14 2 14 8 20 8"/>
   </svg>
 );
-
-// ─────────────────────────────────────────────────────────────
-// TOAST SYSTEM
-// ─────────────────────────────────────────────────────────────
-let _toastSetters = [];
-
-let _toastIdCounter = 0;
-
-function useToasts() {
-  const [toasts, setToasts] = useState([]);
-  useEffect(() => {
-    _toastSetters.push(setToasts);
-    return () => {
-      _toastSetters = _toastSetters.filter((s) => s !== setToasts);
-    };
-  }, []);
-  return toasts;
-}
-
-function pushToast(toast) {
-  const id = `${Date.now()}-${++_toastIdCounter}`;
-  _toastSetters.forEach((set) => set((prev) => [...prev, { ...toast, id }]));
-  return id;
-}
-
-function removeToast(id) {
-  _toastSetters.forEach((set) =>
-    set((prev) => prev.filter((t) => t.id !== id)),
-  );
-}
-
-function ToastContainer() {
-  const toasts = useToasts();
-  return (
-    <div className="bv-toast-wrap">
-      {toasts.map((t) => (
-        <Toast key={t.id} {...t} />
-      ))}
-    </div>
-  );
-}
-
-function Toast({ id, title, message, duration = 5000, type = "success" }) {
-  const [hiding, setHiding] = useState(false);
-
-  const dismiss = () => {
-    setHiding(true);
-    setTimeout(() => removeToast(id), 300);
-  };
-
-  useEffect(() => {
-    const timer = setTimeout(dismiss, duration);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const TOAST_COLORS = {
-    success: "#059669",
-    warning: "#d97706",
-    error:   "#dc2626",
-  };
-  const color = TOAST_COLORS[type] || TOAST_COLORS.success;
-
-  return (
-    <div className={`bv-toast${hiding ? " bv-toast--hiding" : ""}`}>
-      <svg
-        className="bv-toast__icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {type === "success" && (
-          <>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9 12l2 2 4-4" />
-          </>
-        )}
-        {type === "warning" && (
-          <>
-            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-            <line x1="12" y1="9" x2="12" y2="13" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </>
-        )}
-        {type === "error" && (
-          <>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v4m0 4h.01" />
-          </>
-        )}
-      </svg>
-
-      <div className="bv-toast__body">
-        <div className="bv-toast__title">{title}</div>
-        {message && <div className="bv-toast__msg">{message}</div>}
-      </div>
-
-      <button className="bv-toast__close" onClick={dismiss} aria-label="Dismiss">
-        ×
-      </button>
-
-      <div className="bv-toast__progress">
-        <div
-          className="bv-toast__progress-bar"
-          style={{ animationDuration: `${duration}ms`, background: color }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function useShowNotif() {
-  return (message, type = "success") => {
-    const TOAST_TITLES = { success: "Success", warning: "Notice", error: "Error" };
-    const title = TOAST_TITLES[type] || "Notice";
-    pushToast({ title, message, type, duration: 5000 });
-  };
-}
 
 /* ── Sub-components ──────────────────────────────────────────────────────── */
 
