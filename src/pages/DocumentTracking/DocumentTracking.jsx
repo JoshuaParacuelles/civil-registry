@@ -4,33 +4,20 @@ import { supabase } from "../../services/supabaseClient";
 import "./DocumentTracking.css";
 
 // Same-origin by default (goes through the Vite proxy in dev). Only set
-// VITE_API_BASE_URL if the backend truly lives on a different origin —
-// this mirrors the constant already used in PermissionContext.jsx so both
-// files hit the same Flask app.
+// VITE_API_BASE_URL if the backend lives on a different origin.
 const API = import.meta.env.VITE_API_BASE_URL || "";
 
-// How long to wait after a realtime event before re-fetching, so a
-// burst of related writes (e.g. assign -> insert into
-// document_assignments -> update documents in the same action)
-// collapses into a single refetch instead of one per row changed.
+// Debounce for realtime-triggered refetches so a burst of related writes
+// collapses into a single refetch.
 const REALTIME_DEBOUNCE_MS = 300;
 const DOCUMENT_PAGE_SIZE = 50;
 const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
   month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
 });
 
-// PER-STAGE HANDLER FIX: the exact wording shown for a stage that has
-// nobody assigned to it. Kept as one constant so every place that
-// renders a stage's handler uses the same text and nothing ever falls
-// back to another stage's name or to the first person in the pool.
+// Text shown for a stage with nobody assigned.
 const UNSIGNED_LABEL = "Unsigned";
 
-// UI REFINEMENT: status chip colors now come from the shared flat
-// tokens defined on .dt-root in document_tracking.css (a darker "ink"
-// shade for the text, the matching *-soft tint for the fill) instead
-// of four one-off hex pairs, so chips, buttons and panels all draw
-// from the same accent system. The keys and the { fg, bg } shape are
-// unchanged, so nothing that reads STATUS_STYLES needs to change.
 const STATUS_STYLES = {
   "In review": { fg: "var(--blue-ink)", bg: "var(--blue-soft)" },
   "Approved": { fg: "var(--green-ink)", bg: "var(--green-soft)" },
@@ -40,29 +27,17 @@ const STATUS_STYLES = {
 
 const FILTERS = ["All", "In review", "Approved", "Changes requested", "Rejected"];
 
-// Document types offered in the "New Document" form. Adjust to match
-// whatever doc_type values your workflow actually uses.
 const DOC_TYPES = ["Birth Certificate", "Marriage Certificate", "Death Certificate", "Other"];
 
-// WORKFLOW FIX: the four allowed release destinations for the final
-// "Releasing" stage, matching RELEASE_DESTINATIONS in
-// routes/document.py.
+// Matches RELEASE_DESTINATIONS in routes/document.py.
 const RELEASE_DESTINATIONS = ["Owner's Copy", "Hospital", "PSA", "Archive Office"];
 
-// WORKFLOW FIX (Posting Period): how many days the "Posting Period"
-// stage requires, matching POSTING_PERIOD_DAYS in routes/document.py.
-// Used only for display text here — the backend is the source of
-// truth for whether the period has actually elapsed.
+// Matches POSTING_PERIOD_DAYS in routes/document.py (display only; the
+// backend decides whether the period has really elapsed).
 const POSTING_PERIOD_DAYS = 10;
 
-// WORKFLOW FIX: identify the workflow stages that need special
-// handling (the Posting Period step, the Registry Number entry, and
-// the final Releasing step) by label text rather than a hardcoded
-// stage order — mirrors _is_registry_number_stage() /
-// _is_releasing_stage() / _is_posting_period_stage() in
-// routes/document.py. This means documents created under an older
-// workflow never match and keep behaving exactly as they did before
-// this change.
+// Stage identification by label text — mirrors _is_registry_number_stage(),
+// _is_releasing_stage() and _is_posting_period_stage() in routes/document.py.
 function isRegistryNumberStageLabel(label) {
   return (label || "").toLowerCase().includes("registry number");
 }
@@ -73,24 +48,9 @@ function isPostingPeriodStageLabel(label) {
   return (label || "").trim().toLowerCase() === "posting period";
 }
 
-// STAGE PERMISSION FIX (NEW): maps a document_stages.label to the
-// single document_stage_* permission that scopes a role to acting on
-// that one stage — mirrors _stage_permission_for_label() in
-// routes/document.py exactly (same substring/equality rules, same
-// six known stages). A label that doesn't match any of the six known
-// stages returns null, so such a stage is left unrestricted here too,
-// exactly like the backend's block_if_no_stage_permission() behaves
-// for it.
-//
-// This is what was missing before: the backend already refused
-// complete/flag/reject/comment/registry-number/release-destination/
-// posting-period calls from a user whose role didn't cover the stage
-// being acted on, but this file never checked that same permission
-// before deciding whether to render the action controls at all — so
-// any non-admin assigned handler saw "Mark complete", "Request
-// changes", "Reject", and the comment form on every active stage,
-// regardless of which single document_stage_* permission their role
-// actually granted them.
+// Maps a stage label to its document_stage_* permission — mirrors
+// _stage_permission_for_label() in routes/document.py. Unknown labels
+// return null (unrestricted), same as the backend.
 function stagePermissionForLabel(label) {
   const l = (label || "").trim().toLowerCase();
   if (l.includes("registration")) return "document_stage_registration";
@@ -104,23 +64,8 @@ function stagePermissionForLabel(label) {
 
 function formatDate(value) {
   if (!value) return "Pending";
-  // TIMEZONE FIX: document_stages.completed_at and
-  // document_comments.created_at are plain TIMESTAMP columns (no time
-  // zone) in the schema, always written in UTC by Postgres's own
-  // now()/CURRENT_TIMESTAMP. PostgREST returns those as a bare
-  // "YYYY-MM-DDTHH:MM:SS" (or space-separated) string with no "Z" or
-  // offset. The Date constructor treats a date-time string with no
-  // timezone designator as already being in the BROWSER's local time,
-  // not UTC — so a value that's really e.g. 00:29 UTC was rendered as
-  // if it were already 00:29 in the viewer's own time zone, instead of
-  // being converted to the correct local time (00:29 UTC = 08:29 for a
-  // UTC+8 viewer). This normalizes such a bare timestamp to explicit
-  // UTC (appending "Z") before parsing, so it converts to the local
-  // time zone the same way every other timestamp in the app already
-  // does. Values that already carry a timezone marker — e.g. the
-  // Posting Period's posting_start_at/posting_end_at, written from
-  // Python as timezone-aware ISO strings with an explicit "+00:00" —
-  // are left exactly as they were and pass straight through.
+  // Bare "YYYY-MM-DDTHH:MM:SS" strings from PostgREST are UTC but carry no
+  // zone marker; append "Z" so the browser converts them to local time.
   let raw = value;
   if (
     typeof raw === "string" &&
@@ -140,22 +85,6 @@ function initialsFor(name) {
   return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() || "").join("") || "?";
 }
 
-// documents row (from routes/document.py) -> the shape this component
-// works with. Field names are read defensively (a couple of likely
-// aliases per field) so this keeps working even if the backend's field
-// names shift slightly; adjust the ?? chain here if that happens.
-//
-// doc_number is the human-facing id from documents.doc_number, e.g.
-// "DOC-2026-00001" — generated by the trg_generate_doc_number trigger
-// (see doc_number_format.sql), format DOC-<year>-<5-digit sequence>,
-// resetting each calendar year. Falls back to DOC-{id} for any row
-// that somehow doesn't have one (e.g. pre-migration rows).
-//
-// RESTORE FIX: also carries deletedHandlerId / deletedHandlerName from
-// the backend's deleted_handler_id / deleted_handler_name — set when
-// this document was left unassigned because its handler was removed
-// from the pool (see document.py's delete_handler()). Used below to
-// offer a "Restore to <name>" option in the handler dropdown.
 function mapDocumentSummary(row) {
   return {
     id: row.id,
@@ -171,18 +100,8 @@ function mapDocumentSummary(row) {
   };
 }
 
-// WORKFLOW FIX: mapStage() now also carries the Registry Number /
-// release destination for their respective stages, straight from
-// document_stages.registry_number / release_destination, plus the
-// Posting Period's posting_start_at / posting_end_at.
-//
-// PER-STAGE HANDLER FIX: it also carries THIS stage's own handler —
-// document_stages.assigned_handler_id and the name the backend
-// resolved for exactly that id (assigned_handler_name). Both stay
-// null when the stage has nobody assigned; there is deliberately no
-// fallback here to the document's handler, to another stage's
-// handler, or to the first entry of the handler pool, so a stage with
-// no personnel renders as "Unsigned" and nothing else.
+// Each stage carries its own handler (assigned_handler_name). There is no
+// fallback to the document's handler; an empty stage renders "Unsigned".
 function mapStage(stage) {
   return {
     order: stage.stage_order ?? stage.order,
@@ -216,8 +135,7 @@ function mapDocumentDetail(doc) {
   };
 }
 
-// active stage = first stage that is neither done nor flagged. Same rule
-// the UI used before, now applied to data coming from the API.
+// Active stage = first stage that is not done, or is flagged.
 function getActiveIndex(stages) {
   return stages.findIndex((s) => !s.done || s.flag);
 }
@@ -250,35 +168,6 @@ const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect }) {
   );
 });
 
-const CommentForm = memo(function CommentForm({ id, stageOrder, busy, onSubmit }) {
-  const [text, setText] = useState("");
-
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    if (!text.trim()) return;
-    onSubmit(stageOrder, text);
-    setText("");
-  };
-
-  return (
-    <form className="dt-comment-form" onSubmit={handleSubmit}>
-      <textarea
-        id={id}
-        name="comment"
-        className="dt-comment-textarea"
-        placeholder="Add a comment on this step…"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-      />
-      <div className="dt-action-row">
-        <button type="submit" className="dt-btn dt-btn-ghost" disabled={busy}>
-          Add comment
-        </button>
-      </div>
-    </form>
-  );
-});
-
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${API}${path}`, {
     credentials: "include",
@@ -299,48 +188,12 @@ async function apiFetch(path, options = {}) {
 }
 
 export default function DocumentTracking() {
-  // ROLE POLICY (strict):
-  //   - Administrator: VIEW-ONLY on document status/stages, plus the
-  //     ability to create new documents, add people to the handler
-  //     pool, and assign/reassign who handles a given document. An
-  //     admin can NEVER complete, flag, reject, or comment on a stage
-  //     — not even when the document is unassigned or the assigned
-  //     handler hasn't acted yet. There is no "sign on behalf of"
-  //     override for admins.
-  //   - Regular (non-admin) user: the ONLY role that can actually work
-  //     a document through its pipeline — mark a stage complete,
-  //     request changes, reject, or comment — and only once a handler
-  //     is assigned. Regular users work documents ASSIGNED TO THEM;
-  //     they don't create new document/request records — see the
-  //     "+ New Document" button below, which is now admin-only to
-  //     match, and routes/document.py's create_document(), which
-  //     enforces the same rule server-side via require_admin().
-  //
-  //   This mirrors the backend exactly: routes/document.py calls
-  //   block_if_admin() on the complete/flag/reject/comment endpoints,
-  //   so even a crafted request from an admin session is rejected
-  //   server-side with a 403. The UI below simply doesn't render those
-  //   controls for admins, so there is no button that would ever hit
-  //   that 403 in normal use.
-  //
-  //   STAGE PERMISSION FIX (NEW): being the assigned, non-admin handler
-  //   is no longer enough on its own to see the action panel on every
-  //   active stage. Each Document Tracking stage role
-  //   (Registration / Civil Registrar / Posting Period / Records
-  //   Division / Assign Registry Number / Releasing) carries exactly
-  //   one document_stage_* permission (see BUILTIN_ROLE_PERMISSIONS in
-  //   Rolemanagement.py). `hasAccess(...)` below is checked per-stage
-  //   against `stagePermissionForLabel(stage.label)` — mirroring
-  //   block_if_no_stage_permission() in routes/document.py — so a user
-  //   whose only role is "Assign Registry Number" now only ever sees
-  //   the action panel on the "Assign Registry Number" stage; every
-  //   other active stage shows a read-only "not your role" panel
-  //   instead, exactly like admins already see. Completing that one
-  //   stage still simply advances to the next stage row as before
-  //   (see _get_active_stage() in document.py) — which is what
-  //   "forwards" the document to the next role's queue, gated by that
-  //   next stage's own permission the same way.
-  //
+  // ROLE POLICY:
+  //  - Administrator: view-only on stages; can create/delete documents.
+  //  - Non-admin: can work a stage (complete / request changes / reject /
+  //    comment) only when the stage has a handler AND their role carries
+  //    that stage's document_stage_* permission.
+  // Mirrors block_if_admin() / block_if_no_stage_permission() on the backend.
   const { is_admin, hasAccess } = usePermissions();
 
   const [documents, setDocuments] = useState([]);
@@ -357,31 +210,21 @@ export default function DocumentTracking() {
   const [visibleCount, setVisibleCount] = useState(DOCUMENT_PAGE_SIZE);
   const [filter, setFilter] = useState("All");
   const [openStage, setOpenStage] = useState(null);
-  // WORKFLOW FIX: local input state for the two data-entry stages
-  // (Assign Registry Number / Releasing). Cleared whenever the
-  // selected document changes, same as draftComment above.
+
+  // Input state for the stage forms. Cleared when the selected document changes.
+  const [draftComment, setDraftComment] = useState("");
   const [registryNumberInput, setRegistryNumberInput] = useState("");
   const [releaseDestinationInput, setReleaseDestinationInput] = useState("");
-  const [draftComment, setDraftComment] = useState("");   // <-- add this
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const saveTimer = useRef(null);
 
-  // NEW — "New Document" modal: lets any logged-in user create a
-  // document/request record (POST /api/documents). This is what was
-  // missing before — without it there was never a row in `documents`
-  // to select or assign a handler to, which is why the dashboard
-  // could only ever show "0 of 0 shown". Assignment stays a separate,
-  // admin-only step via the existing dropdown in the detail panel;
-  // this form does not touch assigned_handler_id at all.
+  // "New Document" modal
   const [newDocOpen, setNewDocOpen] = useState(false);
   const [newDocNumber, setNewDocNumber] = useState("");
   const [newDocTitle, setNewDocTitle] = useState("");
   const [newDocType, setNewDocType] = useState(DOC_TYPES[0]);
-  // When newDocType === "Other", this free-text value is what actually
-  // gets sent as doc_type — the "Other" option in DOC_TYPES is just a
-  // trigger to reveal this input, never a value submitted on its own.
   const [newDocTypeOther, setNewDocTypeOther] = useState("");
   const [newDocBusy, setNewDocBusy] = useState(false);
   const [newDocError, setNewDocError] = useState(null);
@@ -389,60 +232,29 @@ export default function DocumentTracking() {
   const newDocTitleRef = useRef(null);
   const newDocTypeOtherRef = useRef(null);
 
-  // "Request changes" modal — replaces window.prompt(). flagStageOrder
-  // tracks which stage the modal is for (null = closed); flagNote holds
-  // the textarea content.
+  // "Request changes" modal
   const [flagStageOrder, setFlagStageOrder] = useState(null);
   const [flagNote, setFlagNote] = useState("");
   const [flagBusy, setFlagBusy] = useState(false);
   const [flagError, setFlagError] = useState(null);
   const flagNoteRef = useRef(null);
 
-  // Generic "are you sure?" modal — replaces window.confirm() for
-  // destructive actions (Reject, Delete) so the confirmation matches
-  // the app's own styling instead of the browser's native dialog.
-  // Shape: { title, message, confirmLabel, danger, onConfirm } | null.
+  // Generic confirm modal: { title, message, confirmLabel, danger, onConfirm } | null
   const [confirmModal, setConfirmModal] = useState(null);
   const confirmModalConfirmRef = useRef(null);
 
-  // STALE-RESPONSE FIX: request-id guards so an older /api/documents
-  // (or /api/documents/<id>) response that resolves AFTER a newer one
-  // — e.g. the immediate refresh an action triggers via runAction()
-  // racing the debounced realtime refresh from the same write, or two
-  // quick clicks on different documents — can never overwrite fresher
-  // state with stale data. Each loadList()/loadDetail() call stamps a
-  // ticket number before starting its fetch; when the fetch resolves,
-  // its response is only applied to state if it's still the most
-  // recent call in flight. This is what fixes the bug where, after an
-  // admin restored a soft-deleted handler, the detail panel could keep
-  // showing the previously-assigned/removed person instead of the
-  // restored one, even though the Documents list (and a completely
-  // separate session/reload) already reflected the correct, current
-  // handler.
-  //
+  // Request-id tickets so an older response can never overwrite a newer one.
   const listRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
   const listRefreshTimerRef = useRef(null);
   const detailRefreshTimerRef = useRef(null);
 
-  // SILENT-REFRESH FIX (NEW): mirrors the `detail` state so loadDetail()
-  // (a stable useCallback with no deps) can check whether the document
-  // it is about to refresh is ALREADY on screen — see the SILENT-REFRESH
-  // FIX note in loadDetail() below. Kept in sync by an effect next to
-  // the selectedIdRef sync further down.
+  // Mirrors of state, read by stable callbacks / realtime handlers.
   const detailRef = useRef(null);
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId; // assigned during render so it is never stale
 
-  // SILENT-REFRESH FIX (NEW): `opts.silent === true` means "refresh the
-  // data in place, without showing any loading state". It is passed by
-  // the post-action refresh in runAction()/submitFlagStage() (the user
-  // who just acted) and by every realtime-triggered refresh (every OTHER
-  // open session — Administrator and other personnel alike). Before,
-  // every one of those flipped listLoading on, so the header line under
-  // "Documents" switched to "Loading…" on each refresh, in every
-  // browser watching. The first load, the Retry button and anything
-  // else that calls loadList() with no argument behave exactly as before
-  // — including when Retry passes the click event, since an event has
-  // no `silent` property.
+  // `opts.silent === true` refreshes in place without a loading state.
   const loadList = useCallback(async (opts) => {
     const requestId = ++listRequestIdRef.current;
     const silent = opts?.silent === true;
@@ -450,34 +262,16 @@ export default function DocumentTracking() {
     setListError(null);
     try {
       const rows = await apiFetch("/api/documents");
-      if (listRequestIdRef.current !== requestId) return []; // superseded by a newer call
+      if (listRequestIdRef.current !== requestId) return []; // superseded
       const mapped = (rows || []).map(mapDocumentSummary);
       setDocuments(mapped);
-      // STALE-SELECTION FIX: previously this was
-      //   setSelectedId((prev) => prev ?? mapped[0]?.id ?? null);
-      // which only ever replaced `prev` when it was null/undefined.
-      // Once a document was selected, its id stuck around forever —
-      // even after that exact document was deleted, or otherwise
-      // stopped being returned by this same endpoint (e.g. removed by
-      // another session/tab). The list here would correctly refresh
-      // to reflect reality (down to "0 of 0 shown" in the extreme
-      // case), but loadDetail(selectedId) below kept being called
-      // with that same now-nonexistent id on every subsequent list
-      // reload (including the realtime-triggered ones), so the detail
-      // panel was stuck showing "Couldn't load this document: Document
-      // not found" — a real 404, not a transient error — until a full
-      // page reload reset selectedId back to null. Reconciling the
-      // selection against the freshly loaded list on every loadList()
-      // call closes that gap for good: if the previously selected
-      // document is still present, keep it selected; otherwise fall
-      // back to the first available document (or null if there are
-      // none), exactly like the very first load already did.
+      // Keep the current selection if it still exists, else pick the first.
       setSelectedId((prev) =>
         prev != null && mapped.some((d) => d.id === prev) ? prev : (mapped[0]?.id ?? null)
       );
       return mapped;
     } catch (e) {
-      if (listRequestIdRef.current !== requestId) return []; // superseded by a newer call
+      if (listRequestIdRef.current !== requestId) return [];
       console.error("[DocumentTracking] Failed to load documents:", e);
       setListError(e.message || "Could not reach the server.");
       return [];
@@ -488,65 +282,31 @@ export default function DocumentTracking() {
     }
   }, []);
 
-  // SILENT-REFRESH FIX (NEW): this was the "loading animation" after
-  // Mark complete. Every loadDetail() call used to set detailLoading,
-  // and the render below swaps the whole detail card for a
-  // "Loading document…" placeholder while that is true — so the panel
-  // blanked out and re-appeared on every refresh: for the user who
-  // clicked "Mark complete → next step" (runAction()'s post-action
-  // refresh), and, worse, for the Administrator and every other
-  // personnel who merely had that document open, because each realtime
-  // event on documents / document_stages / document_comments /
-  // document_assignments triggers a loadDetail() in THEIR browser too.
-  //
-  // `opts.silent === true` now skips the loading state, but only when
-  // the detail for this same document is already on screen
-  // (detailRef.current?.id === id), so the current panel stays put and
-  // is simply replaced with the fresh data the moment it arrives.
-  // Selecting a different document, the very first load, and the Retry
-  // button all still show the loading state exactly as before, because
-  // they either don't pass `silent` or have nothing on screen for that
-  // document yet.
+  // SELECTION FIX: the old version discarded a response whenever
+  // `id !== selectedIdRef.current`. That check could silently drop the
+  // response for the auto-selected first document, leaving the right panel
+  // on "Select a document…" with no loading state and no error. The
+  // request-id ticket alone already prevents stale overwrites, and the
+  // render below additionally refuses to show a detail whose id doesn't
+  // match the current selection.
   const loadDetail = useCallback(async (id, opts) => {
     const requestId = ++detailRequestIdRef.current;
     if (id == null) {
       setDetail(null);
+      setDetailLoading(false);
       return;
     }
-    const silent = opts?.silent === true && detailRef.current?.id === id;
+    const silent = opts?.silent === true && String(detailRef.current?.id) === String(id);
     if (!silent) {
       setDetailLoading(true);
       setDetailError(null);
     }
     try {
       const doc = await apiFetch(`/api/documents/${id}`);
-      if (detailRequestIdRef.current !== requestId) return; // superseded by a newer call
-      // CROSS-DOCUMENT STALE-DETAIL FIX (NEW): a request-id ticket only
-      // protects against an older loadDetail() call's response landing
-      // after a newer loadDetail() call's response — it says nothing
-      // about whether `id` (the document this particular fetch was for)
-      // is still the document actually selected. runAction() (used by
-      // Mark complete / Request changes / Reject / assign / comment /
-      // registry-number / release-destination / posting-period) closes
-      // over `selectedId` from the render it was invoked in, and calls
-      // loadDetail(selectedId) once its mutation resolves. If the user
-      // switches the selected document to a DIFFERENT one while that
-      // action's request is still in flight, this post-action refresh
-      // still fires for the OLD document — and because it lands later
-      // in time than the newly-selected document's own loadDetail()
-      // call, it would win the ticket race and overwrite the detail
-      // panel with the wrong document's data even though a different
-      // document is now selected. Guarding against selectedIdRef.current
-      // here (kept in sync with the current selection, see below) closes
-      // that gap: a detail response for a document that is no longer
-      // selected is simply discarded, exactly as it should be, since a
-      // fresh loadDetail() for whatever IS currently selected has
-      // already been kicked off by the selection-change effect below.
-      if (id !== selectedIdRef.current) return;
+      if (detailRequestIdRef.current !== requestId) return; // a newer call took over
       setDetail(mapDocumentDetail(doc));
     } catch (e) {
-      if (detailRequestIdRef.current !== requestId) return; // superseded by a newer call
-      if (id !== selectedIdRef.current) return; // see CROSS-DOCUMENT STALE-DETAIL FIX above
+      if (detailRequestIdRef.current !== requestId) return;
       console.error("[DocumentTracking] Failed to load document detail:", e);
       setDetailError(e.message || "Could not reach the server.");
       setDetail(null);
@@ -557,7 +317,10 @@ export default function DocumentTracking() {
     }
   }, []);
 
+  useEffect(() => { detailRef.current = detail; }, [detail]);
+
   useEffect(() => { loadList(); }, [loadList]);
+
   useEffect(() => {
     setOpenStage(null);
     setDraftComment("");
@@ -567,38 +330,20 @@ export default function DocumentTracking() {
     loadDetail(selectedId);
   }, [selectedId, loadDetail]);
 
-
-  useEffect(() => { detailRef.current = detail; }, [detail]);
-
-  // Realtime — replaces manual refresh. Subscribes once to Postgres
-  // changes on the tables this screen depends on, so every browser
-  // tab picks up assignments, stage completions, comments, and new
-  // documents as they happen, with no page reload and no polling
-  // interval. Requires: (1) Realtime enabled on these tables in
-  // Supabase (Database -> Replication), and (2) a SELECT policy on
-  // each table for whatever role the anon/public key in
-  // supabaseClient.js authenticates as — Postgres RLS is enforced on
-  // realtime events too, so without read access no event ever arrives
-  // even though the subscription itself succeeds silently.
+  // Realtime: refresh list/detail in the background when related tables change.
   useEffect(() => {
     const scheduleList = () => {
       clearTimeout(listRefreshTimerRef.current);
-   const detailRef = useRef(null);
-const selectedIdRef = useRef(selectedId);
-selectedIdRef.current = selectedId;
       listRefreshTimerRef.current = setTimeout(() => loadList({ silent: true }), REALTIME_DEBOUNCE_MS);
     };
     const scheduleDetail = () => {
       clearTimeout(detailRefreshTimerRef.current);
       detailRefreshTimerRef.current = setTimeout(() => {
-        // SILENT-REFRESH FIX: see loadDetail() — the open panel stays
-        // mounted and updates in place; only a document that isn't on
-        // screen yet gets the loading state.
         if (selectedIdRef.current != null) loadDetail(selectedIdRef.current, { silent: true });
       }, REALTIME_DEBOUNCE_MS);
     };
     const idOf = (payload, key) => payload.new?.[key] ?? payload.old?.[key] ?? null;
-    const isSelected = (id) => id == null || id === selectedIdRef.current;
+    const isSelected = (id) => id == null || String(id) === String(selectedIdRef.current);
 
     const channel = supabase
       .channel("document-tracking-realtime")
@@ -618,13 +363,6 @@ selectedIdRef.current = selectedId;
         if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
       })
       .subscribe((status, err) => {
-        // Realtime failures are otherwise completely silent — no
-        // thrown error, no rejected promise, the UI just never
-        // updates. This makes that visible: open DevTools Console and
-        // look for these lines. "SUBSCRIBED" means the tables are
-        // correctly published and readable; anything else (or an err)
-        // points at the publication/RLS/env-var setup instead of the
-        // app code.
         if (status === "SUBSCRIBED") {
           console.info("[DocumentTracking] Realtime connected.");
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
@@ -646,43 +384,26 @@ selectedIdRef.current = selectedId;
   }, []);
   useEffect(() => () => clearTimeout(saveTimer.current), []);
 
-  // Autofocus the "New Document" number field the moment that modal opens
-  // — it's now the first field, since the tracking number is typed in
-  // rather than generated automatically.
   useEffect(() => {
-    if (newDocOpen && newDocNumberRef.current) {
-      newDocNumberRef.current.focus();
-    }
+    if (newDocOpen && newDocNumberRef.current) newDocNumberRef.current.focus();
   }, [newDocOpen]);
 
-  // Autofocus the custom document-type input the moment "Other" is
-  // selected in the dropdown, so typing can start immediately.
   useEffect(() => {
-    if (newDocType === "Other" && newDocTypeOtherRef.current) {
-      newDocTypeOtherRef.current.focus();
-    }
+    if (newDocType === "Other" && newDocTypeOtherRef.current) newDocTypeOtherRef.current.focus();
   }, [newDocType]);
 
-  // Autofocus the "Request changes" note field the moment that modal opens.
   useEffect(() => {
-    if (flagStageOrder != null && flagNoteRef.current) {
-      flagNoteRef.current.focus();
-    }
+    if (flagStageOrder != null && flagNoteRef.current) flagNoteRef.current.focus();
   }, [flagStageOrder]);
 
-  // Autofocus the confirm-modal's primary action button the moment it
-  // opens, so Enter/Space confirms immediately — matching how a native
-  // confirm() dialog behaves.
   useEffect(() => {
-    if (confirmModal && confirmModalConfirmRef.current) {
-      confirmModalConfirmRef.current.focus();
-    }
+    if (confirmModal && confirmModalConfirmRef.current) confirmModalConfirmRef.current.focus();
   }, [confirmModal]);
 
   const filtered = useMemo(() => {
+    const q = deferredQuery.trim().toLowerCase();
     return documents.filter((doc) => {
       const matchesFilter = filter === "All" || doc.status === filter;
-      const q = deferredQuery.trim().toLowerCase();
       const matchesQuery =
         !q ||
         doc.title.toLowerCase().includes(q) ||
@@ -695,9 +416,7 @@ selectedIdRef.current = selectedId;
 
   const visibleDocuments = filtered.slice(0, visibleCount);
 
-  // Wraps a mutating call: runs it, refreshes the detail panel + list
-  // (status/updated/comment counts all change server-side), and surfaces
-  // any error inline instead of failing silently.
+  // Wraps a mutating call: run it, refresh detail + list in place, surface errors.
   const runAction = useCallback(async (fn) => {
     setBusy(true);
     setActionError(null);
@@ -705,11 +424,10 @@ selectedIdRef.current = selectedId;
       await fn();
       clearTimeout(listRefreshTimerRef.current);
       clearTimeout(detailRefreshTimerRef.current);
-      // SILENT-REFRESH FIX: refresh in place, no "Loading document…"
-      // swap. The only in-progress signal left is `busy` above, which
-      // is this component's own local state — it disables and dims the
-      // buttons for the person who clicked and nobody else.
-      await Promise.all([loadDetail(selectedId, { silent: true }), loadList({ silent: true })]);
+      await Promise.all([
+        loadDetail(selectedIdRef.current, { silent: true }),
+        loadList({ silent: true }),
+      ]);
       flashSaved();
     } catch (e) {
       console.error("[DocumentTracking] Action failed:", e);
@@ -717,16 +435,12 @@ selectedIdRef.current = selectedId;
     } finally {
       setBusy(false);
     }
-  }, [selectedId, loadDetail, loadList, flashSaved]);
+  }, [loadDetail, loadList, flashSaved]);
 
   const advanceStage = (stageOrder) =>
     runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/complete`, { method: "POST" }));
 
-  // Submits the "Request changes" modal: validates the note, then
-  // calls the flag endpoint directly (rather than through runAction,
-  // which swallows errors into actionError and always "succeeds" from
-  // the caller's point of view) so a failed request keeps the modal
-  // open with the error shown, instead of closing regardless.
+  // Called directly (not via runAction) so a failure keeps the modal open.
   const submitFlagStage = async () => {
     const note = flagNote.trim();
     if (!note) {
@@ -742,7 +456,6 @@ selectedIdRef.current = selectedId;
         method: "POST",
         body: JSON.stringify({ note }),
       });
-      // SILENT-REFRESH FIX: same as runAction() — refresh in place.
       await Promise.all([loadDetail(selectedId, { silent: true }), loadList({ silent: true })]);
       flashSaved();
       setFlagStageOrder(null);
@@ -767,15 +480,6 @@ selectedIdRef.current = selectedId;
     }));
   }, [selectedId, runAction]);
 
-  // WORKFLOW FIX: saves the Registry Number / release destination for
-  // their respective stages (POST .../registry-number and
-  // .../release-destination in routes/document.py). Routed through
-  // the same runAction() helper as the other stage actions above, so
-  // errors surface via actionError and the detail/list panels refresh
-  // on success the same way. Neither of these completes the stage —
-  // "Mark complete → next step" (advanceStage above) is still the
-  // only thing that does, and the backend now refuses to complete
-  // these stages until the corresponding value has been saved.
   const saveRegistryNumber = (stageOrder, value) =>
     runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/registry-number`, {
       method: "POST",
@@ -788,24 +492,11 @@ selectedIdRef.current = selectedId;
       body: JSON.stringify({ destination: value }),
     }));
 
-  // WORKFLOW FIX (Posting Period): starts the 10-day posting period on
-  // the "Posting Period" stage (POST .../posting-period in
-  // routes/document.py). Same non-completing relationship to
-  // advanceStage() as the registry-number/release-destination savers
-  // above: this only records the start (and server-computed end) time,
-  // and complete_stage() on the backend refuses to complete this stage
-  // until that period has actually elapsed.
   const startPostingPeriod = (stageOrder) =>
     runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/posting-period`, {
       method: "POST",
     }));
 
-  // NEW — submit the "New Document" form. Creates the document/request
-  // record (server generates doc_number as DOC-<year>-<00001> and
-  // seeds starter stages — see create_document() in document.py),
-  // then refreshes the list and selects the newly created document so
-  // it's immediately visible and ready for an admin to assign a
-  // handler to.
   const submitNewDocument = () => {
     const docNumber = newDocNumber.trim();
     const title = newDocTitle.trim();
@@ -821,20 +512,11 @@ selectedIdRef.current = selectedId;
       setNewDocError("Document type is required.");
       return;
     }
-    // When "Other" is picked, the dropdown value itself is never sent —
-    // it's a trigger to reveal the free-text field below. The actual
-    // doc_type is whatever was typed into that field.
-    const resolvedTypeBase = newDocType === "Other" ? newDocTypeOther.trim() : newDocType;
-    if (newDocType === "Other" && !resolvedTypeBase) {
+    const resolvedType = newDocType === "Other" ? newDocTypeOther.trim() : newDocType;
+    if (newDocType === "Other" && !resolvedType) {
       setNewDocError("Please type the document type.");
       return;
     }
-    // 10 DAYS REGISTRATION FIX: the document's type is no longer used to
-    // decide whether its Posting Period stage requires the 10-day
-    // window — that choice now lives on the stage itself (the "10 Days
-    // Registration" button in the action panel), so doc_type is
-    // submitted exactly as typed/selected, with no suffix appended.
-    const resolvedType = resolvedTypeBase;
     setNewDocError(null);
     setNewDocBusy(true);
     apiFetch("/api/documents", {
@@ -848,9 +530,7 @@ selectedIdRef.current = selectedId;
         setNewDocTypeOther("");
         setNewDocOpen(false);
         await loadList();
-        if (created?.id != null) {
-          setSelectedId(created.id);
-        }
+        if (created?.id != null) setSelectedId(created.id);
         flashSaved();
       })
       .catch((e) => {
@@ -860,17 +540,8 @@ selectedIdRef.current = selectedId;
       .finally(() => setNewDocBusy(false));
   };
 
-  // Admin-only: permanently deletes the selected document (and its
-  // stages/comments/assignments). Not wrapped in the generic
-  // runAction() helper because, after a successful delete, there is
-  // no longer a document to reload — runAction() would call
-  // loadDetail(selectedId) against an id that no longer exists and
-  // surface a spurious "not found" error. Deliberately mirrors
-  // require_admin() in routes/document.py's new DELETE
-  // /api/documents/<id> route: only an admin session can reach this
-  // endpoint successfully, and the button that triggers it is only
-  // ever rendered for admins (see the "Delete" button in the detail
-  // panel header below).
+  // Admin-only. Not routed through runAction() because there is no document
+  // left to reload afterwards.
   const deleteDocument = async () => {
     if (selectedId == null) return;
     setBusy(true);
@@ -894,17 +565,13 @@ selectedIdRef.current = selectedId;
     setOpenStage((prev) => (prev === i ? null : i));
   };
 
-  const selected = detail;
+  // Never show a detail that belongs to a different document than the one selected.
+  const selected = detail && String(detail.id) === String(selectedId) ? detail : null;
   const activeIndex = selected ? getActiveIndex(selected.stages) : -1;
 
   return (
     <div className="dt-root">
       <div className="dt-page">
-        {/* UI REFINEMENT: role="tablist" / role="tab" / aria-selected
-            added so the filter row is announced as a set of tabs. The
-            filter logic (setFilter / data-active) is unchanged; the
-            visual restyle lives in document_tracking.css (.dt-tabs,
-            .dt-tab). */}
         <div className="dt-tabs" role="tablist" aria-label="Filter documents by status">
           {FILTERS.map((f) => (
             <button
@@ -927,48 +594,18 @@ selectedIdRef.current = selectedId;
         {listError && (
           <div className="dt-empty" style={{ marginBottom: 12 }}>
             Couldn't load documents: {listError}{" "}
-            <button className="dt-btn dt-btn-ghost" onClick={loadList}>Retry</button>
+            <button className="dt-btn dt-btn-ghost" onClick={() => loadList()}>Retry</button>
           </div>
         )}
 
-        {/*
-          FIX (layout): dt-grid previously only ever rendered the
-          right-hand column when detailLoading, detailError, or
-          `selected` was truthy. With 0 documents (or nothing selected
-          yet) none of those were true, so this cell rendered nothing —
-          that's what produced the half-empty, cut-off-looking layout.
-          `alignItems: "stretch"` (inline, since it doesn't touch the
-          existing .dt-grid rule in the CSS file) makes both columns
-          match height instead of the grid collapsing to its shortest
-          child.
-        */}
         <div className="dt-grid" style={{ alignItems: "stretch" }}>
           <div className="dt-card dt-list-card">
             <div className="dt-card-head">
               <div>
                 <h2>Documents</h2>
-                  <p>{listLoading ? "Loading…" : `${visibleDocuments.length} of ${filtered.length} shown`}</p>
+                <p>{listLoading ? "Loading…" : `${visibleDocuments.length} of ${filtered.length} shown`}</p>
               </div>
-              {/* UI REFINEMENT: the inline-styled flex wrapper is now
-                  .dt-toolbar, so "+ New Document" and the search box
-                  share one row, one height (--control-h) and wrap
-                  together on small screens. */}
               <div className="dt-toolbar">
-                {/* "New Document" button — ADMIN-ONLY. Regular users
-                    only handle/process/move documents already
-                    assigned to them; they don't create new document/
-                    request records. Assigning a handler to a newly
-                    created document remains a separate, admin-only
-                    step via the dropdown in the detail panel below.
-                    Enforced server-side too — see require_admin() on
-                    create_document() in routes/document.py.
-
-                    UI REFINEMENT: was a one-off inline-styled button.
-                    Now uses the shared button classes — dt-btn-primary
-                    (solid blue, the one forward action on this screen)
-                    at the toolbar size (dt-btn-lg) — so it is visibly
-                    the primary control next to the ghost/danger
-                    buttons elsewhere. onClick is unchanged. */}
                 {is_admin && (
                   <button
                     type="button"
@@ -978,15 +615,6 @@ selectedIdRef.current = selectedId;
                     + New Document
                   </button>
                 )}
-
-                {/* PERSONNEL-CONTROL REMOVAL: the admin-only "Add person"
-                    dropdown/combobox used to sit here. Administrators no
-                    longer add, remove, or pick personnel from Document
-                    Tracking at all, so the whole control (and with it the
-                    add-a-name view and the per-row remove/trash button) is
-                    gone from this header. Everything else in this header —
-                    the "+ New Document" button and the search box — is
-                    unchanged. */}
                 <input
                   id="dt-search-input"
                   name="document-search"
@@ -1004,13 +632,6 @@ selectedIdRef.current = selectedId;
             </div>
 
             <div className="dt-list">
-              {/* SMOOTH-LOADING FIX: shimmering placeholder rows for the
-                  genuinely empty initial load only (documents.length === 0),
-                  so the panel doesn't sit blank while the first fetch is in
-                  flight. A background reload — realtime update, filter
-                  change, action refresh — leaves the existing rows on
-                  screen instead of flashing back to this skeleton, since
-                  `documents` isn't cleared before a refetch. */}
               {listLoading && documents.length === 0 && (
                 Array.from({ length: 5 }).map((_, i) => (
                   <div className="dt-skeleton-row" key={`dt-skeleton-${i}`} aria-hidden="true">
@@ -1026,41 +647,14 @@ selectedIdRef.current = selectedId;
               {!listLoading && filtered.length === 0 && (
                 <div className="dt-empty">No documents match this search or filter.</div>
               )}
-              {visibleDocuments.map((doc) => {
-                const style = STATUS_STYLES[doc.status] || STATUS_STYLES["In review"];
-                return (
-                  <button
-                    key={doc.id}
-                    className="dt-row"
-                    data-selected={selectedId === doc.id}
-                    onClick={() => setSelectedId(doc.id)}
-                  >
-                    {/* UI REFINEMENT: the row's three lines are now
-                        separate, individually styled fields instead of
-                        dot-joined strings — document number (bold) and
-                        type on line 1, title on line 2, and on line 3
-                        the handler's name (emphasised) and the last
-                        update time. Same data as before, just
-                        structured so it scans. */}
-                    <div className="dt-row-main">
-                      <span className="dt-row-id">
-                        <span className="dt-row-num">{doc.docNumber}</span>
-                        <span className="dt-row-type">{doc.type}</span>
-                      </span>
-                      <span className="dt-row-title">{doc.title}</span>
-                      <span className="dt-row-meta">
-                        <span>Handling <strong>{doc.owner}</strong></span>
-                        <span>Updated {doc.updated}</span>
-                      </span>
-                    </div>
-                    <div className="dt-row-side">
-                      <span className="dt-badge" style={{ color: style.fg, background: style.bg }}>
-                        {doc.status}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+              {visibleDocuments.map((doc) => (
+                <DocumentRow
+                  key={doc.id}
+                  doc={doc}
+                  selected={selectedId === doc.id}
+                  onSelect={setSelectedId}
+                />
+              ))}
             </div>
             {filtered.length > visibleDocuments.length && (
               <button
@@ -1088,16 +682,9 @@ selectedIdRef.current = selectedId;
             </div>
           )}
 
-          {/*
-            FIX (layout): this branch was missing entirely. When there
-            is no document to show — 0 documents in the system, or a
-            list that's loaded but nothing selected yet — none of the
-            three branches above matched and the right column rendered
-            completely empty, which is what made the panel look
-            cut-off/half-visible next to the Documents list. This keeps
-            a properly sized dt-detail-card in place at all times so
-            the two-column layout never collapses.
-          */}
+          {/* Empty state. If a document IS selected but its detail isn't here
+              yet, say "Loading…" (with a Retry) instead of the misleading
+              "Select a document" message. */}
           {!detailLoading && !detailError && !selected && (
             <div className="dt-card dt-detail-card">
               <div
@@ -1108,11 +695,19 @@ selectedIdRef.current = selectedId;
                   alignItems: "center",
                   justifyContent: "center",
                   textAlign: "center",
+                  gap: 8,
                 }}
               >
-                {documents.length === 0
-                  ? "No documents yet — they'll appear here once submitted."
-                  : "Select a document from the list to see its details."}
+                {selectedId != null ? (
+                  <>
+                    Loading document…{" "}
+                    <button className="dt-btn dt-btn-ghost" onClick={() => loadDetail(selectedId)}>Retry</button>
+                  </>
+                ) : documents.length === 0 ? (
+                  "No documents yet — they'll appear here once submitted."
+                ) : (
+                  "Select a document from the list to see its details."
+                )}
               </div>
             </div>
           )}
@@ -1122,16 +717,7 @@ selectedIdRef.current = selectedId;
               <div className="dt-card-head">
                 <div>
                   <h2>{selected.title}</h2>
-                  {/* UI REFINEMENT: dt-detail-docno gives the document
-                      number tabular figures + a slightly heavier weight
-                      so it reads as the record's identifier, distinct
-                      from the title above it. */}
                   <p className="dt-detail-docno">{selected.docNumber}</p>
-                  {/* WORKFLOW FIX: surfaces the Registry Number / release
-                      destination in the document's header info once
-                      they've been saved, for everyone viewing this
-                      document — pulled from the top-level fields
-                      get_document_detail() now returns. */}
                   {(selected.registryNumber || selected.releaseDestination) && (
                     <p style={{ fontSize: 12, color: "var(--ink-mid)", margin: "2px 0 0" }}>
                       {selected.registryNumber && <>Registry No. <strong>{selected.registryNumber}</strong></>}
@@ -1139,29 +725,11 @@ selectedIdRef.current = selectedId;
                       {selected.releaseDestination && <>Released to <strong>{selected.releaseDestination}</strong></>}
                     </p>
                   )}
-                  {/* PERSONNEL-CONTROL REMOVAL: the two explanatory notes
-                      that used to sit here ("Locked — this document has
-                      already progressed…" and the restore-after-deletion
-                      note) only ever existed to explain the state of the
-                      removed dropdown, so they are gone with it. The
-                      server-side rules they described — the handler lock in
-                      assign_handler() and its reassign-after-delete
-                      exception — are untouched in routes/document.py. */}
                 </div>
-                {/* UI REFINEMENT: the inline column wrapper is now
-                    .dt-head-actions — "Saved" note and Delete sit on
-                    one line, right-aligned, with Delete as a quiet
-                    outlined-red button (never a filled red block). */}
                 <div className="dt-head-actions">
                   <span className="dt-save-note">
                     {justSaved ? "Saved" : "\u00A0"}
                   </span>
-                  {/* Delete — ADMIN-ONLY. Regular users have no access to
-                      this at all: the button simply isn't rendered for
-                      them, and routes/document.py's DELETE
-                      /api/documents/<id> also enforces require_admin()
-                      server-side, so a non-admin session gets a 403 even
-                      if it somehow calls the endpoint directly. */}
                   {is_admin && (
                     <button
                       type="button"
@@ -1195,30 +763,15 @@ selectedIdRef.current = selectedId;
                   const hasComments = Boolean(stage.comments?.length);
                   const isOpen = openStage === i;
                   const isActive = i === activeIndex && !selected.rejected;
-                  // WORKFLOW FIX: per-stage gating for the three special
-                  // stages — mirrors the checks complete_stage() enforces
-                  // server-side in routes/document.py, so "Mark complete"
-                  // is disabled here before ever hitting that rejection
-                  // in normal use.
+
+                  // Per-stage gating — mirrors complete_stage() in routes/document.py.
                   const stageRegistryMissing = isRegistryNumberStageLabel(stage.label) && !stage.registryNumber;
                   const stageReleaseMissing = isReleasingStageLabel(stage.label) && !stage.releaseDestination;
-                  // POSTING PERIOD FIX: the stage can't be completed
-                  // until it's been started AND POSTING_PERIOD_DAYS have
-                  // actually elapsed since posting_start_at.
                   const isPostingStage = isPostingPeriodStageLabel(stage.label);
-                  // 10 DAYS REGISTRATION FIX: the 10-day posting window is
-                  // now an optional, per-document choice made directly on
-                  // this stage — via the "10 Days Registration" button in
-                  // the action panel below — instead of something derived
-                  // from the document's type at creation time. If nobody
-                  // has clicked that button yet (stage.postingStartAt is
-                  // empty), this stage is a plain pass-through step and
-                  // "Mark complete → next step" is available immediately,
-                  // same as any other stage. Once clicked, the existing
-                  // rules apply: POSTING_PERIOD_DAYS must actually elapse,
-                  // and (mirroring the matching check in complete_stage()
-                  // in routes/document.py) an explanatory comment must be
-                  // added on this stage before "Mark complete" unlocks.
+
+                  // The 10-day window is optional: it only applies once the
+                  // "10 Days Registration" button has been clicked. Until then
+                  // the Posting Period stage is a plain pass-through step.
                   const postingEndTime = stage.postingEndAt ? new Date(stage.postingEndAt).getTime() : null;
                   const stagePostingStarted = isPostingStage && Boolean(stage.postingStartAt);
                   const stagePostingNotElapsed =
@@ -1229,26 +782,7 @@ selectedIdRef.current = selectedId;
                   const markCompleteDisabled =
                     busy || stageRegistryMissing || stageReleaseMissing ||
                     stagePostingNotElapsed || stagePostingCommentMissing;
-                  // MARK-COMPLETE VISIBILITY FIX (NEW): markCompleteDisabled
-                  // being true previously gave NO visible signal beyond the
-                  // click silently doing nothing — the button (dt-btn
-                  // dt-btn-primary) kept its normal solid-blue look whether
-                  // it was clickable or not, since disabling a <button> only
-                  // stops the click handler from firing, it doesn't change
-                  // how the button is painted unless CSS specifically
-                  // targets :disabled. That's exactly the reported symptom:
-                  // "I click Mark complete → next step and nothing happens."
-                  // In reality the click IS being blocked, correctly, by the
-                  // very same rule complete_stage() enforces server-side
-                  // (e.g. the Posting Period's 10-day window not having
-                  // elapsed yet) — the only thing missing was feedback.
-                  //
-                  // This computes a plain-language reason for the *current*
-                  // block (checked in the same order complete_stage() in
-                  // routes/document.py checks them), so it can be shown
-                  // directly under the button below. It does not change
-                  // markCompleteDisabled itself or any of the underlying
-                  // gating rules — those are correct as-is.
+
                   const markCompleteDisabledReason = stagePostingNotElapsed
                     ? `Mark complete unlocks once the ${POSTING_PERIOD_DAYS}-day posting period ends${
                         stage.postingEndAt ? ` (${formatDate(stage.postingEndAt)})` : ""
@@ -1260,41 +794,14 @@ selectedIdRef.current = selectedId;
                     : stageReleaseMissing
                     ? "Select the release destination before this step can be completed."
                     : null;
-                  // STAGE PERMISSION FIX (NEW): does the current user's
-                  // role carry the specific document_stage_* permission
-                  // this stage requires? Mirrors
-                  // block_if_no_stage_permission() in routes/document.py
-                  // exactly — a stage whose label doesn't match any of the
-                  // six known stages has no required permission
-                  // (stagePermission === null) and stays unrestricted,
-                  // same as the backend. This is what scopes each role to
-                  // only its own stage: a user whose only permission is
-                  // "document_stage_registry_number" gets
-                  // userHasStageAccess === false on every other stage, so
-                  // the action panel below never renders for them there —
-                  // only on "Assign Registry Number".
+
+                  // Does the user's role carry this stage's permission?
                   const stagePermission = stagePermissionForLabel(stage.label);
                   const userHasStageAccess = !stagePermission || hasAccess(stagePermission);
-                  // This stage's handler comes only from the stage row.
+
                   const stageHandlerName = stage.assignedHandlerName || UNSIGNED_LABEL;
-                  // STAGE ASSIGNMENT FIX (NEW): whether THIS stage
-                  // currently has nobody handling it. The blocked/action/
-                  // admin panels below used to gate on the document-level
-                  // `isUnassigned` (derived only from
-                  // documents.assigned_handler_id), so a stage actually
-                  // staffed via a Document Tracking role — e.g. jamaica
-                  // holding "Registration", surfaced above as
-                  // stageHandlerName via the ROLE-BASED HANDLER FIX — could
-                  // still show "Unassigned — assign a handler before this
-                  // step can be worked" and block "Mark complete", even
-                  // though "Currently handling" already correctly showed
-                  // her name. Basing this on the exact same resolved name
-                  // shown in "Currently handling" keeps these panels
-                  // consistent with what's actually displayed, and with
-                  // the backend (complete_stage() in document.py never
-                  // required a document-level handler in the first place —
-                  // only block_if_no_stage_permission()).
                   const stageIsUnassigned = stageHandlerName === UNSIGNED_LABEL;
+
                   return (
                     <li
                       key={stage.order ?? i}
@@ -1313,38 +820,12 @@ selectedIdRef.current = selectedId;
                           disabled={!hasComments}
                         >
                           <div className="dt-step-heading-text">
-                            {/* DOCUMENT-NUMBER-ON-STAGE FIX (NEW): every
-                                stage now shows the document's own doc_number
-                                right above its label, so whoever is
-                                viewing/processing a stage can always tell at
-                                a glance which document they're on — this
-                                matters most once multiple documents are
-                                open/worked across sessions or when scanning
-                                a long timeline. Sourced straight from
-                                selected.docNumber (already resolved via
-                                mapDocumentSummary()/_summarize_document()),
-                                so no backend change or extra request is
-                                needed, and this is purely an added display
-                                line — it doesn't affect stage.label,
-                                stage.detail, gating, or any other existing
-                                behavior.
-
-                                UI REFINEMENT: the inline style on this line
-                                moved into .dt-step-docno in the stylesheet
-                                (same text, same content) so it stays a
-                                quiet reference line above the stage name. */}
                             <p className="dt-step-docno">
                               Document No: {selected.docNumber}
                             </p>
                             <p className="dt-step-label">{stage.label}</p>
                             <p className="dt-step-detail">{stage.detail}</p>
                             <p className="dt-step-date">{stage.date}</p>
-                            {/* WORKFLOW FIX: surfaces Registry Number /
-                                release destination on their respective
-                                stages, for everyone (admins included) —
-                                not just while the stage is active — so
-                                this information stays visible in the
-                                timeline/history once entered. */}
                             {isRegistryNumberStageLabel(stage.label) && stage.registryNumber && (
                               <p className="dt-step-detail" style={{ marginTop: 2 }}>
                                 Registry Number: <strong>{stage.registryNumber}</strong>
@@ -1355,11 +836,6 @@ selectedIdRef.current = selectedId;
                                 Released to: <strong>{stage.releaseDestination}</strong>
                               </p>
                             )}
-                            {/* POSTING PERIOD FIX: surfaces the posting
-                                window on its stage, for everyone (admins
-                                included) — not just while the stage is
-                                active — so this stays visible in the
-                                timeline/history once started. */}
                             {isPostingStage && stage.postingStartAt && (
                               <p className="dt-step-detail" style={{ marginTop: 2 }}>
                                 Posted {formatDate(stage.postingStartAt)} — {stagePostingNotElapsed
@@ -1381,28 +857,7 @@ selectedIdRef.current = selectedId;
                           )}
                         </button>
 
-                        {/* PER-STAGE HANDLER FIX: "Currently handling"
-                            for THIS step only, still read straight off
-                            this stage's own assigned_handler_id, showing
-                            "Unsigned" when it has none, and rendered for
-                            every stage so the timeline stays a per-stage
-                            record of who is/was responsible for each
-                            step.
-
-                            PERSONNEL-CONTROL REMOVAL: this is now
-                            READ-ONLY for everyone, administrators
-                            included. It previously rendered a <select>
-                            for whoever could manage personnel, letting an
-                            admin pick the person for this step; that
-                            control has been removed, so the name is
-                            simply displayed.
-
-                            UI REFINEMENT: the inline style on the name
-                            moved into .dt-handler-name, and
-                            data-unsigned lets the stylesheet mute the
-                            "Unsigned" placeholder so an empty stage
-                            reads as empty rather than as a person's
-                            name. The displayed text is unchanged. */}
+                        {/* Read-only "Currently handling" for this stage. */}
                         <div className="dt-handler-row" style={{ marginTop: 6 }}>
                           <span className="dt-handler-label">Currently handling:</span>
                           <span className="dt-handler-name" data-unsigned={stageIsUnassigned}>{stageHandlerName}</span>
@@ -1425,23 +880,7 @@ selectedIdRef.current = selectedId;
                           </ul>
                         )}
 
-                        {/* Blocked panel — active stage, but no handler is
-                            assigned yet. Shown instead of either panel
-                            below, for admins and regular users alike:
-                            nobody can work an unassigned stage, and there
-                            is no sign/authorize override for admins.
-
-                            PERSONNEL-CONTROL REMOVAL: the line that told
-                            an admin to use the "Document handler"
-                            dropdown has been dropped along with that
-                            dropdown.
-
-                            STAGE ASSIGNMENT FIX: gated on stageIsUnassigned
-                            (this stage's own resolved handler, the same
-                            value shown in "Currently handling" above) —
-                            see the definition of stageIsUnassigned above
-                            for why the old document-level `isUnassigned`
-                            was wrong here. */}
+                        {/* Blocked: active stage with nobody assigned. */}
                         {isActive && stageIsUnassigned && (
                           <div className="dt-active-panel dt-active-panel-blocked">
                             <span className="dt-active-panel-label">
@@ -1450,42 +889,13 @@ selectedIdRef.current = selectedId;
                           </div>
                         )}
 
-                        {/* Action panel — only the active (current) stage gets one,
-                            and only for the assigned, non-admin user, and only
-                            once a handler is actually assigned. This is the ONLY
-                            place a stage can be completed, flagged, rejected, or
-                            commented on — Administrators never get this panel,
-                            see the read-only admin panel below instead.
-
-                            STAGE PERMISSION FIX (NEW): also gated on
-                            userHasStageAccess — a non-admin, assigned user
-                            only sees this on the one stage their role's
-                            document_stage_* permission actually covers.
-                            See the "not your role" panel just below this
-                            one for what renders instead on every other
-                            active stage.
-
-                            STAGE ASSIGNMENT FIX: gated on
-                            !stageIsUnassigned (this stage's own resolved
-                            handler) instead of the document-level
-                            !isUnassigned — see stageIsUnassigned above. */}
+                        {/* Action panel: active stage, non-admin, has a handler, role covers this stage. */}
                         {isActive && !is_admin && !stageIsUnassigned && userHasStageAccess && (
                           <div className="dt-active-panel">
                             <span className="dt-active-panel-label">
                               Current step — action needed
                             </span>
 
-                            {/* 10 DAYS REGISTRATION FIX: this control now
-                                always renders on the Posting Period
-                                stage, for every document. Clicking
-                                "10 Days Registration" starts the 10-day
-                                window on THIS stage — if it's never
-                                clicked, "Mark complete → next step"
-                                below works right away with no waiting
-                                and no forced comment, since
-                                stagePostingNotElapsed /
-                                stagePostingCommentMissing both stay
-                                false until the button is clicked. */}
                             {isPostingStage && (
                               <div style={{ marginBottom: 10 }}>
                                 <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>
@@ -1510,12 +920,6 @@ selectedIdRef.current = selectedId;
                               </div>
                             )}
 
-                            {/* WORKFLOW FIX: Registry Number entry — only
-                                rendered on the "Assign Registry Number"
-                                stage. Once saved, the input locks
-                                (matching save_registry_number()'s one-way
-                                write in routes/document.py) and
-                                "Mark complete" unlocks. */}
                             {isRegistryNumberStageLabel(stage.label) && (
                               <div style={{ marginBottom: 10 }}>
                                 <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>
@@ -1547,11 +951,6 @@ selectedIdRef.current = selectedId;
                               </div>
                             )}
 
-                            {/* WORKFLOW FIX: release-destination selection
-                                — only rendered on the final "Releasing"
-                                stage. Once saved, "Mark complete" unlocks
-                                and the document finishes the pipeline as
-                                before. */}
                             {isReleasingStageLabel(stage.label) && (
                               <div style={{ marginBottom: 10 }}>
                                 <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>
@@ -1591,15 +990,6 @@ selectedIdRef.current = selectedId;
                                 className="dt-btn dt-btn-primary"
                                 disabled={markCompleteDisabled}
                                 onClick={() => advanceStage(stage.order)}
-                                // MARK-COMPLETE VISIBILITY FIX: explicit
-                                // inline dimming so the button visibly
-                                // looks locked whenever markCompleteDisabled
-                                // is true, regardless of what dt-btn /
-                                // dt-btn-primary do (or don't do) for
-                                // :disabled in the stylesheet. Purely
-                                // visual — the disabled attribute above is
-                                // still what actually blocks the click, and
-                                // that logic is unchanged.
                                 style={
                                   markCompleteDisabled
                                     ? { opacity: 0.5, cursor: "not-allowed" }
@@ -1640,17 +1030,6 @@ selectedIdRef.current = selectedId;
                               </button>
                             </div>
 
-                            {/* MARK-COMPLETE VISIBILITY FIX: plain-language
-                                explanation for why "Mark complete" is
-                                currently locked, shown right under the
-                                action row. Only rendered while genuinely
-                                blocked by one of the workflow rules above
-                                (never for the transient `busy` state, which
-                                resolves on its own within a moment), so
-                                this never contradicts what the button is
-                                doing — it just says out loud what
-                                markCompleteDisabled was already enforcing
-                                silently. */}
                             {markCompleteDisabledReason && (
                               <p style={{ fontSize: 12, color: "var(--ink-mid)", margin: "8px 0 0" }}>
                                 {markCompleteDisabledReason}
@@ -1661,6 +1040,7 @@ selectedIdRef.current = selectedId;
                               className="dt-comment-form"
                               onSubmit={(e) => {
                                 e.preventDefault();
+                                if (!draftComment.trim()) return;
                                 addComment(stage.order, draftComment);
                                 setDraftComment("");
                                 setOpenStage(i);
@@ -1683,24 +1063,7 @@ selectedIdRef.current = selectedId;
                           </div>
                         )}
 
-                        {/* STAGE PERMISSION FIX (NEW): active stage,
-                            handler assigned, non-admin — but this user's
-                            role doesn't carry the document_stage_*
-                            permission this specific stage requires. This
-                            is the panel that now shows on Registration /
-                            Civil Registrar / etc. for a user whose only
-                            role is, say, "Assign Registry Number" —
-                            mirroring the backend's
-                            block_if_no_stage_permission() 403 on
-                            complete/flag/reject/comment/registry-number/
-                            release-destination/posting-period, so no
-                            action control that would just hit that
-                            rejection is ever rendered here.
-
-                            STAGE ASSIGNMENT FIX: gated on
-                            !stageIsUnassigned instead of the
-                            document-level !isUnassigned — see
-                            stageIsUnassigned above. */}
+                        {/* Non-admin, stage has a handler, but the role doesn't cover this stage. */}
                         {isActive && !is_admin && !stageIsUnassigned && !userHasStageAccess && (
                           <div className="dt-active-panel dt-active-panel-blocked">
                             <span className="dt-active-panel-label">
@@ -1709,28 +1072,7 @@ selectedIdRef.current = selectedId;
                           </div>
                         )}
 
-                        {/* Admin view — STRICTLY VIEW-ONLY. Per role
-                            policy, Administrators only monitor/view
-                            document status and create new documents
-                            (plus personnel/assignment administration
-                            elsewhere on this screen); they can never
-                            complete, flag, reject, or comment on a
-                            stage, whether or not a handler is assigned.
-                            No action buttons or comment form are
-                            rendered here — this mirrors the backend,
-                            which rejects these same four actions from
-                            an admin session via block_if_admin() in
-                            routes/document.py, so there is no button
-                            here that could ever hit that 403.
-
-                            PER-STAGE HANDLER FIX: the person named here
-                            is this stage's own handler (or "Unsigned"),
-                            never the document-level one.
-
-                            STAGE ASSIGNMENT FIX: gated on
-                            !stageIsUnassigned instead of the
-                            document-level !isUnassigned — see
-                            stageIsUnassigned above. */}
+                        {/* Admin: strictly view-only. */}
                         {isActive && is_admin && !stageIsUnassigned && (
                           <div className="dt-active-panel dt-active-panel-admin">
                             <span className="dt-active-panel-label">
@@ -1761,17 +1103,7 @@ selectedIdRef.current = selectedId;
         </div>
       </div>
 
-      {/* "New Document" modal. Simple overlay (no new dependency)
-          matching the styling already used inline elsewhere in this
-          file. Escape / backdrop click closes it; Enter in the title
-          field submits. Only reachable via the admin-only "+ New
-          Document" trigger button above.
-          Backdrop is a plain translucent dim (no blur), so the
-          dashboard behind it stays fully visible, just darkened —
-          matching the reference screenshot.
-          position: "fixed" + inset: 0 covers the entire viewport
-          (sidebar and topbar included), matching how Home's own
-          logout confirmation modal behaves. */}
+      {/* "New Document" modal */}
       {newDocOpen && (
         <div
           className="dt-modal-overlay"
@@ -1852,9 +1184,6 @@ selectedIdRef.current = selectedId;
                 onChange={(e) => {
                   setNewDocType(e.target.value);
                   setNewDocError(null);
-                  // Switching away from "Other" clears whatever was
-                  // typed, so it can't linger and get silently reused
-                  // if the person picks "Other" again later.
                   if (e.target.value !== "Other") setNewDocTypeOther("");
                 }}
                 style={{
@@ -1867,9 +1196,6 @@ selectedIdRef.current = selectedId;
                 ))}
               </select>
 
-              {/* Free-text field revealed only when "Other" is selected —
-                  this is what actually gets sent as doc_type in that case,
-                  never the literal word "Other". */}
               {newDocType === "Other" && (
                 <input
                   ref={newDocTypeOtherRef}
@@ -1934,18 +1260,7 @@ selectedIdRef.current = selectedId;
         </div>
       )}
 
-      {/* "Request changes" modal, replacing window.prompt(). Same
-          overlay pattern as the New Document modal above: backdrop
-          click or Escape cancels, Enter in the textarea would insert a
-          newline (expected for a note), so submission is button-only
-          here rather than on Enter. Only reachable from the non-admin
-          action panel above, since admins never see the "Request
-          changes" trigger button.
-          Backdrop is a plain translucent dim (no blur), matching the
-          other modals.
-          position: "fixed" + inset: 0 covers the entire viewport
-          (sidebar and topbar included), same as the New Document
-          modal above. */}
+      {/* "Request changes" modal */}
       {flagStageOrder != null && (
         <div
           className="dt-modal-overlay"
@@ -2029,16 +1344,8 @@ selectedIdRef.current = selectedId;
           </div>
         </div>
       )}
-      {/* Generic confirm modal — replaces window.confirm() for Reject
-          and Delete, so the browser's plain native dialog never
-          appears; this uses the same overlay/card styling as the
-          "New Document" and "Request changes" modals above. Backdrop
-          click or Escape cancels (same as the other modals); the
-          primary button is autofocused so Enter confirms immediately.
-          Same plain translucent dim backdrop as the other two modals,
-          kept consistent across all three (no blur).
-          position: "fixed" + inset: 0 covers the entire viewport
-          (sidebar and topbar included), same as the other two modals. */}
+
+      {/* Generic confirm modal (Reject / Delete) */}
       {confirmModal && (
         <div
           className="dt-modal-overlay"
