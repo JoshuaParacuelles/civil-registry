@@ -2770,3 +2770,90 @@
   }
   .ubr-action-bar .btn-secondary { min-width: 60px !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ADDED: BULK SELECT (Archive) — Select All checkbox + bulk action bar
+═══════════════════════════════════════════════════════════════════════ */
+.tbl-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.tbl th.tbl-check-col,
+.tbl td.tbl-check-col {
+  width: 40px;
+  padding-left: 14px;
+  padding-right: 4px;
+  text-align: center;
+}
+
+.tbl tbody tr.tbl-row--selected,
+.tbl tbody tr.tbl-row--selected:hover {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+/* Bulk action bar */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px;
+  background: rgba(37, 99, 235, 0.07);
+  border-bottom: 1px solid var(--blue-bd);
+  flex-wrap: wrap;
+  animation: fadeIn 0.15s ease;
+}
+.bulk-bar__count {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--blue);
+}
+.bulk-bar__acts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bulk-bar__clear {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  background: #ffffff;
+  color: var(--txt2);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--f);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.bulk-bar__clear:hover:not(:disabled) { background: var(--surf-2); color: var(--txt); }
+.bulk-bar__clear:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.bulk-bar__delete {
+  height: 30px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.bulk-bar__delete:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+/* Mobile "Select all" row */
+.select-all-mobile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--txt2);
+  background: var(--surf-2);
+  border-bottom: 1px solid var(--border-lt);
+  cursor: pointer;
+}
+.mobile-record-card--selected { background: rgba(37, 99, 235, 0.06); }

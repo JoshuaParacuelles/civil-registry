@@ -51,6 +51,30 @@ function useViewport() {
   };
 }
 
+// ── FIXED: resilient JSON fetch ────────────────────────────────────────────
+// The marriage list endpoints occasionally fail for a moment right after an
+// upload (server busy / DB hiccup). Retry a couple of times before giving up,
+// and surface the server's real error message instead of a blank Error().
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchJsonWithRetry(url, { signal, retries = 2, delay = 500 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, { signal });
+      let body = null;
+      try { body = await res.json(); } catch { /* non-JSON body */ }
+      if (!res.ok) throw new Error(body?.error || `Server responded with ${res.status}`);
+      return body;
+    } catch (err) {
+      if (err?.name === "AbortError") throw err;
+      lastErr = err;
+      if (attempt < retries) await sleep(delay * (attempt + 1));
+    }
+  }
+  throw lastErr;
+}
+
 const formatDate = (d) => {
   if (!d) return "—";
   const parsed = new Date(d);
@@ -1192,6 +1216,65 @@ const NegativeCertPreview = ({
   );
 };
 
+// Green progress bar used in the upload dialog (self-styled, no CSS file needed).
+const UploadProgressBar = ({ value = 0, width = "100%", height = 10, showLabel = true }) => {
+  const pct = Math.max(0, Math.min(100, Math.round(value)));
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, width }}>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        style={{ flex: 1, height, background: "#e5e7eb", borderRadius: 999, overflow: "hidden" }}
+      >
+        <div
+          style={{
+            width: `${pct}%`, height: "100%", background: "#10b981",
+            borderRadius: 999, transition: "width 0.2s ease",
+          }}
+        />
+      </div>
+      {showLabel && (
+        <span style={{ minWidth: 34, textAlign: "right", fontSize: 12, fontWeight: 700, color: "#059669" }}>
+          {pct}%
+        </span>
+      )}
+    </div>
+  );
+};
+
+// Upload with real progress (fetch can't report upload progress, XHR can).
+function uploadWithProgress(url, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.min(99, (e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText || "{}"); } catch { /* non-JSON body */ }
+      if (xhr.status >= 200 && xhr.status < 300) { onProgress(100); resolve(data); }
+      else reject(new Error(data.error || "Upload failed"));
+    };
+    xhr.onerror = () => reject(new Error("Cannot reach server."));
+    xhr.send(formData);
+  });
+}
+
+// FIXED: inline layout for the "matching surname records" list. Marriage names
+// are "Groom & Bride" and much longer than Birth/Death names, so without this
+// the date dropped under the name and the modal grew past the screen (the
+// Done button got cut off).
+const MATCH_LIST_STYLE  = { maxHeight: 260, overflowY: "auto" };
+const MATCH_ROW_STYLE   = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "nowrap", gap: 12 };
+const MATCH_LEFT_STYLE  = { display: "flex", alignItems: "center", flexWrap: "nowrap", gap: 8, flex: "1 1 auto", minWidth: 0 };
+const MATCH_ICON_STYLE  = { flexShrink: 0, display: "inline-flex" };
+const MATCH_NAME_STYLE  = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const MATCH_BADGE_STYLE = { flexShrink: 0, whiteSpace: "nowrap" };
+const MATCH_DATE_STYLE  = { flexShrink: 0, whiteSpace: "nowrap" };
+
 const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
   const [stage,           setStage]           = useState("upload");
   const [queue,           setQueue]           = useState([]);
@@ -1202,6 +1285,10 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
 
   const slotsLeft    = MAX_UPLOAD - queue.length;
   const limitReached = queue.length >= MAX_UPLOAD;
+
+  const overallProgress = queue.length
+    ? queue.reduce((sum, q) => sum + (q.status === "done" ? 100 : q.status === "uploading" ? (q.progress || 0) : 0), 0) / queue.length
+    : 0;
 
   const getLimitClass = () => {
     if (limitReached)                   return "upl-limit-badge--reached";
@@ -1237,15 +1324,15 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
     setIsUploading(true);
     const uploaded = [];
     for (const item of queue) {
-      setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "uploading" } : qi));
+      setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "uploading", progress: 0 } : qi));
       try {
         const fd = new FormData();
         fd.append("file", item.file);
-        const res = await fetch(`${API}/records`, { method: "POST", body: fd });
-        if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Upload failed"); }
-        const data = await res.json();
+        const data = await uploadWithProgress(`${API}/records`, fd, (pct) =>
+          setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, progress: pct } : qi)),
+        );
         uploaded.push(data);
-        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "done" } : qi));
+        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "done", progress: 100 } : qi));
       } catch (err) {
         setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "error", error: err.message } : qi));
         showNotif(`Failed to upload "${item.file.name}": ${err.message}`, "error");
@@ -1254,16 +1341,15 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
     setIsUploading(false);
     if (uploaded.length > 0) {
       setUploadedRecords(uploaded);
-      onUploadSuccess();
-      const uploadedLastNames = uploaded.flatMap((r) => [
-        (r.groom_last_name || "").trim().toUpperCase(),
-        (r.bride_last_name || "").trim().toUpperCase(),
-      ]).filter(Boolean);
-      const refreshed = [...allRecords, ...uploaded.map((r) => ({ ...r, uploaded_at: new Date().toISOString() }))];
-      setMatches(refreshed.filter((r) => {
-        const lns = getRecordLastNames(r);
-        return uploadedLastNames.some((ul) => lns.some((ln) => ul && ln && (ul === ln || ul.includes(ln) || ln.includes(ul))));
-      }));
+
+      // FIXED: give the server a moment to settle after the last upload
+      // before refetching the lists (fetchers also retry on failure).
+      setTimeout(() => onUploadSuccess(), 400);
+
+      // Show ONLY the files that were just uploaded (not every record that
+      // happens to share a surname).
+      setMatches(uploaded.map((r) => ({ ...r, uploaded_at: r.uploaded_at || new Date().toISOString() })));
+
       setStage("results");
       showNotif(`${uploaded.length} file${uploaded.length > 1 ? "s" : ""} uploaded!`, "success");
     }
@@ -1282,7 +1368,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                 : `${uploadedRecords.length} file${uploadedRecords.length > 1 ? "s" : ""} uploaded successfully`}
             </div>
           </div>
-          <button className="upl-close" onClick={onClose}>&#10005;</button>
+          <button className="upl-close" onClick={onClose} aria-label="Close upload dialog">&#10005;</button>
         </div>
 
         {stage === "upload" && (
@@ -1308,9 +1394,9 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                 style={{ display: "none" }}
               />
               {isUploading ? (
-                <div className="dropzone__uploading">
-                  <div className="spinner" />
+                <div className="dropzone__uploading" style={{ flexDirection: "column", width: "80%", gap: 8 }}>
                   <span className="dropzone__uploading-text">Uploading…</span>
+                  <UploadProgressBar value={overallProgress} height={12} />
                 </div>
               ) : limitReached ? (
                 <>
@@ -1343,12 +1429,14 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                     <span className="upl-queue__name" title={item.file.name}>{ensurePdfName(item.file.name)}</span>
                     <span className={`upl-queue__status upl-queue__status--${item.status}`}>
                       {item.status === "pending"   && "Pending"}
-                      {item.status === "uploading" && "Uploading…"}
+                      {item.status === "uploading" && (
+                        <UploadProgressBar value={item.progress || 0} width={140} height={8} />
+                      )}
                       {item.status === "done"      && "Done"}
                       {item.status === "error"     && `Error: ${item.error || "Unknown"}`}
                     </span>
                     {!isUploading && item.status !== "done" && (
-                      <button className="upl-queue__remove" onClick={() => removeFromQueue(item.id)} title="Remove">
+                      <button className="upl-queue__remove" onClick={() => removeFromQueue(item.id)} title="Remove" aria-label={`Remove ${ensurePdfName(item.file.name)} from queue`}>
                         &#10005;
                       </button>
                     )}
@@ -1364,7 +1452,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                 disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done")}
               >
                 {isUploading
-                  ? <><div className="spinner spinner--sm" />&nbsp;Uploading…</>
+                  ? `Uploading… ${Math.round(overallProgress)}%`
                   : `Upload ${queue.filter((q) => q.status === "pending").length} File${queue.filter((q) => q.status === "pending").length !== 1 ? "s" : ""}`}
               </button>
             </div>
@@ -1373,36 +1461,68 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
 
         {stage === "results" && (
           <div className="upl-body">
-            <div className="upl-ok">
-              <div className="upl-ok__emoji"><IconCheck /></div>
-              <div>
-                <div className="upl-ok__title">
-                  {uploadedRecords.length} file{uploadedRecords.length > 1 ? "s" : ""} uploaded successfully
+            <div
+              style={{
+                display: "flex", flexDirection: "column", gap: 10,
+                padding: "14px 16px", background: "#f0fdf4",
+                border: "1px solid #bbf7d0", borderRadius: 12,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div
+                  style={{
+                    width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+                    background: "#dcfce7", color: "#059669",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <IconCheck />
                 </div>
-                <div className="upl-ok__sub">
-                  {uploadedRecords.map((r) => getRecordDisplayName(r)).join(", ")}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#065f46" }}>Upload complete</div>
+                  <div style={{ fontSize: 12, color: "#047857" }}>
+                    {uploadedRecords.length} of {uploadedRecords.length} file{uploadedRecords.length !== 1 ? "s" : ""} added to the archive
+                  </div>
                 </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#059669" }}>100%</span>
               </div>
+              <UploadProgressBar value={100} height={6} showLabel={false} />
             </div>
             <div>
               <div className="upl-matches-hdr">
-                <span className="upl-matches-hdr__text">Matching surname records: {matches.length}</span>
+                <span className="upl-matches-hdr__text">Uploaded records: {matches.length}</span>
               </div>
               {matches.length === 0 ? (
-                <div className="upl-matches-empty">No other records share the same surname.</div>
-              ) : matches.map((r, i) => {
-                const isNew = uploadedRecords.some((u) => normalizeFileKey(u.file_name) === normalizeFileKey(r.file_name));
-                return (
-                  <div key={r.id || i} className={`upl-match-row${isNew ? " upl-match-row--new" : ""}`}>
-                    <div className="upl-match-row__left">
-                      <span className="upl-match-row__left-icon"><FileIconSm /></span>
-                      <span className="upl-match-row__name">{getRecordDisplayName(r)}</span>
-                      {isNew && <span className="upl-match-row__badge">Just Uploaded</span>}
-                    </div>
-                    <span className="upl-match-row__date">{formatDate(r.uploaded_at || new Date())}</span>
-                  </div>
-                );
-              })}
+                <div className="upl-matches-empty">No records were uploaded.</div>
+              ) : (
+                <div style={MATCH_LIST_STYLE}>
+                  {matches.map((r, i) => {
+                    const isNew = uploadedRecords.some((u) => normalizeFileKey(u.file_name) === normalizeFileKey(r.file_name));
+                    return (
+                      <div
+                        key={r.id || i}
+                        className={`upl-match-row${isNew ? " upl-match-row--new" : ""}`}
+                        style={MATCH_ROW_STYLE}
+                      >
+                        <div className="upl-match-row__left" style={MATCH_LEFT_STYLE}>
+                          <span className="upl-match-row__left-icon" style={MATCH_ICON_STYLE}><FileIconSm /></span>
+                          <span
+                            className="upl-match-row__name"
+                            style={MATCH_NAME_STYLE}
+                            title={getRecordDisplayName(r)}
+                          >
+                            {getRecordDisplayName(r)}
+                          </span>
+                          {isNew && <span className="upl-match-row__badge" style={MATCH_BADGE_STYLE}>Just Uploaded</span>}
+                        </div>
+                        <span className="upl-match-row__date" style={MATCH_DATE_STYLE}>
+                          {formatDate(r.uploaded_at || new Date())}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="upl-foot">
               <button className="btn btn-primary" onClick={onClose}>Done</button>
@@ -1483,13 +1603,21 @@ const InlinePdfViewer = ({ pdfData, pdfError, record, onPrint, loadingPdf, showN
   );
 };
 
-const MobileRecordCardArchive = ({ record, index, onView, onDelete }) => {
+// UPDATED: now has a checkbox for bulk selection (selected / onToggle props).
+const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
   const groom       = getGroomDisplayName(record);
   const bride       = getBrideDisplayName(record);
   return (
-    <div className="mobile-record-card">
+    <div className={`mobile-record-card${selected ? " mobile-record-card--selected" : ""}`}>
       <div className="mobile-record-card__top">
+        <input
+          type="checkbox"
+          className="tbl-checkbox"
+          checked={!!selected}
+          onChange={onToggle}
+          aria-label={`Select ${displayName}`}
+        />
         <span className="mobile-record-card__num">#{index + 1}</span>
         <span className="mobile-record-card__name">{displayName}</span>
       </div>
@@ -1543,6 +1671,10 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   const [archiveSearch,      setArchiveSearch]      = useState("");
   const [archiveUnlocked,    setArchiveUnlocked]    = useState(false);
 
+  // ADDED: bulk selection (Archive tab)
+  const [selectedIds,  setSelectedIds]  = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   const { isMobile, isTablet } = useViewport();
   const useCards = isMobile || isTablet;
 
@@ -1558,6 +1690,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   const recordsAbortRef  = useRef(null);
   const archivedAbortRef = useRef(null);
 
+  // FIXED: uses fetchJsonWithRetry and shows the real server error.
   const fetchRecords = useCallback(async () => {
     if (recordsAbortRef.current) recordsAbortRef.current.abort();
     const controller = new AbortController();
@@ -1565,13 +1698,11 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
 
     setLoadingRecords(true);
     try {
-      const res  = await fetch(`${API}/records`, { signal: controller.signal });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await fetchJsonWithRetry(`${API}/records`, { signal: controller.signal });
       setAllRecords(Array.isArray(data) ? data : []);
     } catch (err) {
       if (err?.name !== "AbortError") {
-        showNotif("Failed to load records.", "error");
+        showNotif(`Failed to load records. ${err?.message || ""}`.trim(), "error");
       }
     } finally {
       if (recordsAbortRef.current === controller) setLoadingRecords(false);
@@ -1585,14 +1716,12 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
 
     setLoadingRecords(true);
     try {
-      const res  = await fetch(`${API}/archived`, { signal: controller.signal });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await fetchJsonWithRetry(`${API}/archived`, { signal: controller.signal });
       const arr  = Array.isArray(data) ? data : [];
       setAllArchivedRecords(arr);
     } catch (err) {
       if (err?.name !== "AbortError") {
-        showNotif("Failed to load archived records.", "error");
+        showNotif(`Failed to load archived records. ${err?.message || ""}`.trim(), "error");
       }
     } finally {
       if (archivedAbortRef.current === controller) setLoadingRecords(false);
@@ -1807,6 +1936,70 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   const filteredArchived = archiveSearch.trim()
     ? allArchivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
     : allArchivedRecords;
+
+  // ── ADDED: Bulk selection (Archive) ──────────────────────────────────────
+  const filteredIds  = filteredArchived.map((r) => r.id);
+  const allSelected  = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const someSelected = !allSelected && filteredIds.some((id) => selectedIds.has(id));
+
+  const toggleSelect = (id) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  // Select All only affects the rows currently visible (respects the search box).
+  const toggleSelectAll = () =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) filteredIds.forEach((id) => next.delete(id));
+      else             filteredIds.forEach((id) => next.add(id));
+      return next;
+    });
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // Drop selections whose records no longer exist (after delete / refetch).
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const valid = new Set(allArchivedRecords.map((r) => r.id));
+      const next  = new Set([...prev].filter((id) => valid.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [allArchivedRecords]);
+
+  const handleBulkDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setConfirmModal({
+      title: "Permanently Delete Selected",
+      message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
+      confirmLabel: `Delete ${ids.length}`,
+      confirmColor: "#dc2626",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setBulkDeleting(true);
+        const results = await Promise.allSettled(
+          ids.map(async (id) => {
+            const res = await fetch(`${API}/records/${id}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Delete failed");
+            return id;
+          }),
+        );
+        const failed  = results.filter((r) => r.status === "rejected").length;
+        const deleted = ids.length - failed;
+
+        if (deleted > 0) showNotif(`${deleted} record${deleted !== 1 ? "s" : ""} deleted.`, "success");
+        if (failed  > 0) showNotif(`${failed} record${failed !== 1 ? "s" : ""} could not be deleted.`, "error");
+
+        clearSelection();
+        await fetchArchived();
+        setBulkDeleting(false);
+      },
+    });
+  };
 
   /* ── Render ────────────────────────────────────────────────────────────── */
   return (
@@ -2164,6 +2357,27 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
                 </div>
               </div>
               <div className="tab-card">
+                {/* ADDED: bulk action bar — only visible when something is selected */}
+                {selectedIds.size > 0 && (
+                  <div className="bulk-bar">
+                    <span className="bulk-bar__count">{selectedIds.size} selected</span>
+                    <div className="bulk-bar__acts">
+                      <button className="bulk-bar__clear" onClick={clearSelection} disabled={bulkDeleting}>
+                        Clear
+                      </button>
+                      <button
+                        className="tbl-btn tbl-btn--red bulk-bar__delete"
+                        onClick={handleBulkDelete}
+                        disabled={bulkDeleting}
+                      >
+                        {bulkDeleting
+                          ? <><div className="spinner spinner--sm spinner--white" />&nbsp;Deleting…</>
+                          : `Delete Selected (${selectedIds.size})`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {loadingRecords ? (
                   <div className="tbl-loading">
                     <div className="spinner" />
@@ -2180,22 +2394,47 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
                     </div>
                   </div>
                 ) : useCards ? (
-                  <div className="mobile-records-list">
-                    {filteredArchived.map((r, i) => (
-                      <MobileRecordCardArchive
-                        key={r.id}
-                        record={r}
-                        index={i}
-                        onView={() => handleViewPdf(r.id, r)}
-                        onDelete={() => handleDelete(r.id, r)}
+                  <>
+                    <label className="select-all-mobile">
+                      <input
+                        type="checkbox"
+                        className="tbl-checkbox"
+                        checked={allSelected}
+                        ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                        onChange={toggleSelectAll}
                       />
-                    ))}
-                  </div>
+                      <span>Select all ({filteredArchived.length})</span>
+                    </label>
+                    <div className="mobile-records-list">
+                      {filteredArchived.map((r, i) => (
+                        <MobileRecordCardArchive
+                          key={r.id}
+                          record={r}
+                          index={i}
+                          selected={selectedIds.has(r.id)}
+                          onToggle={() => toggleSelect(r.id)}
+                          onView={() => handleViewPdf(r.id, r)}
+                          onDelete={() => handleDelete(r.id, r)}
+                        />
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   <div className="tbl-wrap">
                     <table className="tbl">
                       <thead>
                         <tr>
+                          <th className="tbl-check-col">
+                            <input
+                              type="checkbox"
+                              className="tbl-checkbox"
+                              checked={allSelected}
+                              ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                              onChange={toggleSelectAll}
+                              title={allSelected ? "Unselect all" : "Select all"}
+                              aria-label="Select all records"
+                            />
+                          </th>
                           <th>#</th>
                           <th>Name</th>
                           <th>Groom / Bride</th>
@@ -2204,25 +2443,37 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredArchived.map((r, i) => (
-                          <tr key={r.id}>
-                            <td className="tbl-num">{i + 1}</td>
-                            <td>
-                              <div className="tbl-file">
-                                <span className="tbl-file__icon"><IconDocument /></span>
-                                <span className="tbl-file-name">{getRecordDisplayName(r)}</span>
-                              </div>
-                            </td>
-                            <td><RelativesChips record={r} /></td>
-                            <td className="tbl-date">{formatDate(r.archived_at)}</td>
-                            <td>
-                              <div className="tbl-acts">
-                                <button className="tbl-btn tbl-btn--blue" onClick={() => handleViewPdf(r.id, r)}>View</button>
-                                <button className="tbl-btn tbl-btn--red"  onClick={() => handleDelete(r.id, r)}>Delete</button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                        {filteredArchived.map((r, i) => {
+                          const checked = selectedIds.has(r.id);
+                          return (
+                            <tr key={r.id} className={checked ? "tbl-row--selected" : ""}>
+                              <td className="tbl-check-col">
+                                <input
+                                  type="checkbox"
+                                  className="tbl-checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleSelect(r.id)}
+                                  aria-label={`Select ${getRecordDisplayName(r)}`}
+                                />
+                              </td>
+                              <td className="tbl-num">{i + 1}</td>
+                              <td>
+                                <div className="tbl-file">
+                                  <span className="tbl-file__icon"><IconDocument /></span>
+                                  <span className="tbl-file-name">{getRecordDisplayName(r)}</span>
+                                </div>
+                              </td>
+                              <td><RelativesChips record={r} /></td>
+                              <td className="tbl-date">{formatDate(r.archived_at)}</td>
+                              <td>
+                                <div className="tbl-acts">
+                                  <button className="tbl-btn tbl-btn--blue" onClick={() => handleViewPdf(r.id, r)}>View</button>
+                                  <button className="tbl-btn tbl-btn--red"  onClick={() => handleDelete(r.id, r)}>Delete</button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
