@@ -34,8 +34,7 @@ const ACTION_CONFIG = {
   NAVIGATE:       { label: "Navigated",       tone: "neutral" },
 };
 
-// Actions that aren't in ACTION_CONFIG (e.g. LOGOUT_BEACON) used to show up
-// as raw SNAKE_CASE. Turn them into a readable label instead.
+// Actions that aren't in ACTION_CONFIG are normalized into readable labels.
 const humanizeAction = (action) => {
   const text = (action || "Unknown")
     .toString()
@@ -134,7 +133,7 @@ const AnimatedCount = ({ value }) => {
   useEffect(() => {
     const start = prevRef.current;
     const end = value;
-    if (start === end) { setDisplay(end); return; }
+    if (start === end) return;
     const duration = 700;
     const startTime = performance.now();
     const tick = (now) => {
