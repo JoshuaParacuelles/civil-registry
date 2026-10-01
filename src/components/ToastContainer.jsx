@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useLayoutEffect, useRef } from "react";
 import ReactDOM from "react-dom";
 import useToasts from "../hooks/useToasts";
-import { removeToast } from "../services/toastService";
+import { hideToast } from "../services/toastService";
+import StatusToast from "./StatusToast";
 import "./ToastContainer.css";
 
 const TOAST_WRAP_STYLE = {
@@ -13,22 +14,13 @@ const TOAST_WRAP_STYLE = {
   zIndex: 999999,
 };
 
-function Toast({ id, title, message, duration = 5000, success = true }) {
-  const [hiding, setHiding] = useState(false);
-
-  const dismiss = () => {
-    setHiding(true);
-    setTimeout(() => removeToast(id), 300);
-  };
-
-  useEffect(() => {
-    const timer = setTimeout(dismiss, duration);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [duration]);
-
+function Toast({ id, title, message, duration, createdAt, hiding, success = true }) {
+  const progressRef = useRef(null);
+  useLayoutEffect(() => {
+    const elapsed = Math.min(Date.now() - createdAt, duration);
+    progressRef.current?.style.setProperty("animation-delay", `-${elapsed}ms`);
+  }, [createdAt, duration]);
   const iconColor = success ? "#16a34a" : "#dc2626";
-  const barColor  = success ? "#16a34a" : "#dc2626";
 
   return (
     <div className={`toast${hiding ? " hiding" : ""}`}>
@@ -50,11 +42,12 @@ function Toast({ id, title, message, duration = 5000, success = true }) {
         <div className="toast-title">{title}</div>
         <div className="toast-msg">{message}</div>
       </div>
-      <button className="toast-close" onClick={dismiss}>×</button>
+      <button type="button" className="toast-close" onClick={() => hideToast(id)} aria-label="Dismiss">×</button>
       <div className="toast-progress">
         <div
+          ref={progressRef}
           className="toast-progress-bar"
-          style={{ animationDuration: `${duration}ms`, background: barColor }}
+          style={{ animationDuration: `${duration}ms`, background: iconColor }}
         />
       </div>
     </div>
@@ -66,7 +59,9 @@ export default function ToastContainer() {
   return ReactDOM.createPortal(
     <div className="toast-wrap" style={TOAST_WRAP_STYLE}>
       {toasts.map((t) => (
-        <Toast key={t.id} {...t} />
+        t.presentation === "status"
+          ? <StatusToast key={t.id} {...t} onDismiss={hideToast} />
+          : <Toast key={t.id} {...t} />
       ))}
     </div>,
     document.body

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./Login.css";
 
-import ToastContainer from "../../components/ToastContainer";
 import { pushToast } from "../../services/toastService";
 
 import bgImage from "../../assets/images/home.jpg";
@@ -162,7 +161,6 @@ const Login = () => {
     <div className="login-page">
       <div className="login-topbar" />
 
-      <ToastContainer />
 
       <div className="login-body">
         <div className="login-bg" style={{ backgroundImage: `url(${bgImage})` }} />

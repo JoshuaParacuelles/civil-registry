@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { usePermissions } from "../../context/PermissionContext";
-import RmToastContainer from "../../components/ToastContainer";
 import { pushToast } from "../../services/toastService";
 import "./RoleManagement.css";
 
@@ -338,7 +337,6 @@ export default function Rolemanagement() {
   if (!is_admin) {
     return (
       <div className="rm-wrap">
-        <RmToastContainer />
         <div className="rm-access-denied">
           <span className="rm-access-denied__icon">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -534,7 +532,6 @@ export default function Rolemanagement() {
   return (
     <div className="rm-wrap">
 
-      <RmToastContainer />
 
       {/* Credential category selector — lets the admin switch between
           managing Vital Record Management credentials and Document

@@ -3,7 +3,6 @@ import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
 import lcrLogo from "../../../assets/images/lcr.jpg";
-import ToastContainer from "../../../components/ToastContainer";
 import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
@@ -1862,7 +1861,6 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   /* ── Render ────────────────────────────────────────────────────────────── */
   return (
     <div className="ubr-root">
-      <ToastContainer />
 
       {confirmModal && <ConfirmModal {...confirmModal} onCancel={() => setConfirmModal(null)} />}
 

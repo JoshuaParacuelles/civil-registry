@@ -9,6 +9,7 @@ import Login from "./pages/Auth/Login";
 import AccessDenied from "./pages/AccountSettings/AccessDenied";
 import HomePreloader from "./routes/HomePreloader";
 import LoadingScreen from "./routes/LoadingScreen";
+import ToastContainer from "./components/ToastContainer";
 
 // Home is the shell for every dashboard page (charts, maps, tables). Loading it
 // lazily keeps all of that out of the initial bundle the login page downloads.
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     {/* Router wraps PermissionProvider so Navigate works inside ProtectedRoute */}
     <Router>
+      <ToastContainer />
       <PermissionProvider>
         <Routes>
           {/* Public routes */}

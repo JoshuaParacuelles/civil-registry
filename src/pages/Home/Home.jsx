@@ -18,11 +18,11 @@ import { usePermissions } from "../../context/PermissionContext";
 
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/Topbar";
-import StatusToast from "../../components/StatusToast";
 import LogoutModal from "../../components/LogoutModal";
 import NotificationBell from "../../components/NotificationBell";
 import NotificationDetailModal from "../../components/NotificationDetailModal";
 import useNotifications from "../../hooks/useNotifications";
+import { pushToast } from "../../services/toastService";
 
 import logoImg from "../../assets/icons/sidebar/scc.png";
 import dashboardIcon from "../../assets/icons/sidebar/dashboard.png";
@@ -281,16 +281,8 @@ const Home = () => {
   const [requestDetail, setRequestDetail] = useState(null); // { notifId, data }
   const activeNotifIdRef = useRef(null);
 
-  const [statusToasts, setStatusToasts] = useState([]);
-  const statusToastIdRef = useRef(0);
-
   const showStatusToast = useCallback((title, message, type = "success") => {
-    const id = `${Date.now()}-${++statusToastIdRef.current}`;
-    setStatusToasts((prev) => [...prev, { id, title, message, type }]);
-  }, []);
-
-  const dismissStatusToast = useCallback((id) => {
-    setStatusToasts((prev) => prev.filter((t) => t.id !== id));
+    pushToast({ title, message, type, presentation: "status", duration: 5000 });
   }, []);
 
   const visibleVitalChildren = useMemo(
@@ -643,12 +635,6 @@ const Home = () => {
 
   return (
     <div className={containerClasses}>
-      <div className="notif-toast-wrap">
-        {statusToasts.map((t) => (
-          <StatusToast key={t.id} {...t} onDismiss={dismissStatusToast} />
-        ))}
-      </div>
-
       <button
         type="button"
         className={`mobile-menu-toggle${mobileMenuOpen ? " active" : ""}`}

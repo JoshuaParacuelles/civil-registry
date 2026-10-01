@@ -1,7 +1,6 @@
 import { useState, useMemo, memo, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { usePermissions } from "../../context/PermissionContext";
 import { supabase } from "../../services/supabaseClient";
-import ToastContainer from "../../components/ToastContainer";
 import { pushToast } from "../../services/toastService";
 import "./DocumentTracking.css";
 
@@ -610,7 +609,6 @@ export default function DocumentTracking() {
 
   return (
    <div className="dt-root">
-      <ToastContainer />
       <div className="dt-page">
         <div className="dt-tabs" role="tablist" aria-label="Filter documents by status">
           {FILTERS.map((f) => (

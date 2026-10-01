@@ -1,7 +1,5 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useLayoutEffect, useRef } from "react";
 import "./StatusToast.css";
-
-const STATUS_TOAST_DURATION = 5000;
 
 const CloseIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -37,18 +35,12 @@ const StatusToastIcon = ({ type }) => {
   return <ToastSuccessIcon />;
 };
 
-const StatusToast = ({ id, title, message, type = "success", onDismiss }) => {
-  const [hiding, setHiding] = useState(false);
-
-  const dismiss = useCallback(() => {
-    setHiding(true);
-    setTimeout(() => onDismiss(id), 280);
-  }, [id, onDismiss]);
-
-  useEffect(() => {
-    const timer = setTimeout(dismiss, STATUS_TOAST_DURATION);
-    return () => clearTimeout(timer);
-  }, [dismiss]);
+const StatusToast = ({ id, title, message, type = "success", duration = 5000, createdAt, hiding, onDismiss }) => {
+  const progressRef = useRef(null);
+  useLayoutEffect(() => {
+    const elapsed = Math.min(Date.now() - createdAt, duration);
+    progressRef.current?.style.setProperty("animation-delay", `-${elapsed}ms`);
+  }, [createdAt, duration]);
 
   return (
     <div className={`notif-toast notif-toast--${type}${hiding ? " notif-toast--hiding" : ""}`}>
@@ -59,11 +51,11 @@ const StatusToast = ({ id, title, message, type = "success", onDismiss }) => {
         <div className="notif-toast__title">{title}</div>
         {message && <div className="notif-toast__msg">{message}</div>}
       </div>
-      <button type="button" className="notif-toast__close" onClick={dismiss} aria-label="Dismiss">
+      <button type="button" className="notif-toast__close" onClick={() => onDismiss(id)} aria-label="Dismiss">
         <CloseIcon />
       </button>
       <div className="notif-toast__progress">
-        <div className="notif-toast__progress-bar" style={{ animationDuration: `${STATUS_TOAST_DURATION}ms` }} />
+        <div ref={progressRef} className="notif-toast__progress-bar" style={{ animationDuration: `${duration}ms` }} />
       </div>
     </div>
   );

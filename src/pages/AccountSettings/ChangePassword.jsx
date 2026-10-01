@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { usePermissions } from "../../context/PermissionContext";
-import ToastContainer from "../../components/ToastContainer";
 import { pushToast } from "../../services/toastService";
 import "./ChangePassword.css";
 
@@ -442,7 +441,6 @@ const ChangePassword = () => {
 
   return (
     <div className="cp-root">
-      <ToastContainer />
 
       <div className="cp-body">
         <div className="cp-tab-strip">
