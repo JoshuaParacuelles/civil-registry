@@ -106,8 +106,6 @@ function mapDocumentSummary(row) {
     status: row.status ?? "In review",
     updated: formatDate(row.updated_at ?? row.updated),
     rejected: row.status === "Rejected",
-    deletedHandlerId: row.deleted_handler_id ?? null,
-    deletedHandlerName: row.deleted_handler_name ?? null,
   };
 }
 
@@ -121,7 +119,6 @@ function mapStage(stage) {
     date: formatDate(stage.completed_at ?? stage.date),
     done: Boolean(stage.done),
     flag: Boolean(stage.flag),
-    assignedHandlerId: stage.assigned_handler_id ?? null,
     assignedHandlerName: stage.assigned_handler_name ?? null,
     registryNumber: stage.registry_number ?? null,
     releaseDestination: stage.release_destination ?? null,
@@ -139,7 +136,6 @@ function mapStage(stage) {
 function mapDocumentDetail(doc) {
   return {
     ...mapDocumentSummary(doc),
-    handlerId: doc.assigned_handler_id ?? doc.handler_id ?? null,
     registryNumber: doc.registry_number ?? null,
     releaseDestination: doc.release_destination ?? null,
     stages: (doc.stages || []).map(mapStage),
@@ -240,7 +236,6 @@ export default function DocumentTracking() {
   const [newDocBusy, setNewDocBusy] = useState(false);
   const [newDocError, setNewDocError] = useState(null);
   const newDocNumberRef = useRef(null);
-  const newDocTitleRef = useRef(null);
   const newDocTypeOtherRef = useRef(null);
 
   // "Request changes" modal
@@ -293,13 +288,9 @@ export default function DocumentTracking() {
     }
   }, []);
 
-  // SELECTION FIX: the old version discarded a response whenever
-  // `id !== selectedIdRef.current`. That check could silently drop the
-  // response for the auto-selected first document, leaving the right panel
-  // on "Select a document…" with no loading state and no error. The
-  // request-id ticket alone already prevents stale overwrites, and the
-  // render below additionally refuses to show a detail whose id doesn't
-  // match the current selection.
+  // The request-id ticket prevents stale overwrites, and the render below
+  // additionally refuses to show a detail whose id doesn't match the
+  // current selection.
   const loadDetail = useCallback(async (id, opts) => {
     const requestId = ++detailRequestIdRef.current;
     if (id == null) {
@@ -428,7 +419,7 @@ export default function DocumentTracking() {
   const visibleDocuments = filtered.slice(0, visibleCount);
 
   // Wraps a mutating call: run it, refresh detail + list in place, surface errors.
-    const runAction = useCallback(async (fn, successMsg) => {
+  const runAction = useCallback(async (fn, successMsg) => {
     setBusy(true);
     setActionError(null);
     try {
@@ -450,7 +441,7 @@ export default function DocumentTracking() {
     }
   }, [loadDetail, loadList, flashSaved]);
 
-   const advanceStage = (stageOrder) =>
+  const advanceStage = (stageOrder) =>
     runAction(
       () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/complete`, { method: "POST" }),
       "Step marked complete."
@@ -474,26 +465,26 @@ export default function DocumentTracking() {
       });
       await Promise.all([loadDetail(selectedId, { silent: true }), loadList({ silent: true })]);
       flashSaved();
-      notify("Changes requested.", "success");   // ADD
+      notify("Changes requested.", "success");
       setFlagStageOrder(null);
       setFlagNote("");
     } catch (e) {
       console.error("[DocumentTracking] Request changes failed:", e);
       setFlagError(e.message || "Could not submit this request.");
-      notify(e.message || "Could not submit this request.", "error");   // ADD
+      notify(e.message || "Could not submit this request.", "error");
     } finally {
       setFlagBusy(false);
       setBusy(false);
     }
   };
 
-    const rejectDoc = () =>
+  const rejectDoc = () =>
     runAction(
       () => apiFetch(`/api/documents/${selectedId}/reject`, { method: "POST" }),
       "Document rejected."
     );
 
-    const addComment = useCallback((stageOrder, text) => {
+  const addComment = useCallback((stageOrder, text) => {
     if (!text.trim()) return;
     return runAction(
       () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/comments`, {
@@ -512,7 +503,6 @@ export default function DocumentTracking() {
       }),
       "Registry number saved."
     );
-
 
   const saveReleaseDestination = (stageOrder, value) =>
     runAction(
@@ -566,12 +556,12 @@ export default function DocumentTracking() {
         await loadList();
         if (created?.id != null) setSelectedId(created.id);
         flashSaved();
-        notify("Document created.", "success");   // ADD
+        notify("Document created.", "success");
       })
       .catch((e) => {
         console.error("[DocumentTracking] Failed to create document:", e);
         setNewDocError(e.message || "Could not create this document.");
-        notify(e.message || "Could not create this document.", "error");   // ADD
+        notify(e.message || "Could not create this document.", "error");
       })
       .finally(() => setNewDocBusy(false));
   };
@@ -588,11 +578,11 @@ export default function DocumentTracking() {
       setDetail(null);
       await loadList();
       flashSaved();
-      notify("Document deleted.", "success");   // ADD
+      notify("Document deleted.", "success");
     } catch (e) {
       console.error("[DocumentTracking] Failed to delete document:", e);
       setActionError(e.message || "Could not delete this document.");
-      notify(e.message || "Could not delete this document.", "error");   // ADD
+      notify(e.message || "Could not delete this document.", "error");
     } finally {
       setBusy(false);
     }
@@ -608,7 +598,7 @@ export default function DocumentTracking() {
   const activeIndex = selected ? getActiveIndex(selected.stages) : -1;
 
   return (
-   <div className="dt-root">
+    <div className="dt-root">
       <div className="dt-page">
         <div className="dt-tabs" role="tablist" aria-label="Filter documents by status">
           {FILTERS.map((f) => (
@@ -1193,7 +1183,6 @@ export default function DocumentTracking() {
                 Title
               </label>
               <input
-                ref={newDocTitleRef}
                 id="dt-new-doc-title"
                 name="new-document-title"
                 type="text"

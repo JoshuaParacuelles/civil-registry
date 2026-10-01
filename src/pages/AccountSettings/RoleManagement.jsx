@@ -418,18 +418,10 @@ export default function Rolemanagement() {
     if (!deleteTarget) return;
     setSaving(true);
     try {
-      // ─── CREDENTIAL CATEGORY SEPARATION (NEW) ──────────────────────────
-      // A username can now hold an independent role in both the Vital
-      // Record Management and Document Tracking categories at once, so
-      // deleting by username alone would risk removing the wrong
-      // assignment (or, on the backend's old behavior, every assignment
-      // that username has). Passing BOTH role_id and category scopes the
-      // delete to the exact row shown in this table/category, leaving any
-      // role the same username holds in the other category untouched.
       const category = resolveCategory(deleteTarget) || activeCategory;
       const params = new URLSearchParams({
-        role_id:  String(deleteTarget.role_id ?? ""),
-        category: category,
+        role_id: String(deleteTarget.role_id ?? ""),
+        category,
       });
       const res  = await fetch(`${API}/api/user-roles/${deleteTarget.username}?${params.toString()}`, {
         method: "DELETE",

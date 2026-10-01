@@ -423,8 +423,6 @@
 /* No zebra striping; hairline dividers + a quiet hover are enough. */
 .audit-tr { transition: background 0.12s; }
 
-.audit-tr-even,
-.audit-tr-odd { background: transparent; }
 
 .audit-tr:hover { background: var(--bg-surface-soft, #f8fafc); }
 

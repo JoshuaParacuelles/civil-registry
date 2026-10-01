@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { usePermissions } from "../../context/PermissionContext";
 import { pushToast } from "../../services/toastService";
 import "./ChangePassword.css";

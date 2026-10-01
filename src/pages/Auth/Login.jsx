@@ -161,7 +161,6 @@ const Login = () => {
     <div className="login-page">
       <div className="login-topbar" />
 
-
       <div className="login-body">
         <div className="login-bg" style={{ backgroundImage: `url(${bgImage})` }} />
         <div className="login-bg-overlay" />
@@ -184,9 +183,7 @@ const Login = () => {
                   {lockSecondsRemaining > 0 && (
                     <>
                       {" "}— try again in{" "}
-                      <span className="lock-countdown">
-                        {formatLockCountdown(lockSecondsRemaining)}
-                      </span>
+                      {formatLockCountdown(lockSecondsRemaining)}
                     </>
                   )}
                 </span>

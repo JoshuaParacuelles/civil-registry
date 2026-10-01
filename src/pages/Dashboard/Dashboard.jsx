@@ -22,13 +22,10 @@ const ENDPOINTS = {
 };
 
 const COLORS = {
-  birth:          "#378ADD",
-  marriage:       "#1D9E75",
-  death:          "#7F77DD",
-  verification:   "#BA7517",
-  birth_light:    "#B5D4F4",
-  marriage_light: "#9FE1CB",
-  death_light:    "#CECBF6",
+  birth:        "#378ADD",
+  marriage:     "#1D9E75",
+  death:        "#7F77DD",
+  verification: "#BA7517",
 };
 
 const MONTH_SHORT = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -189,6 +186,10 @@ const LineChartStaticLayer = memo(function LineChartStaticLayer({ chartLabels, c
   const tickVals = Array.from({ length: 5 }, (_, index) =>
     Math.round(minVal + (range / 4) * index)
   );
+
+  // Thin x-axis labels based on actual available pixel space, not a fixed
+  // "every Nth index" rule, so long labels like "Aug 2026"/"Sep 2026"
+  // never overlap.
   const charWidth = 5.6;
   const longestLabelLen = Math.max(1, ...chartLabels.map((label) => (label || "").length));
   const estimatedLabelWidth = longestLabelLen * charWidth + 10;
@@ -318,9 +319,6 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
     setHoverIdx(Math.max(0, Math.min(chartLabels.length - 1, idx)));
   }, [chartLabels.length, isSinglePoint, W, innerW, PAD.left]);
 
-  // Thin labels based on actual available pixel space, not a fixed
-  // "every Nth index" rule, so long labels like "Aug 2026"/"Sep 2026"
-  // never overlap.
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
       <svg
@@ -592,7 +590,7 @@ const GrowthBadge = ({ value }) => {
 };
 
 /* ══ METRIC CARD ═════════════════════════════════════════════════════════════ */
-const MetricCard = ({ label, value, sub, accent, growth, hero = false, period, trend, onClick }) => {
+const MetricCard = ({ label, value, sub, accent, hero = false, period, trend, onClick }) => {
   const interactive = typeof onClick === "function";
 
   const handleKeyDown = (e) => {
@@ -623,7 +621,6 @@ const MetricCard = ({ label, value, sub, accent, growth, hero = false, period, t
       <div className="an-metric-value">{value}</div>
       <div className="an-metric-footer">
         <span className="an-metric-sub">{sub}</span>
-        {growth != null && <GrowthBadge value={growth} />}
       </div>
       {period && <div className="an-metric-period">{period}</div>}
       {trend && trend.length > 1 && (
@@ -940,8 +937,8 @@ function buildGrowthKpis(growth) {
     prevMomLabel = "Need 2+ months of requests";
   }
 
-  const momDisplay         = momValue     != null ? fmtPct(momValue)     : (latestRow ? `${fmtNum(latestRow.count)} reqs` : "—");
-  const prevMomDisplay = prevMomValue != null ? fmtPct(prevMomValue) : "—";
+  const momDisplay       = momValue     != null ? fmtPct(momValue)     : (latestRow ? `${fmtNum(latestRow.count)} reqs` : "—");
+  const prevMomDisplay   = prevMomValue != null ? fmtPct(prevMomValue) : "—";
   const momDisplayAccent = momValue != null ? momAccent : (latestRow ? COLORS.birth : "#64748b");
 
   return { momDisplay, momLabel, momAccent: momDisplayAccent, prevMomDisplay, prevMomLabel };
@@ -1113,31 +1110,31 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       </div>
 
       <div className="an-kpi-secondary-row">
-  <MemoMetricCard
-    hero
-    label="Birth Records"
-    value={fmtNum(summary.total_birth_records)}
-    sub={`${summary.uploaded_today_breakdown?.birth || 0} uploaded today`}
-    accent={COLORS.birth}
-    onClick={recordLinks.birth || undefined}
-  />
-  <MemoMetricCard
-    hero
-    label="Marriage Records"
-    value={fmtNum(summary.total_marriage_records)}
-    sub={`${summary.uploaded_today_breakdown?.marriage || 0} uploaded today`}
-    accent={COLORS.marriage}
-    onClick={recordLinks.marriage || undefined}
-  />
-  <MemoMetricCard
-    hero
-    label="Death Records"
-    value={fmtNum(summary.total_death_records)}
-    sub={`${summary.uploaded_today_breakdown?.death || 0} uploaded today`}
-    accent={COLORS.death}
-    onClick={recordLinks.death || undefined}
-  />
-</div>
+        <MemoMetricCard
+          hero
+          label="Birth Records"
+          value={fmtNum(summary.total_birth_records)}
+          sub={`${summary.uploaded_today_breakdown?.birth || 0} uploaded today`}
+          accent={COLORS.birth}
+          onClick={recordLinks.birth || undefined}
+        />
+        <MemoMetricCard
+          hero
+          label="Marriage Records"
+          value={fmtNum(summary.total_marriage_records)}
+          sub={`${summary.uploaded_today_breakdown?.marriage || 0} uploaded today`}
+          accent={COLORS.marriage}
+          onClick={recordLinks.marriage || undefined}
+        />
+        <MemoMetricCard
+          hero
+          label="Death Records"
+          value={fmtNum(summary.total_death_records)}
+          sub={`${summary.uploaded_today_breakdown?.death || 0} uploaded today`}
+          accent={COLORS.death}
+          onClick={recordLinks.death || undefined}
+        />
+      </div>
 
       <div className="an-tabs" role="tablist">
         {tabs.map((t) => (
@@ -1257,14 +1254,6 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
           </Panel>
 
           {data.topMunicipalities !== undefined && munis.length > 0 && (
-            /* FIX: this row was previously forced to a hardcoded 3-column
-               inline style, which always overrides CSS and therefore
-               ignored every responsive breakpoint. That squeezed each
-               hotspot panel's BarChart rows (label / track / value) down
-               to almost nothing on narrower screens, so only the
-               truncated municipality label was visible. Using the
-               ".an-three-col" class alone lets dashboard.css's responsive
-               rules (2 columns at <=1024px, 1 column at <=768px) apply. */
             <div className="an-three-col">
               <Panel title="Hotspot analysis — Birth records" sub="Municipalities with concentrated birth registrations">
                 <MemoBarChart

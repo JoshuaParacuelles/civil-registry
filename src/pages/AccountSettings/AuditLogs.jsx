@@ -559,7 +559,7 @@ const AuditLogs = () => {
 
                   return (
                     <React.Fragment key={log.id || `${log.created_at}-${idx}`}>
-                      <tr className={`audit-tr ${idx % 2 === 0 ? "audit-tr-even" : "audit-tr-odd"}`}>
+                      <tr className="audit-tr">
                         <td className="audit-td audit-td-time">
                           <span className="audit-time">{formatTime(log.created_at)}</span>
                           <span className="audit-date">{formatDate(log.created_at)}</span>

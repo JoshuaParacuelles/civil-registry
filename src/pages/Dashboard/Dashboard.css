@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   ANALYTICS DASHBOARD — dashboard.css
+   ANALYTICS DASHBOARD — Dashboard.css
    Matched to home.css design system (an-* prefix)
    ══════════════════════════════════════════════════════════════ */
 
@@ -22,17 +22,11 @@
   --an-text-muted:     var(--text-muted,     #94a3b8);
   --an-text-dim:       var(--text-dim,       #b0bec5);
 
-  --an-shadow:         var(--shadow-sm,      0 2px 10px rgba(0,0,0,0.07));
   --an-shadow-hover:   var(--shadow-md,      0 6px 20px rgba(0,0,0,0.10));
 
-  --an-radius:         var(--radius-lg,      8px);
   --an-radius-sm:      var(--radius-sm,      6px);
 
   --an-blue:           var(--accent-blue,    #2563eb);
-  --an-green:          #1D9E75;
-  --an-purple:         #7F77DD;
-  --an-amber:          #BA7517;
-  --an-red:            #dc2626;
 }
 
 /* ─── Wrapper ────────────────────────────────────────────────── */
@@ -46,103 +40,6 @@
   color: var(--an-text);
 }
 
-/* ─── Header ─────────────────────────────────────────────────── */
-.an-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--an-border);
-  flex-wrap: wrap;
-}
-
-.an-kicker {
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.10em;
-  color: var(--an-text-muted);
-  margin-bottom: 5px;
-}
-
-.an-title {
-  margin: 0 0 5px;
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--an-text);
-  letter-spacing: -0.3px;
-  line-height: 1.2;
-}
-
-.an-subtitle {
-  margin: 0;
-  font-size: 12px;
-  color: var(--an-text-soft);
-  line-height: 1.6;
-  max-width: 640px;
-  font-weight: 500;
-}
-
-.an-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  padding-top: 4px;
-}
-
-/* ─── Live Badge ─────────────────────────────────────────────── */
-.an-live-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
-  background: rgba(22, 163, 74, 0.08);
-  border: 1px solid rgba(22, 163, 74, 0.22);
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #166534;
-}
-
-.an-live-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #16a34a;
-  animation: anPulse 2s ease-in-out infinite;
-  flex-shrink: 0;
-}
-
-@keyframes anPulse {
-  0%, 100% { opacity: 1;   transform: scale(1);    }
-  50%       { opacity: 0.5; transform: scale(0.85); }
-}
-
-/* ─── Refresh Button — matches topbar-toggle style ───────────── */
-.an-refresh-btn {
-  border: 1px solid var(--an-border-strong);
-  border-radius: var(--an-radius-sm);
-  padding: 8px 14px;
-  background: var(--an-surface);
-  color: var(--an-text-soft);
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: var(--font, "DM Sans", sans-serif);
-  transition: all 0.18s ease;
-}
-
-.an-refresh-btn:hover {
-  background: var(--an-surface-hover);
-  color: var(--an-text);
-  border-color: rgba(0, 0, 0, 0.20);
-}
-
-.an-refresh-btn:active { transform: scale(0.97); }
-
 /* ─── Error Banner ───────────────────────────────────────────── */
 .an-error-banner {
   margin-bottom: 14px;
@@ -153,6 +50,22 @@
   color: #991b1b;
   font-size: 12.5px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.an-error-retry {
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  background: #fff;
+  color: #991b1b;
+  border-radius: var(--an-radius-sm);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 /* ─── KPI Grid ───────────────────────────────────────────────── */
@@ -182,15 +95,14 @@
 .an-metric-card--clickable {
   cursor: pointer;
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;  /* no tap flash on mobile */
+  -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Hover effect only on devices with a real mouse/trackpad.
-   On touch screens this never applies, so no "stuck" hover after a tap. */
+/* Hover effect only on devices with a real mouse/trackpad. */
 @media (hover: hover) and (pointer: fine) {
   .an-metric-card--clickable:hover {
     border-color: var(--an-border-strong);
@@ -198,7 +110,7 @@
   }
 }
 
-/* Touch devices: no visible feedback at all when tapping */
+/* Touch devices: no visible feedback when tapping */
 @media (hover: none), (pointer: coarse) {
   .an-metric-card--clickable:hover,
   .an-metric-card--clickable:active,
@@ -210,16 +122,13 @@
   }
 }
 
-/* Keyboard users still get a focus ring (Tab key only, not mouse or touch) */
+/* Keyboard users still get a focus ring */
 .an-metric-card--clickable:focus-visible {
   outline: 2px solid var(--an-blue);
   outline-offset: 2px;
 }
 
-/* ─── Hero / secondary KPI hierarchy ──────────────────────────
-   One prominent primary metric (hero) with smaller, equal-weight
-   secondary metrics beneath it, instead of a row of identical
-   cards — see .an-kpi-hero-row / .an-kpi-secondary-row below. */
+/* ─── Hero / secondary KPI hierarchy ─────────────────────────── */
 .an-metric-card--hero {
   padding: 22px 24px;
 }
@@ -377,23 +286,15 @@
   gap: 12px;
 }
 
-/* ─── Two Column Layout ──────────────────────────────────────── */
+/* ─── Two / Three Column Layouts ─────────────────────────────── */
 .an-two-col {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
 }
 
-/* ─── Three Column Layout ─────────────────────────────────────
-   FIX: this was previously applied as an inline `style` prop in the
-   component (gridTemplateColumns: repeat(3, minmax(0, 1fr))), which
-   always overrides CSS — including the responsive rules below — so
-   on narrow/mobile widths the 3 hotspot-analysis panels stayed
-   locked at 3 equal columns. That squeezed each BarChart row's
-   "80px 1fr 48px" grid down so far that only the truncated label
-   ("San Carlos …") was visible, with the bar track and value
-   clipped out of view. Moving this into a real CSS class lets the
-   breakpoints below take effect. ───────────────────────────────── */
+/* Must stay a CSS class (not an inline style) so the responsive
+   breakpoints below can collapse it on narrow screens. */
 .an-three-col {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -460,6 +361,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  margin-top: 0.75rem;
 }
 
 /* ─── Empty ──────────────────────────────────────────────────── */
@@ -569,9 +471,10 @@
   gap: 9px;
 }
 
+/* Flexible label + auto-width value so big numbers never clip */
 .an-bar-row {
   display: grid;
-  grid-template-columns: 80px 1fr 48px;
+  grid-template-columns: minmax(64px, 30%) minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
 }
@@ -599,6 +502,7 @@
 }
 
 .an-bar-val {
+  min-width: 36px;
   font-size: 12px;
   font-weight: 800;
   color: var(--an-text);
@@ -616,7 +520,7 @@
 
 .an-stacked-row {
   display: grid;
-  grid-template-columns: 110px 1fr 56px;
+  grid-template-columns: minmax(70px, 28%) minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
 }
@@ -708,10 +612,15 @@
 }
 
 /* ─── Heatmap ────────────────────────────────────────────────── */
+/* Keep readable cells, scroll sideways instead of squishing */
 .an-heatmap {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
 }
 
 .an-heatmap-row {
@@ -719,6 +628,7 @@
   grid-template-columns: 60px repeat(12, 1fr);
   gap: 4px;
   align-items: center;
+  min-width: 560px;
 }
 
 .an-heatmap-header { margin-bottom: 2px; }
@@ -976,28 +886,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ─── Footer ─────────────────────────────────────────────────── */
-.an-footer {
-  margin-top: 28px;
-  padding-top: 14px;
-  border-top: 1px solid var(--an-border);
-  font-size: 11.5px;
-  color: var(--an-text-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font-weight: 500;
-}
-
-.an-footer code {
-  font-family: var(--font-mono, "DM Mono", monospace);
-  font-size: 10.5px;
-  background: rgba(0, 0, 0, 0.06);
-  padding: 2px 6px;
-  border-radius: var(--an-radius-sm);
-  color: var(--an-text-soft);
-}
+/* ─── Responsive hardening ───────────────────────────────────── */
+.an-metric-card,
+.an-panel,
+.an-today-block { min-width: 0; }
 
 /* ══════════════════════════════════════════════════════════════
    RESPONSIVE
@@ -1016,10 +908,7 @@
   .an-wrapper  { padding: 14px 14px 32px; }
   .an-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-  /* FIX: tabs were squeezed to equal widths (flex: 1) on narrow screens,
-     which clipped/overlapped labels like "Geographic" and "Growth Rate".
-     Let each tab size to its own content and scroll horizontally instead
-     (.an-tabs already has overflow-x: auto) so labels never collide. */
+  /* Tabs size to their content and scroll horizontally so labels never collide. */
   .an-tabs { gap: 2px; padding: 4px; justify-content: flex-start; }
   .an-tab  {
     padding: 8px 12px;
@@ -1028,82 +917,12 @@
     width: auto;
   }
 
-  /* FIX: the 3 "Hotspot analysis" panels were being forced into 3 equal
-     columns at all widths (see .an-three-col comment above), leaving no
-     room for the bar-chart rows inside each panel. Collapse to a single
-     column on mobile so each hotspot panel gets full width and its
-     BarChart rows (label / track / value) render properly. */
+  /* Hotspot panels get full width so their bar rows render properly. */
   .an-three-col { grid-template-columns: 1fr; }
 
   .an-today-grid    { grid-template-columns: 1fr; }
   .an-heatmap-row   { grid-template-columns: 50px repeat(12, 1fr); }
 }
-
-@media (max-width: 480px) {
-  .an-kpi-grid          { grid-template-columns: 1fr; }
-  .an-kpi-secondary-row { grid-template-columns: 1fr; }
-  .an-header      { flex-direction: column; }
-  .an-metric-value { font-size: 22px; }
-  .an-metric-card--hero .an-metric-value { font-size: 34px; }
-
-  /* FIX: same overlap issue at the smallest breakpoint — keep tabs at
-     their natural width instead of forcing them into an equal-width
-     flex row, which is what caused "Geographic" and "Growth Rate" to
-     collide visually. */
-  .an-tabs { gap: 2px; padding: 4px; justify-content: flex-start; }
-  .an-tab  {
-    padding: 7px 10px;
-    font-size: 11px;
-    flex: 0 0 auto;
-    width: auto;
-  }
-}
-
-/* ─── Responsive hardening ───────────────────────────────────── */
-.an-metric-card,
-.an-panel,
-.an-today-block { min-width: 0; }
-
-/* Bar rows: flexible label + auto-width value so big numbers never clip */
-.an-bar-row {
-  grid-template-columns: minmax(64px, 30%) minmax(0, 1fr) auto;
-}
-.an-bar-val { min-width: 36px; }
-
-.an-stacked-row {
-  grid-template-columns: minmax(70px, 28%) minmax(0, 1fr) auto;
-}
-
-/* Heatmap: keep readable cells, scroll sideways instead of squishing */
-.an-heatmap {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px;
-  scrollbar-width: thin;
-}
-.an-heatmap-row { min-width: 560px; }
-
-/* Error banner */
-.an-error-banner {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-}
-.an-error-retry {
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  background: #fff;
-  color: #991b1b;
-  border-radius: var(--an-radius-sm);
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-/* Loading skeleton grid (now a class instead of inline style) */
-.an-loading-grid { margin-top: 0.75rem; }
 
 @media (max-width: 640px) {
   .an-loading-grid      { grid-template-columns: 1fr; }
@@ -1130,6 +949,20 @@
   .an-muni-total { font-size: 12.5px; }
 
   .an-today-big { font-size: 24px; }
+}
+
+@media (max-width: 480px) {
+  .an-kpi-grid     { grid-template-columns: 1fr; }
+  .an-metric-value { font-size: 22px; }
+  .an-metric-card--hero .an-metric-value { font-size: 34px; }
+
+  .an-tabs { gap: 2px; padding: 4px; justify-content: flex-start; }
+  .an-tab  {
+    padding: 7px 10px;
+    font-size: 11px;
+    flex: 0 0 auto;
+    width: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -995,8 +995,6 @@ body {
   background: var(--bg-base);
 }
 
-.main-content--registry { padding: 0; }
-
 .main-content > h1 {
   font-size: 20px;
   font-weight: 800;
@@ -1643,7 +1641,6 @@ body {
     scrollbar-gutter: auto;
   }
   .main-content           { width: 100%; padding: 12px; }
-  .main-content--registry { padding: 0; }
 
   .notif-dropdown {
     right: -10px;
@@ -1661,7 +1658,6 @@ body {
   .sidebar-brand-subtitle { font-size: 10px; }
 
   .main-content           { padding: 8px; }
-  .main-content--registry { padding: 0; }
 
   .mobile-menu-toggle { top: 8px; left: 12px; }
   .topbar { padding-left: 56px; padding-right: 10px; gap: 8px; }

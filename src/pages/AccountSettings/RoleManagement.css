@@ -495,8 +495,6 @@
   gap: 16px;
 }
 
-.rm-modal__body--noscroll { overflow: hidden; }
-
 .rm-modal__foot {
   padding: 14px 20px;
   border-top: 1px solid var(--rm-border);

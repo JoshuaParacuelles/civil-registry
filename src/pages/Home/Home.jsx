@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { Suspense, lazy, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import AccessDenied from "../AccountSettings/AccessDenied";
 import LoadingScreen from "../../routes/LoadingScreen";
@@ -86,7 +86,7 @@ const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "COMPLETED"];
 const REQUEST_STATUS_LABELS = {
   PENDING:    "Pending Review",
   PROCESSING: "Being Processed",
-  COMPLETED:  "Completed", // CHANGED: was "Complete"; matches the label the citizen is emailed
+  COMPLETED:  "Completed",
   REJECTED:   "Rejected",
 };
 
@@ -168,10 +168,7 @@ const SIGNATURE_BASE64_KEYS = [
   "signature",
 ];
 
-// CHANGED: the signature is now served by the session-gated main backend
-// (GET /api/requests/<id>/signature) on the same origin, so the login
-// cookie is sent automatically. It no longer points at the public
-// request.py service (which now requires an admin key).
+// Served by the session-gated backend on the same origin, so the login cookie is sent automatically.
 const getSignatureSrc = (snap, _type, recordId) => {
   for (const key of SIGNATURE_BASE64_KEYS) {
     const val = snap?.[key];
@@ -274,7 +271,7 @@ const Home = () => {
   const [statusSaving, setStatusSaving]   = useState(false);
   const [notifyVia, setNotifyVia]         = useState("email");
 
-  // NEW: full request row fetched from the session-gated backend. Kept in
+  // Full request row fetched from the session-gated backend. Kept in
   // its own state (NOT merged into the notification / snapshot that is
   // stored in the database) so requester details are never written back
   // to the `notification` table.
@@ -379,8 +376,7 @@ const Home = () => {
 
       setRequestDetail({ notifId: notif.id, data });
 
-      // FIX: default to emailing the citizen whenever an address is on file
-      // (the snapshot never contained the email, so this used to be "none").
+      // Default to emailing the citizen whenever an address is on file.
       setNotifyVia((data.requester_email || "").trim() ? "email" : "none");
 
       const liveStatus = (data.status || "").toUpperCase();
@@ -397,18 +393,7 @@ const Home = () => {
     } catch (err) {
       console.error("[Home] Could not load request details:", err);
     }
-  }, [
-    markNotificationClicked,
-    setSigFailed,
-    setSigZoomed,
-    setSelectedNotif,
-    setNotifOpen,
-    setStatusNote,
-    setRequestDetail,
-    setStatusDraft,
-    setNotifyVia,
-    setNotifications,
-  ]);
+  }, [markNotificationClicked, setNotifOpen, setNotifications]);
 
   const closeNotifDetails = useCallback(() => {
     activeNotifIdRef.current = null;
@@ -450,9 +435,7 @@ const Home = () => {
       setStatusDraft(savedStatus);
       setStatusNote("");
 
-      // Update local state only. CHANGED: the status is no longer written
-      // from the browser into notification.request_snapshot; the live
-      // status is re-read from the backend each time a popup is opened.
+      // Update local state only; the live status is re-read from the backend each time a popup opens.
       setRequestDetail((prev) =>
         prev && prev.notifId === selectedNotif.id
           ? { ...prev, data: { ...prev.data, status: savedStatus } }
