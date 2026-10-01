@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { usePermissions } from "../../context/PermissionContext";
 import "./AccessDenied.css";
 
@@ -24,6 +26,18 @@ import "./AccessDenied.css";
  */
 export default function AccessDenied() {
   const { role } = usePermissions();
+  const location = useLocation();
+
+  useEffect(() => {
+    fetch("/api/audit/access-denied", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ route: location.pathname }),
+    }).catch((error) => {
+      console.warn("Could not record access-denied event:", error);
+    });
+  }, [location.pathname]);
 
   // Detect if we're rendered as a full-page route (not inside Home's <main>).
   // We do this by checking whether we're inside an element with class

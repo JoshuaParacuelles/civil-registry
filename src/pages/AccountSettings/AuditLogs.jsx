@@ -17,7 +17,9 @@ const API_URL = "/api";
 //   neutral  – session and navigation noise
 const ACTION_CONFIG = {
   LOGIN:          { label: "Login",           tone: "success" },
+  LOGIN_SUCCESS:  { label: "Login",           tone: "success" },
   LOGIN_FAILED:   { label: "Login Failed",    tone: "danger"  },
+  ACCOUNT_LOCKED: { label: "Account Locked",  tone: "danger"  },
   LOGIN_LOCKED:   { label: "Account Locked",  tone: "danger"  },
   LOGOUT:         { label: "Logout",          tone: "neutral" },
   VIEW:           { label: "Viewed",          tone: "info"    },
@@ -47,19 +49,6 @@ const humanizeAction = (action) => {
 
 const getActionConfig = (action) =>
   ACTION_CONFIG[action] || { label: humanizeAction(action), tone: "neutral" };
-
-export const logAction = async (action, description, meta = {}) => {
-  try {
-    await fetch(`${API_URL}/audit/log`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, description, meta }),
-    });
-  } catch (error) {
-    console.error("Audit log failed:", error);
-  }
-};
 
 const formatTime = (iso) => {
   if (!iso) return "—";
@@ -121,15 +110,6 @@ const IconDownload = () => (
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
     <polyline points="7 10 12 15 17 10" />
     <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
-);
-
-const IconTrash = () => (
-  <svg className="audit-icon" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <polyline points="3 6 5 6 21 6" />
-    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-    <path d="M10 11v6M14 11v6" />
-    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
   </svg>
 );
 
@@ -211,7 +191,6 @@ const AuditLogs = () => {
   const [search, setSearch] = useState("");
   const [filterAction, setFilterAction] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
 
   const sentinelRef = useRef(null);
@@ -355,25 +334,6 @@ const AuditLogs = () => {
     return filtered.slice(start, start + ROWS_PER_PAGE);
   }, [filtered, currentPage]);
 
-  const handleClear = async () => {
-    try {
-      const response = await fetch(`${API_URL}/audit/clear`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      setLogs([]);
-      setOffset(0);
-      setHasMore(false);
-      setCurrentPage(1);
-      setExpandedId(null);
-    } catch (err) {
-      console.error("Clear failed:", err);
-    } finally {
-      setShowClearConfirm(false);
-    }
-  };
-
   const exportCSV = () => {
     const headers = ["Timestamp", "User", "IP", "Action", "Description"];
     const rows = logs.map((log) => [
@@ -430,10 +390,6 @@ const AuditLogs = () => {
           </button>
           <button className="audit-btn-export" onClick={exportCSV}>
             <IconDownload /> Print Auditlogs
-          </button>
-          <span className="audit-header-divider" aria-hidden="true" />
-          <button className="audit-btn-clear" onClick={() => setShowClearConfirm(true)}>
-            <IconTrash /> Clear Logs
           </button>
         </div>
       </div>
@@ -670,21 +626,6 @@ const AuditLogs = () => {
         </div>
       )}
 
-      {/* ── Clear Confirm Modal ── */}
-      {showClearConfirm && (
-        <div className="audit-modal-overlay" onClick={() => setShowClearConfirm(false)}>
-          <div className="audit-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="audit-modal-title">Clear Audit Logs?</h3>
-            <p className="audit-modal-text">
-              This will permanently remove all audit history records. This action cannot be undone.
-            </p>
-            <div className="audit-modal-actions">
-              <button className="audit-modal-cancel" onClick={() => setShowClearConfirm(false)}>Cancel</button>
-              <button className="audit-modal-confirm" onClick={handleClear}>Yes, Clear</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
