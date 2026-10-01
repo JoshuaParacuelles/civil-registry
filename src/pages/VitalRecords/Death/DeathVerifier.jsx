@@ -155,16 +155,6 @@ function ensurePdfName(name) {
   return /\.pdf$/i.test(name) ? name : `${name}.pdf`;
 }
 
-function formatParentDisplayName(first, middle, last, fullName = "") {
-  const f = cleanNamePart(first);
-  const m = cleanNamePart(middle);
-  const l = cleanNamePart(last);
-  const fromParts = formatFullName(f, m, l);
-  if (fromParts) return fromParts;
-  if (fullName) return toTitleCase(fullName);
-  return "";
-}
-
 function getRecordDisplayName(record) {
   if (!record) return "";
   const first  = cleanNamePart(record.deceased_first_name);

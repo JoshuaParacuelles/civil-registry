@@ -28,6 +28,13 @@ const COLORS = {
   verification: "#BA7517",
 };
 
+const TYPE_COLORS = {
+  Birth: COLORS.birth,
+  Marriage: COLORS.marriage,
+  Death: COLORS.death,
+  Verification: COLORS.verification,
+};
+
 const MONTH_SHORT = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 /* ══ HELPERS ═════════════════════════════════════════════════════════════════ */
@@ -781,7 +788,7 @@ const MonthHeatmap = ({ byMonth = [], reqByMonth = [] }) => {
       {months.map((m, i) => {
         const monthNum = i + 1;
         const val = map[monthNum] || 0;
-        if (maxVal === 0 || !Object.values(map).some((v) => v > 0)) {
+        if (!Object.values(map).some((v) => v > 0)) {
           return (
             <div key={m} className="an-heatmap-cell" title={`${m}: no data`}>
               <span style={{ color: "var(--an-text-dim, #b0bec5)", fontSize: "9px" }}>—</span>
@@ -822,12 +829,6 @@ const MonthHeatmap = ({ byMonth = [], reqByMonth = [] }) => {
 const TodayPanel = ({ today = {} }) => {
   const breakdown = safeArr(today.requests_breakdown);
   const payments  = safeArr(today.payments_breakdown);
-  const colorMap  = {
-    Birth:        COLORS.birth,
-    Marriage:     COLORS.marriage,
-    Death:        COLORS.death,
-    Verification: COLORS.verification,
-  };
 
   return (
     <div className="an-today-grid">
@@ -840,9 +841,9 @@ const TodayPanel = ({ today = {} }) => {
               key={r.label}
               className="an-today-pill"
               style={{
-                background:  `${colorMap[r.label] || "#64748b"}22`,
-                color:        colorMap[r.label] || "#64748b",
-                borderColor: `${colorMap[r.label] || "#64748b"}44`,
+                background:  `${TYPE_COLORS[r.label] || "#64748b"}22`,
+                color:        TYPE_COLORS[r.label] || "#64748b",
+                borderColor: `${TYPE_COLORS[r.label] || "#64748b"}44`,
               }}
             >
               {r.label} {fmtNum(r.count)}
@@ -860,9 +861,9 @@ const TodayPanel = ({ today = {} }) => {
               key={r.label}
               className="an-today-pill"
               style={{
-                background:  `${colorMap[r.label] || "#64748b"}22`,
-                color:        colorMap[r.label] || "#64748b",
-                borderColor: `${colorMap[r.label] || "#64748b"}44`,
+                background:  `${TYPE_COLORS[r.label] || "#64748b"}22`,
+                color:        TYPE_COLORS[r.label] || "#64748b",
+                borderColor: `${TYPE_COLORS[r.label] || "#64748b"}44`,
               }}
             >
               {r.label} {fmtPHP(r.amount)}
@@ -1045,21 +1046,12 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
   const todayRequestRows = useMemo(() => (today.requests_breakdown || []).map((row) => ({
     label: row.label,
     count: row.count,
-    color: {
-      Birth: COLORS.birth,
-      Marriage: COLORS.marriage,
-      Death: COLORS.death,
-      Verification: COLORS.verification,
-    }[row.label] || "#64748b",
+    color: TYPE_COLORS[row.label] || "#64748b",
   })), [today.requests_breakdown]);
   const todayPaymentRows = useMemo(() => (today.payments_breakdown || []).map((row) => ({
     label: row.label,
     count: row.amount,
-    color: {
-      Birth: COLORS.birth,
-      Marriage: COLORS.marriage,
-      Death: COLORS.death,
-    }[row.label] || "#64748b",
+    color: TYPE_COLORS[row.label] || "#64748b",
   })), [today.payments_breakdown]);
 
   const tabs = [

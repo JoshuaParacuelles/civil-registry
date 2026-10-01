@@ -145,7 +145,6 @@ const LockIcon = () => (
 export default function Rolemanagement() {
   const { is_admin } = usePermissions();
 
-  const [roles,        setRoles]        = useState([]);
   const [userRoles,    setUserRoles]    = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [modal,        setModal]        = useState(null);
@@ -244,7 +243,7 @@ export default function Rolemanagement() {
       await checkJson(rolesRes);
       await checkJson(userRolesRes);
 
-      const r1 = await rolesRes.json();
+      await rolesRes.json();
       const r2 = await userRolesRes.json();
 
       // FIX: normalise every row so `permissions` is always an array. Any
@@ -257,7 +256,6 @@ export default function Rolemanagement() {
           permissions: Array.isArray(item?.permissions) ? item.permissions : [],
         }));
 
-      setRoles(normalise(r1));
       setUserRoles(normalise(r2));
       return true;
     } catch (err) {

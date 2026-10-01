@@ -240,7 +240,7 @@ const ModulePasswordForm = ({ config, showNotify }) => {
         const { title } = classifyError(res.status, result);
         showNotify(false, title, result.message || "An error occurred.");
       }
-    } catch (err) {
+    } catch {
       showNotify(false, "Connection error", navigator.onLine ? "Cannot reach the server." : "You are offline.");
     } finally {
       setLoading(false);

@@ -65,7 +65,6 @@ const NotificationDetailModal = ({
   getSignatureSrc,
   REQUEST_STATUS_OPTIONS,
   REQUEST_STATUS_LABELS,
-  selectedNotif,
 }) => {
   if (!notification) return null;
 
