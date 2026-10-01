@@ -40,11 +40,11 @@ ReactDOM.createRoot(document.getElementById("root")).render(
               </ProtectedRoute>
             }
           >
-            <Route path="dashboard" />
-            <Route path="vital-records/*" />
-            <Route path="heatmaps" />
-            <Route path="document-tracking" />
-            <Route path="settings/*" />
+            <Route path="dashboard" element={<></>} />
+            <Route path="vital-records/*" element={<></>} />
+            <Route path="heatmaps" element={<></>} />
+            <Route path="document-tracking" element={<></>} />
+            <Route path="settings/*" element={<></>} />
           </Route>
 
           {/* Catch-all */}
