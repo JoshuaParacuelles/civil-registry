@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { usePermissions } from "../../context/PermissionContext";
+import ToastContainer from "../../components/ToastContainer";
+import { pushToast } from "../../services/toastService";
 import "./ChangePassword.css";
 
 // ── ICONS ──────────────────────────────────────────────────────────────────
@@ -137,98 +139,6 @@ function classifyError(status, result) {
     return { title: "Not found", isSessionError: false };
   }
   return { title: "Update failed", isSessionError: false };
-}
-
-// ── TOAST SYSTEM ────────────────────────────────────────────────────────────
-
-let _toastSetters = [];
-
-function useToasts() {
-  const [toasts, setToasts] = useState([]);
-  useEffect(() => {
-    _toastSetters.push(setToasts);
-    return () => {
-      _toastSetters = _toastSetters.filter((s) => s !== setToasts);
-    };
-  }, []);
-  return toasts;
-}
-
-function pushToast(toast) {
-  const id = Date.now();
-  _toastSetters.forEach((set) => set((prev) => [...prev, { ...toast, id }]));
-  return id;
-}
-
-function removeToast(id) {
-  _toastSetters.forEach((set) =>
-    set((prev) => prev.filter((t) => t.id !== id))
-  );
-}
-
-function ToastContainer() {
-  const toasts = useToasts();
-  return (
-    <div className="cp-toast-wrap">
-      {toasts.map((t) => (
-        <Toast key={t.id} {...t} />
-      ))}
-    </div>
-  );
-}
-
-function Toast({ id, title, message, duration = 5000, success = true }) {
-  const [hiding, setHiding] = useState(false);
-
-  const dismiss = () => {
-    setHiding(true);
-    setTimeout(() => removeToast(id), 300);
-  };
-
-  useEffect(() => {
-    const timer = setTimeout(dismiss, duration);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const iconColor = success ? "#16a34a" : "#dc2626";
-  const barColor  = success ? "#16a34a" : "#dc2626";
-
-  return (
-    <div className={`cp-toast${hiding ? " hiding" : ""}`}>
-      <svg
-        className="cp-toast-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke={iconColor}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {success ? (
-          <>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9 12l2 2 4-4" />
-          </>
-        ) : (
-          <>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v4m0 4h.01" />
-          </>
-        )}
-      </svg>
-      <div className="cp-toast-body">
-        <div className="cp-toast-title">{title}</div>
-        <div className="cp-toast-msg">{message}</div>
-      </div>
-      <button className="cp-toast-close" onClick={dismiss}>×</button>
-      <div className="cp-toast-progress">
-        <div
-          className="cp-toast-progress-bar"
-          style={{ animationDuration: `${duration}ms`, background: barColor }}
-        />
-      </div>
-    </div>
-  );
 }
 
 // ── SUB-COMPONENTS ─────────────────────────────────────────────────────────
