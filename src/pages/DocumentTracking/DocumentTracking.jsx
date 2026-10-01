@@ -1,6 +1,8 @@
 import { useState, useMemo, memo, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { usePermissions } from "../../context/PermissionContext";
 import { supabase } from "../../services/supabaseClient";
+import ToastContainer from "../../components/ToastContainer";
+import { pushToast } from "../../services/toastService";
 import "./DocumentTracking.css";
 
 // Same-origin by default (goes through the Vite proxy in dev). Only set
@@ -17,7 +19,17 @@ const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
 
 // Text shown for a stage with nobody assigned.
 const UNSIGNED_LABEL = "Unsigned";
-
+// Shared toast helper (same shared toastService used by Login / Vital Records).
+// Plain function, not a hook, so it can be used inside useCallback without deps.
+function notify(message, type = "success") {
+  const ok = type === "success";
+  pushToast({
+    title: ok ? "Success" : "Error",
+    message,
+    success: ok,
+    duration: 4000,
+  });
+}
 const STATUS_STYLES = {
   "In review": { fg: "var(--blue-ink)", bg: "var(--blue-soft)" },
   "Approved": { fg: "var(--green-ink)", bg: "var(--green-soft)" },
@@ -417,7 +429,7 @@ export default function DocumentTracking() {
   const visibleDocuments = filtered.slice(0, visibleCount);
 
   // Wraps a mutating call: run it, refresh detail + list in place, surface errors.
-  const runAction = useCallback(async (fn) => {
+    const runAction = useCallback(async (fn, successMsg) => {
     setBusy(true);
     setActionError(null);
     try {
@@ -429,16 +441,21 @@ export default function DocumentTracking() {
         loadList({ silent: true }),
       ]);
       flashSaved();
+      if (successMsg) notify(successMsg, "success");
     } catch (e) {
       console.error("[DocumentTracking] Action failed:", e);
       setActionError(e.message || "Something went wrong.");
+      notify(e.message || "Something went wrong.", "error");
     } finally {
       setBusy(false);
     }
   }, [loadDetail, loadList, flashSaved]);
 
-  const advanceStage = (stageOrder) =>
-    runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/complete`, { method: "POST" }));
+   const advanceStage = (stageOrder) =>
+    runAction(
+      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/complete`, { method: "POST" }),
+      "Step marked complete."
+    );
 
   // Called directly (not via runAction) so a failure keeps the modal open.
   const submitFlagStage = async () => {
@@ -458,44 +475,62 @@ export default function DocumentTracking() {
       });
       await Promise.all([loadDetail(selectedId, { silent: true }), loadList({ silent: true })]);
       flashSaved();
+      notify("Changes requested.", "success");   // ADD
       setFlagStageOrder(null);
       setFlagNote("");
     } catch (e) {
       console.error("[DocumentTracking] Request changes failed:", e);
       setFlagError(e.message || "Could not submit this request.");
+      notify(e.message || "Could not submit this request.", "error");   // ADD
     } finally {
       setFlagBusy(false);
       setBusy(false);
     }
   };
 
-  const rejectDoc = () =>
-    runAction(() => apiFetch(`/api/documents/${selectedId}/reject`, { method: "POST" }));
+    const rejectDoc = () =>
+    runAction(
+      () => apiFetch(`/api/documents/${selectedId}/reject`, { method: "POST" }),
+      "Document rejected."
+    );
 
-  const addComment = useCallback((stageOrder, text) => {
+    const addComment = useCallback((stageOrder, text) => {
     if (!text.trim()) return;
-    return runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/comments`, {
-      method: "POST",
-      body: JSON.stringify({ body: text.trim() }),
-    }));
+    return runAction(
+      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body: text.trim() }),
+      }),
+      "Comment added."
+    );
   }, [selectedId, runAction]);
 
   const saveRegistryNumber = (stageOrder, value) =>
-    runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/registry-number`, {
-      method: "POST",
-      body: JSON.stringify({ registry_number: value }),
-    }));
+    runAction(
+      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/registry-number`, {
+        method: "POST",
+        body: JSON.stringify({ registry_number: value }),
+      }),
+      "Registry number saved."
+    );
+
 
   const saveReleaseDestination = (stageOrder, value) =>
-    runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/release-destination`, {
-      method: "POST",
-      body: JSON.stringify({ destination: value }),
-    }));
+    runAction(
+      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/release-destination`, {
+        method: "POST",
+        body: JSON.stringify({ destination: value }),
+      }),
+      "Release destination saved."
+    );
 
   const startPostingPeriod = (stageOrder) =>
-    runAction(() => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/posting-period`, {
-      method: "POST",
-    }));
+    runAction(
+      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/posting-period`, {
+        method: "POST",
+      }),
+      "Posting period started."
+    );
 
   const submitNewDocument = () => {
     const docNumber = newDocNumber.trim();
@@ -532,10 +567,12 @@ export default function DocumentTracking() {
         await loadList();
         if (created?.id != null) setSelectedId(created.id);
         flashSaved();
+        notify("Document created.", "success");   // ADD
       })
       .catch((e) => {
         console.error("[DocumentTracking] Failed to create document:", e);
         setNewDocError(e.message || "Could not create this document.");
+        notify(e.message || "Could not create this document.", "error");   // ADD
       })
       .finally(() => setNewDocBusy(false));
   };
@@ -552,9 +589,11 @@ export default function DocumentTracking() {
       setDetail(null);
       await loadList();
       flashSaved();
+      notify("Document deleted.", "success");   // ADD
     } catch (e) {
       console.error("[DocumentTracking] Failed to delete document:", e);
       setActionError(e.message || "Could not delete this document.");
+      notify(e.message || "Could not delete this document.", "error");   // ADD
     } finally {
       setBusy(false);
     }
@@ -570,7 +609,8 @@ export default function DocumentTracking() {
   const activeIndex = selected ? getActiveIndex(selected.stages) : -1;
 
   return (
-    <div className="dt-root">
+   <div className="dt-root">
+      <ToastContainer />
       <div className="dt-page">
         <div className="dt-tabs" role="tablist" aria-label="Filter documents by status">
           {FILTERS.map((f) => (
