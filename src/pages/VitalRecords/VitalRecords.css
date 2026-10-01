@@ -16,7 +16,6 @@
   --surf:    #ffffff;
   --surf-2:  #f0f4f8;
   --raised:  #f8fafc;
-  --hover:   #eef2f7;
 
   /* Borders */
   --border:        rgba(0, 0, 0, 0.10);
@@ -35,9 +34,6 @@
   --blue-md: rgba(37, 99, 235, 0.14);
   --blue-bd: rgba(37, 99, 235, 0.30);
 
-  /* Navy */
-  --navy: #1e3a5f;
-
   /* Green */
   --green:    #059669;
   --green-d:  #047857;
@@ -54,16 +50,6 @@
   --amber:    #d97706;
   --amber-d:  #b45309;
   --amber-lt: rgba(217, 119, 6, 0.08);
-
-  /* Purple */
-  --purple:    #7c3aed;
-  --purple-lt: rgba(124, 58, 237, 0.08);
-  --purple-bd: rgba(124, 58, 237, 0.28);
-
-  /* Pink */
-  --pink:    #db2777;
-  --pink-lt: rgba(219, 39, 119, 0.07);
-  --pink-bd: rgba(219, 39, 119, 0.25);
 
   /* Shadows */
   --shadow-sm:    0 1px 4px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0,0,0,0.04);
@@ -204,7 +190,6 @@
   flex-shrink: 0;
 }
 
-.ubr-tab-btn__icon  { font-size: 13px; }
 .ubr-tab-btn__label { line-height: 1; }
 
 .ubr-tab-btn--active {
@@ -246,9 +231,6 @@
   align-items: flex-start;
   position: relative;
 }
-
-.ubr-stepbar__rail,
-.ubr-stepbar__fill { display: none !important; }
 
 .ubr-stepbar__step {
   display: flex;
@@ -367,15 +349,6 @@
   border-radius: 0 0 var(--r) var(--r);
 }
 
-.ubr-action-bar__hint {
-  font-size: 11px;
-  color: var(--txt3);
-  margin-right: auto;
-  flex: 1;
-  min-width: 0;
-  line-height: 1.4;
-}
-
 /* Keep every button in the action bar sized to its own content and
    locked to a single row — this is what puts "Back" and "Proceed to
    Release" side by side, with "Back" only as wide as its text. */
@@ -479,19 +452,6 @@
   box-shadow: none;
 }
 
-/* .btn-success — positive/confirming action. Changed from blue to green
-   so it visually matches its semantic meaning (kept for any current or
-   future "success"-style call to action, e.g. a completed/confirm step). */
-.btn-success {
-  background: #059669 !important;
-  color: #fff !important;
-  box-shadow: 0 3px 10px rgba(5,150,105,0.30);
-  min-width: 150px;
-  justify-content: center;
-}
-.btn-success:hover:not(:disabled) { background: #047857 !important; transform: translateY(-1px); }
-.btn-success:disabled { background: rgba(5,150,105,0.30) !important; cursor: not-allowed; }
-
 .btn .spinner { flex-shrink: 0; }
 
 .tbl-btn {
@@ -511,12 +471,8 @@
   touch-action: manipulation;
 }
 .tbl-btn:hover      { filter: brightness(0.92); transform: translateY(-1px); }
-/* Table-row action buttons — color now maps to what each button does:
-   blue = view/info, purple = reserved secondary accent, amber = caution,
-   green = restore (positive), red = delete (destructive). */
+/* Table-row action buttons: blue = view, green = restore, red = delete. */
 .tbl-btn--blue      { background: #2563eb !important; }
-.tbl-btn--purple    { background: #7c3aed !important; }
-.tbl-btn--amber     { background: #d97706 !important; color: #fff !important; }
 .tbl-btn--green     { background: #059669 !important; }
 .tbl-btn--red       { background: #dc2626 !important; }
 
@@ -692,13 +648,6 @@
   letter-spacing: -0.15px;
 }
 
-.result-row__card-parent-label {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--txt);
-  letter-spacing: -0.15px;
-}
-
 .result-row__chips {
   display: flex;
   gap: 5px;
@@ -740,18 +689,6 @@
 }
 
 /* Badges */
-.exact-match-badge {
-  font-size: 9px;
-  font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 20px;
-  background: var(--green);
-  color: #fff;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
 .archived-badge {
   font-size: 9px;
   font-weight: 700;
@@ -763,22 +700,6 @@
   letter-spacing: 0.2px;
   flex-shrink: 0;
 }
-
-/* Parent chips */
-.parent-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 20px;
-  white-space: nowrap;
-  background: transparent !important;
-  border: none !important;
-}
-.parent-chip--father { color: var(--blue) !important; }
-.parent-chip--mother { color: var(--pink) !important; }
 
 /* .view-pdf-btn — informational action (opens a PDF preview). Stays blue
    to match the other "view/info" actions (e.g. .tbl-btn--blue). */
@@ -892,149 +813,6 @@
 }
 .no-match-alt__text  { font-size: 11.5px; color: var(--txt3); }
 .neg-btn--inline     { font-size: 11px; padding: 4px 10px; }
-/* ═══════════════════════════════════════
-   TOAST NOTIFICATION SYSTEM
-   (ported from request.jsx)
-═══════════════════════════════════════ */
-
-/* Container — fixed top-right, stacks downward */
-.bv-toast-wrap {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 99999;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  pointer-events: none;
-}
-
-/* Individual toast card */
-.bv-toast {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.10), 0 1px 6px rgba(0, 0, 0, 0.06);
-  padding: 13px 14px 16px;           /* extra bottom padding for progress bar */
-  min-width: 280px;
-  max-width: 360px;
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  pointer-events: all;
-  position: relative;
-  overflow: hidden;
-  animation: bvToastSlideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.bv-toast--hiding {
-  animation: bvToastSlideOut 0.28s ease forwards;
-}
-
-/* Slide-in from right */
-@keyframes bvToastSlideIn {
-  from { opacity: 0; transform: translateX(60px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-/* Slide-out to right */
-@keyframes bvToastSlideOut {
-  to { opacity: 0; transform: translateX(60px); }
-}
-
-/* SVG status icon */
-.bv-toast__icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-/* Text area */
-.bv-toast__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.bv-toast__title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #1a2332;
-  margin-bottom: 2px;
-  font-family: var(--f);
-  line-height: 1.3;
-}
-
-.bv-toast__msg {
-  font-size: 12px;
-  color: #4a5568;
-  line-height: 1.5;
-  font-family: var(--f);
-  word-break: break-word;
-}
-
-/* Dismiss button */
-.bv-toast__close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #9ca3af;
-  font-size: 17px;
-  line-height: 1;
-  padding: 0;
-  flex-shrink: 0;
-  transition: color 0.15s;
-  margin-top: -1px;
-  font-family: var(--f);
-}
-.bv-toast__close:hover { color: #1a2332; }
-
-/* Auto-dismiss progress bar */
-.bv-toast__progress {
-  height: 3px;
-  background: #f3f4f6;
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  overflow: hidden;
-  border-radius: 0 0 10px 10px;
-}
-
-.bv-toast__progress-bar {
-  height: 100%;
-  width: 100%;
-  animation: bvToastShrink linear forwards;
-  border-radius: 0 0 10px 10px;
-}
-
-@keyframes bvToastShrink {
-  from { width: 100%; }
-  to   { width: 0%; }
-}
-
-/* ── Mobile adjustments ───────────────────────────────────────────────── */
-/* FIX: previously this block repositioned the toast to the BOTTOM of the
-   screen on narrow viewports (top: auto; bottom: 16px;) and swapped the
-   slide animation to come up from the bottom. Per the requested fix, the
-   toast must stay pinned to the UPPER-RIGHT on all screen sizes — so we
-   now only adjust left/right spacing for small screens and keep it at
-   the top, and we no longer override the slide-in/out keyframes. */
-@media (max-width: 600px) {
-  .bv-toast-wrap {
-    top: 12px;
-    right: 12px;
-    left: auto;
-    bottom: auto;
-  }
-
-  .bv-toast {
-    min-width: 240px;
-    max-width: calc(100vw - 24px);
-    width: auto;
-  }
-}
-
 /* ── OVERLAYS & MODALS ────────────────────────────────────────────────── */
 .overlay {
   position: fixed;
@@ -1111,13 +889,8 @@
 }
 .modal-confirm:hover { filter: brightness(0.92); transform: translateY(-1px); }
 
-/* Confirm-button variants now map to what the confirmed action actually
-   does: red = destructive (Delete), green = positive (Restore), blue =
-   neutral confirm. Components pass the matching class/inline color based
-   on the action being confirmed. */
+/* Red marks destructive confirmation actions. */
 .modal-confirm--red    { background: #dc2626 !important; }
-.modal-confirm--blue   { background: #2563eb !important; }
-.modal-confirm--green  { background: #059669 !important; }
 
 /* ── NEGATIVE CERTIFICATE INFO MODAL ─────────────────────────────────── */
 .negcert-info-modal {
@@ -1134,26 +907,6 @@
   background: var(--surf-2);
   border-bottom: 1px solid var(--border);
 }
-.negcert-info-modal__hdr-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(220,38,38,0.08);
-  border: 1.5px solid rgba(220,38,38,0.22);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: #dc2626;
-}
-
-.negcert-info-modal__hdr-icon svg {
-  width: 18px;
-  height: 18px;
-  color: #dc2626;
-  stroke: currentColor;
-}
-
 .negcert-info-modal__hdr-text { min-width: 0; }
 .negcert-info-modal__title {
   margin: 0 0 2px;
@@ -1195,7 +948,6 @@
   color: var(--txt3);
   line-height: 1;
 }
-.negcert-info-modal__label-icon { font-size: 11px; line-height: 1; }
 .negcert-info-modal__required   { color: #dc2626; margin-left: 1px; font-size: 11px; }
 
 .negcert-info-modal__input {
@@ -1230,28 +982,6 @@
   display: flex;
   align-items: center;
   gap: 3px;
-}
-
-.negcert-info-modal__hint {
-  font-size: 10.5px;
-  color: var(--txt3);
-  font-style: italic;
-  line-height: 1.4;
-  padding-left: 1px;
-}
-
-.negcert-info-modal__note {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 12px 16px 0;
-  padding: 8px 10px;
-  background: rgba(217,119,6,0.07);
-  border: 1px solid rgba(217,119,6,0.18);
-  border-radius: var(--r-sm);
-  font-size: 10.5px;
-  color: #92400e;
-  line-height: 1.5;
 }
 
 .negcert-info-modal__acts {
@@ -1353,7 +1083,6 @@
    neutral slate so it doesn't visually compete with Print as if it were
    an equally important action. */
 .hdr-btn--print       { background: #2563eb !important; }
-.hdr-btn--dl          { background: #2563eb !important; }
 .hdr-btn--close       { background: #64748b !important; }
 
 .print-iframe {
@@ -1365,8 +1094,6 @@
   border: 0;
   visibility: hidden;
 }
-
-.upl-file-input { display: none; }
 
 .tab-wrap {
   width: 100%;
@@ -1690,20 +1417,6 @@
 .dropzone__uploading                 { display: flex; align-items: center; gap: 8px; }
 .dropzone__uploading-text            { font-size: 12.5px; color: var(--blue); }
 
-.upl-ok {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  background: var(--green-lt);
-  border: 1px solid var(--green-bd);
-  border-radius: var(--r-sm);
-  padding: 10px 12px;
-}
-.upl-ok__emoji { font-size: 20px; flex-shrink: 0; display: flex; align-items: center; color: var(--green); }
-.upl-ok__emoji svg { width: 20px; height: 20px; }
-.upl-ok__title { font-size: 12.5px; font-weight: 700; color: #065f46; }
-.upl-ok__sub   { font-size: 11px; color: #047857; margin-top: 2px; word-break: break-all; }
-
 .upl-limit-badge {
   display: inline-flex;
   align-items: center;
@@ -2005,23 +1718,6 @@
   border: none;
   display: block;
 }
-
-/* ── NEGATIVE CERT NOTICE ─────────────────────────────────────────────── */
-.neg-cert-notice {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 36px 20px;
-  border: 1.5px dashed var(--red-bd);
-  border-radius: var(--r);
-  background: var(--red-lt);
-  text-align: center;
-}
-.neg-cert-notice__icon  { font-size: 38px; opacity: 0.55; }
-.neg-cert-notice__title { font-family: var(--fh); font-size: 15px; font-weight: 800; color: var(--red); }
-.neg-cert-notice__sub   { font-size: 12.5px; color: #7f1d1d; max-width: 340px; line-height: 1.65; }
 
 /* ── STEP 3: RELEASE COMPLETE ─────────────────────────────────────────── */
 .release-complete-wrap {
@@ -2432,7 +2128,6 @@
   .tbl-wrap       { max-height: none; overflow-y: visible; }
   .tbl th         { position: static; }
   .ubr-action-bar { padding: 7px 11px; gap: 5px; }
-  .ubr-action-bar__hint { display: none; }
   .pdf-inline-viewer    { height: 46vh; min-height: 260px; }
   .pdf-inline-toolbar   { flex-wrap: wrap; gap: 7px; }
   .pdf-inline-toolbar__name { max-width: min(180px, 32vw); }
@@ -2449,7 +2144,6 @@
   .release-complete__ring-inner { width: 74px; height: 74px; }
   .release-complete__check      { font-size: 28px; }
   .release-complete-wrap        { gap: 11px; padding: 28px 14px; }
-  .neg-cert-notice { padding: 28px 14px; }
   .upl-modal { max-width: 100%; }
 }
 
@@ -2458,7 +2152,6 @@
   .ubr-header { padding: 7px 9px; min-height: var(--ubr-topbar-h); gap: 6px; }
   .ubr-header__tabs { gap: 3px; }
   .ubr-tab-btn { padding: 5px 7px; font-size: 11px; border-radius: 7px; gap: 3px; }
-  .ubr-tab-btn__icon { font-size: 12px; }
   .ubr-body { padding: 7px 9px; }
   .ubr-tx__scroll { padding: 5px 0 0; }
   .step-inner { padding: 9px 9px 7px; gap: 9px; }
@@ -2498,11 +2191,9 @@
   .pdf-inline-print-btn { font-size: 11.5px; padding: 5px 9px; }
   .pdf-inline-viewer { height: 38vh; min-height: 185px; }
   .modal-box { padding: 16px 14px; }
-  .notif { right: 9px; left: 9px; min-width: auto; max-width: calc(100vw - 18px); }
   .ubr-action-bar { flex-wrap: nowrap; }
   .ubr-action-bar .btn-secondary { flex-shrink: 0; flex: none; min-width: 64px; }
-  .result-row__card-name,
-  .result-row__card-parent-label { font-size: 12.5px; }
+  .result-row__card-name { font-size: 12.5px; }
 }
 
 @media (max-width: 360px) {

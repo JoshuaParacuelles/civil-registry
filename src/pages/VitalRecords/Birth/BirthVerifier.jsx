@@ -64,8 +64,6 @@ function useViewport() {
   return {
     isMobile:  width < 480,
     isTablet:  width >= 480 && width < 768,
-    isDesktop: width >= 768,
-    width,
   };
 }
 
@@ -381,34 +379,11 @@ function printPdfFromData(pdfData) {
 
 // ── Office Logo ─────────────────────────────────────────────────────────
 const OfficeLogo = ({ className = "" }) => {
-  if (LOGO_SRC || LOGO_SRC_2) {
-    return (
-      <div className="office-logo-group">
-        {LOGO_SRC && <img src={LOGO_SRC} alt="Office Seal" className={className} />}
-        {LOGO_SRC_2 && <img src={LOGO_SRC_2} alt="LCR Seal" className={className} />}
-      </div>
-    );
-  }
   return (
-    <svg
-      className={className}
-      viewBox="0 0 100 100"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <circle cx="50" cy="50" r="47" fill="#f8fafc" stroke="#1a3c6e" strokeWidth="2.5" />
-      <circle cx="50" cy="50" r="39" fill="none" stroke="#1a3c6e" strokeWidth="1.2" />
-      <path
-        d="M50 20 L54 32 L67 32 L57 40 L61 53 L50 45 L39 53 L43 40 L33 32 L46 32 Z"
-        fill="#1a3c6e"
-      />
-      <text
-        x="50" y="72" textAnchor="middle"
-        fontFamily="Times New Roman, serif" fontSize="8.5" fontWeight="700"
-        fill="#1a3c6e" letterSpacing="0.5"
-      >
-        OFFICE SEAL
-      </text>
-    </svg>
+    <div className="office-logo-group">
+      <img src={LOGO_SRC} alt="Office Seal" className={className} />
+      <img src={LOGO_SRC_2} alt="LCR Seal" className={className} />
+    </div>
   );
 };
 
@@ -1509,7 +1484,6 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   const [subjectName,    setSubjectName]    = useState("");
   const [payRef,         setPayRef]         = useState("");
   const [processing,     setProcessing]     = useState(false);
-  const [restoringId,    setRestoringId]    = useState(null);
 
   const [step2PdfData,     setStep2PdfData]     = useState(null);
   const [step2PdfLoading,  setStep2PdfLoading]  = useState(false);
@@ -1578,20 +1552,6 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   }, []);
 
   useEffect(() => { fetchRecords(); fetchArchived(); }, [fetchRecords, fetchArchived]);
-
-  const restoreRecord = useCallback(async (id) => {
-    setRestoringId(id);
-    try {
-      const res = await fetch(`${API}/records/${id}/restore`, { method: "POST" });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Restore failed"); }
-      await fetchRecords();
-      await fetchArchived();
-      return true;
-    } catch (err) {
-      showNotif(err.message || "Failed to restore record in the background.", "error");
-      return false;
-    } finally { setRestoringId(null); }
-  }, [fetchRecords, fetchArchived]);
 
   const handleSearch = () => {
     let valid = true;

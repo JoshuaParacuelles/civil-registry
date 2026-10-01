@@ -187,7 +187,7 @@ function getRecordIdentityKey(record) {
   return `${name}|${groom}|${bride}`;
 }
 
-function getMatchedSpouseName(record, searchFirst, searchLast) {
+function getMatchedSpouseName(record, searchLast) {
   const sLast = cleanNamePart(searchLast).toUpperCase();
   if (!sLast) return getRecordDisplayName(record);
   const groomLast = cleanNamePart(record?.groom_last_name).toUpperCase();
@@ -1663,7 +1663,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   // Selecting a record is a purely local UI action: it chooses the record
   // for this transaction without mutating the archived status in the database.
   const handleSelectFromSearch = (record) => {
-    const displayName = getMatchedSpouseName(record, srchFirstName, srchLastName);
+    const displayName = getMatchedSpouseName(record, srchLastName);
 
     setSelectedRecord(record);
     setRecordStatus("ACTIVE");
