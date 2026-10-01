@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { usePermissions } from "../../context/PermissionContext";
+import RmToastContainer from "../../components/ToastContainer";
+import { pushToast } from "../../services/toastService";
 import "./RoleManagement.css";
 
 // Use empty string to route via Vite proxy, avoiding CORS/Cookie domain mismatches
@@ -141,99 +143,6 @@ const LockIcon = () => (
   </svg>
 );
 
-// ─── TOAST SYSTEM ─────────────────────────────────────────────────────────────
-
-let _rmToastSetters = [];
-
-function useRmToasts() {
-  const [toasts, setToasts] = useState([]);
-  useEffect(() => {
-    _rmToastSetters.push(setToasts);
-    return () => {
-      _rmToastSetters = _rmToastSetters.filter((s) => s !== setToasts);
-    };
-  }, []);
-  return toasts;
-}
-
-function pushRmToast(toast) {
-  const id = Date.now() + Math.random();
-  _rmToastSetters.forEach((set) => set((prev) => [...prev, { ...toast, id }]));
-  return id;
-}
-
-function removeRmToast(id) {
-  _rmToastSetters.forEach((set) =>
-    set((prev) => prev.filter((t) => t.id !== id))
-  );
-}
-
-function RmToastContainer() {
-  const toasts = useRmToasts();
-  return (
-    <div className="rm-toast-wrap">
-      {toasts.map((t) => (
-        <RmToast key={t.id} {...t} />
-      ))}
-    </div>
-  );
-}
-
-function RmToast({ id, title, message, duration = 6000, success = true }) {
-  const [hiding, setHiding] = useState(false);
-
-  const dismiss = useCallback(() => {
-    setHiding(true);
-    setTimeout(() => removeRmToast(id), 300);
-  }, [id]);
-
-  useEffect(() => {
-    const timer = setTimeout(dismiss, duration);
-    return () => clearTimeout(timer);
-  }, [duration, id, dismiss]);
-
-  const iconColor = success ? "#16a34a" : "#dc2626";
-  const barColor  = success ? "#16a34a" : "#dc2626";
-
-  return (
-    <div className={`rm-toast-item${hiding ? " hiding" : ""}`}>
-      <svg
-        className="rm-toast-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke={iconColor}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {success ? (
-          <>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9 12l2 2 4-4" />
-          </>
-        ) : (
-          <>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v4m0 4h.01" />
-          </>
-        )}
-      </svg>
-      <div className="rm-toast-body">
-        <div className="rm-toast-title">{title}</div>
-        {message && <div className="rm-toast-msg">{message}</div>}
-      </div>
-      <button className="rm-toast-close" onClick={dismiss}>×</button>
-      <div className="rm-toast-progress">
-        <div
-          className="rm-toast-progress-bar"
-          style={{ animationDuration: `${duration}ms`, background: barColor }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Rolemanagement() {
   const { is_admin } = usePermissions();
 
@@ -260,7 +169,7 @@ export default function Rolemanagement() {
 
   const showToast = useCallback((msg, type = "success", detail = "") => {
     const isSuccess = type === "success";
-    pushRmToast({ title: msg, message: detail, success: isSuccess, duration: 6000 });
+    pushToast({ title: msg, message: detail, success: isSuccess, duration: 6000 });
   }, []);
 
   const describeFetchError = (err, res) => {
