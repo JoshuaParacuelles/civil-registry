@@ -1,6 +1,7 @@
 import { useState, useMemo, memo, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { usePermissions } from "../../context/PermissionContext";
 import { supabase } from "../../services/supabaseClient";
+import { pushToast } from "../../services/toastService";
 import "./DocumentTracking.css";
 
 // Same-origin by default (goes through the Vite proxy in dev). Only set
@@ -19,8 +20,15 @@ const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
 const UNSIGNED_LABEL = "Unsigned";
 // Shared toast helper (same shared toastService used by Login / Vital Records).
 // Plain function, not a hook, so it can be used inside useCallback without deps.
-function notify() {}
-
+function notify(message, type = "success") {
+  const ok = type === "success";
+  pushToast({
+    title: ok ? "Success" : "Error",
+    message,
+    success: ok,
+    duration: 4000,
+  });
+}
 const STATUS_STYLES = {
   "In review": { fg: "var(--blue-ink)", bg: "var(--blue-soft)" },
   "Approved": { fg: "var(--green-ink)", bg: "var(--green-soft)" },
