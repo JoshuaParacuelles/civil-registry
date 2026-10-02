@@ -84,7 +84,8 @@ const NOTIF_TARGETS = {
   death:    { menu: MENU_KEYS.DEATH,    permission: "death_verification" },
 };
 
-const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "COMPLETED"];
+// REJECTED is selectable too (the backend requires a remark for it).
+const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "COMPLETED", "REJECTED"];
 const REQUEST_STATUS_LABELS = {
   PENDING:    "Pending Review",
   PROCESSING: "Being Processed",
@@ -436,24 +437,20 @@ const Home = () => {
 
       const savedStatus = (data.status || statusDraft).toUpperCase();
 
-      const notifiedByEmail = Boolean(data.email_sent);
-      const noEmailNeeded = Boolean(data.email_skipped);
-
-      // Build the message here so it always names the status that was saved
-      // (Being Processed, Completed, ...) instead of relying on the backend text.
+      // Exact message for Being Processed / Completed / Rejected:
+      //   "Status updated to <status>"
       const statusLabel = REQUEST_STATUS_LABELS[savedStatus] || savedStatus;
-      let toastMessage;
-      if (notifiedByEmail || noEmailNeeded) {
-        toastMessage = `Status updated to ${statusLabel}.`;
-      } else {
-        toastMessage = `Status updated to ${statusLabel}, but the email notification failed to send. Check server logs.`;
-      }
+      showStatusToast("Success", `Status updated to ${statusLabel}`, "success");
 
-      showStatusToast(
-        notifiedByEmail || noEmailNeeded ? "Success" : "Notice",
-        toastMessage,
-        notifiedByEmail || noEmailNeeded ? "success" : "warning"
-      );
+      // Only warn if an email was actually supposed to go out (Completed or
+      // Rejected) and it failed. Being Processed never sends an email.
+      if (data.email_attempted && !data.email_sent) {
+        showStatusToast(
+          "Notice",
+          "The email notification could not be sent. Check server logs.",
+          "warning"
+        );
+      }
 
       setStatusDraft(savedStatus);
       setStatusNote("");
