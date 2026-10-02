@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "./NotificationDetailModal.css";
+import { useRequestDetail } from "../hooks/useRequestDetail";
 
 const CloseIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -65,25 +66,60 @@ const NotificationDetailModal = ({
   getSignatureSrc,
   REQUEST_STATUS_OPTIONS,
   REQUEST_STATUS_LABELS,
+  fetchSnapshot, // NEW: async (notification) => latest request snapshot
 }) => {
+  // Hooks must run before any early return.
+  const { key, phase, snapshot, refresh, retry } = useRequestDetail(notification, fetchSnapshot);
+
+  const snap = snapshot || {};
+  const currentStatus = (snap.status || "").toUpperCase();
+  const loading = phase === "loading";
+  const ready = phase === "ready";
+  const editorLocked = loading || phase === "fallback";
+
+  // Once fresh data lands, align the dropdown with the real status (and reset per-notification state).
+  useEffect(() => {
+    if (!key) return;
+    setSigFailed(false);
+    setSigZoomed(false);
+    setStatusNote("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  useEffect(() => {
+    if (ready) setStatusDraft(currentStatus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, key, currentStatus]);
+
   if (!notification) return null;
 
-  const snap = notification.request_snapshot || {};
   const type = notification.record_type;
   const sections = [TYPE_SECTIONS[type], ...COMMON_SECTIONS].filter(Boolean);
   const target = NOTIF_TARGETS[type];
   const canOpen = Boolean(target && canAccess(target.permission));
   const signatureSrc = getSignatureSrc(snap, type, notification.record_id);
   const showSignatureImage = Boolean(snap.has_signature) && !sigFailed;
-  const topStatusValue = statusDraft || (snap.status || "").toUpperCase();
+
+  // The header pill always reflects the SAVED status, never the dropdown draft.
+  const topStatusValue = currentStatus;
   const topStatusLabel = REQUEST_STATUS_LABELS[topStatusValue] || topStatusValue;
+
   const statusOptions = Array.from(new Set([...(REQUEST_STATUS_OPTIONS || []), "REJECTED"]));
-  const statusOptionLabel = (status) => REQUEST_STATUS_LABELS[status] || (status === "REJECTED" ? "Rejected" : status);
-  const currentStatus = (snap.status || "").toUpperCase();
-  const isRejecting = statusDraft === "REJECTED";
+  const statusOptionLabel = (status) =>
+    REQUEST_STATUS_LABELS[status] || (status === "REJECTED" ? "Rejected" : status);
+  const selectValue = statusDraft || currentStatus;
+  const isRejecting = selectValue === "REJECTED";
   const remarkMissing = isRejecting && !statusNote.trim();
   const FINAL_STATUSES = ["COMPLETED", "REJECTED"];
   const isFinalized = FINAL_STATUSES.includes(currentStatus);
+
+  const handleUpdate = async () => {
+    try {
+      await updateRequestStatus();
+    } finally {
+      refresh(); // pull the new saved status so the header pill updates
+    }
+  };
 
   return (
     <div className="notif-detail-overlay" onClick={onClose}>
@@ -92,6 +128,7 @@ const NotificationDetailModal = ({
         role="dialog"
         aria-modal="true"
         aria-label="Request details"
+        aria-busy={loading}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="notif-detail-header">
@@ -106,17 +143,30 @@ const NotificationDetailModal = ({
               {timeAgo(notification.created_at)}
             </p>
           </div>
-          {topStatusValue && (
-            <span className={`notif-detail-status ${String(topStatusValue).toLowerCase()}`}>
-              {topStatusLabel}
-            </span>
+
+          {loading ? (
+            <span className="notif-detail-status skeleton" aria-hidden="true" />
+          ) : (
+            topStatusValue && (
+              <span className={`notif-detail-status ${topStatusValue.toLowerCase()} notif-fade-in`}>
+                {topStatusLabel}
+              </span>
+            )
           )}
+
           <button type="button" className="notif-detail-close" aria-label="Close" onClick={onClose}>
             <CloseIcon />
           </button>
         </div>
 
-        <div className="notif-detail-body">
+        <div className={`notif-detail-body ${ready ? "is-ready" : ""}`}>
+          {phase === "fallback" && (
+            <div className="notif-detail-banner" role="status">
+              <span>Couldn't load the latest details. Showing the last saved copy.</span>
+              <button type="button" onClick={retry}>Retry</button>
+            </div>
+          )}
+
           {!notification.request_snapshot ? (
             <p className="notif-detail-fallback">{notification.message}</p>
           ) : (
@@ -124,10 +174,17 @@ const NotificationDetailModal = ({
               <section key={section.title} className="notif-detail-section">
                 <h3>{section.title}</h3>
                 <dl className="notif-detail-grid">
-                  {section.fields.map(([key, label]) => (
-                    <div key={key} className="notif-detail-field">
+                  {section.fields.map(([fieldKey, label]) => (
+                    <div key={fieldKey} className="notif-detail-field">
                       <dt>{label}</dt>
-                      {key === SIGNATURE_FIELD_KEY && showSignatureImage ? (
+                      {loading ? (
+                        <dd>
+                          <span
+                            className={`notif-skel ${fieldKey === SIGNATURE_FIELD_KEY ? "block" : ""}`}
+                            aria-hidden="true"
+                          />
+                        </dd>
+                      ) : fieldKey === SIGNATURE_FIELD_KEY && showSignatureImage ? (
                         <dd>
                           <img
                             className="notif-detail-signature"
@@ -149,7 +206,7 @@ const NotificationDetailModal = ({
                           />
                         </dd>
                       ) : (
-                        <dd>{detailValue(snap[key])}</dd>
+                        <dd>{detailValue(snap[fieldKey])}</dd>
                       )}
                     </div>
                   ))}
@@ -162,22 +219,22 @@ const NotificationDetailModal = ({
             <section className="notif-detail-section">
               <h3>Request Status</h3>
               <div className="notif-status-editor">
-                <select
-                  className="notif-status-select"
-                  value={statusDraft}
-                  onChange={(e) => setStatusDraft(e.target.value)}
-                  disabled={statusSaving || isFinalized}
-                >
-                  {statusOptions.map((status) => (
-                    <option key={status} value={status}>{statusOptionLabel(status)}</option>
-                  ))}
-                </select>
-
-                {isFinalized ? (
-                  <p className="notif-status-locked">
-                    This request is {statusOptionLabel(currentStatus)}. Its status can no longer be changed.
-                  </p>
+                {loading ? (
+                  <span className="notif-skel select" aria-hidden="true" />
                 ) : (
+                  <select
+                    className="notif-status-select"
+                    value={selectValue}
+                    onChange={(e) => setStatusDraft(e.target.value)}
+                    disabled={statusSaving || isFinalized || editorLocked}
+                  >
+                    {statusOptions.map((status) => (
+                      <option key={status} value={status}>{statusOptionLabel(status)}</option>
+                    ))}
+                  </select>
+                )}
+
+                {!isFinalized && !loading && (
                   <>
                     <label className="notif-status-note-label" htmlFor="notif-status-remark">
                       Remark{isRejecting ? " (required)" : ""}
@@ -188,13 +245,13 @@ const NotificationDetailModal = ({
                       placeholder="Remark to include in the citizen's email…"
                       value={statusNote}
                       onChange={(e) => setStatusNote(e.target.value)}
-                      disabled={statusSaving}
+                      disabled={statusSaving || editorLocked}
                     />
                     <button
                       type="button"
                       className={`notif-status-update-btn ${isRejecting ? "reject" : ""}`}
-                      onClick={() => updateRequestStatus()}
-                      disabled={statusSaving || statusDraft === currentStatus || remarkMissing}
+                      onClick={handleUpdate}
+                      disabled={statusSaving || editorLocked || selectValue === currentStatus || remarkMissing}
                       title={remarkMissing ? "Enter a remark to reject" : undefined}
                     >
                       {statusSaving ? "Updating…" : isRejecting ? "Reject Request" : "Update Status"}
@@ -204,7 +261,6 @@ const NotificationDetailModal = ({
               </div>
             </section>
           )}
-
         </div>
 
         <div className="notif-detail-footer">

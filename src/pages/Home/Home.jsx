@@ -22,6 +22,8 @@ import LogoutModal from "../../components/LogoutModal";
 import NotificationBell from "../../components/NotificationBell";
 import NotificationDetailModal from "../../components/NotificationDetailModal";
 import useNotifications from "../../hooks/useNotifications";
+import { loadSnapshot, prefetchRequestSnapshot } from "../../hooks/useRequestDetail";
+import { fetchSnapshot } from "../../services/requestSnapshotService";
 import { pushToast } from "../../services/toastService";
 
 import logoImg from "../../assets/icons/sidebar/scc.png";
@@ -350,7 +352,15 @@ const Home = () => {
     };
   }, [selectedNotif, requestDetail]);
 
-  const handleNotifClick = useCallback(async (notif) => {
+  // Warm the cache before the click lands (hover / focus / touch in the bell).
+  // Only online requests have a live row to fetch.
+  const handlePrefetchNotification = useCallback((notif) => {
+    if (notif?.request_snapshot?.source === "online_request") {
+      prefetchRequestSnapshot(notif, fetchSnapshot);
+    }
+  }, []);
+
+  const handleNotifClick = useCallback((notif) => {
     markNotificationClicked(notif.id);
     setSigFailed(false);
     setSigZoomed(false);
@@ -358,41 +368,43 @@ const Home = () => {
     setNotifOpen(false);
     setStatusNote("");
     setRequestDetail(null);
+    // Don't seed the status from the stored (possibly stale) snapshot.
+    // The modal shows a skeleton until the live row is ready, then syncs it.
+    setStatusDraft("");
     activeNotifIdRef.current = notif.id;
 
     const snap = notif.request_snapshot || {};
-    setStatusDraft((snap.status || "PENDING").toUpperCase());
     setNotifyVia((snap.requester_email || "").trim() ? "email" : "none");
 
     if (!notif.record_id || snap.source !== "online_request") return;
 
-    try {
-      const res = await fetch(`/api/requests/${notif.record_id}`, { credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json().catch(() => null);
-      if (!data) return;
-      // The admin may have closed this popup or opened another one meanwhile.
-      if (activeNotifIdRef.current !== notif.id) return;
+    // Shares the cache + in-flight request with the modal (and with the hover
+    // prefetch), so this does NOT cause a second network call.
+    loadSnapshot(notif, fetchSnapshot)
+      .then((data) => {
+        // The admin may have closed this popup or opened another one meanwhile.
+        if (activeNotifIdRef.current !== notif.id) return;
 
-      setRequestDetail({ notifId: notif.id, data });
+        setRequestDetail({ notifId: notif.id, data });
 
-      // Default to emailing the citizen whenever an address is on file.
-      setNotifyVia((data.requester_email || "").trim() ? "email" : "none");
+        // Default to emailing the citizen whenever an address is on file.
+        setNotifyVia((data.requester_email || "").trim() ? "email" : "none");
 
-      const liveStatus = (data.status || "").toUpperCase();
-      if (liveStatus) {
-        setStatusDraft(liveStatus);
-        setNotifications((prev) =>
-          prev.map((n) =>
-            n.id === notif.id
-              ? { ...n, request_snapshot: { ...(n.request_snapshot || {}), status: liveStatus } }
-              : n
-          )
-        );
-      }
-    } catch (err) {
-      console.error("[Home] Could not load request details:", err);
-    }
+        const liveStatus = (data.status || "").toUpperCase();
+        if (liveStatus) {
+          setStatusDraft(liveStatus);
+          setNotifications((prev) =>
+            prev.map((n) =>
+              n.id === notif.id
+                ? { ...n, request_snapshot: { ...(n.request_snapshot || {}), status: liveStatus } }
+                : n
+            )
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("[Home] Could not load request details:", err);
+      });
   }, [markNotificationClicked, setNotifOpen, setNotifications]);
 
   const closeNotifDetails = useCallback(() => {
@@ -435,7 +447,8 @@ const Home = () => {
       setStatusDraft(savedStatus);
       setStatusNote("");
 
-      // Update local state only; the live status is re-read from the backend each time a popup opens.
+      // Update local state only; the modal re-reads the live row right after this
+      // (see handleUpdate in NotificationDetailModal) so its header pill stays correct.
       setRequestDetail((prev) =>
         prev && prev.notifId === selectedNotif.id
           ? { ...prev, data: { ...prev.data, status: savedStatus } }
@@ -685,6 +698,7 @@ const Home = () => {
             timeAgo={timeAgo}
             NOTIF_TARGETS={NOTIF_TARGETS}
             setOpenActionMenuId={setOpenActionMenuId}
+            onPrefetchNotification={handlePrefetchNotification}
           />
         </Topbar>
 
@@ -721,6 +735,7 @@ const Home = () => {
         getSignatureSrc={getSignatureSrc}
         REQUEST_STATUS_OPTIONS={REQUEST_STATUS_OPTIONS}
         REQUEST_STATUS_LABELS={REQUEST_STATUS_LABELS}
+        fetchSnapshot={fetchSnapshot}
       />
 
       <LogoutModal

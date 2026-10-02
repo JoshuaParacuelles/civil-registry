@@ -73,6 +73,7 @@ const NotifItem = memo(function NotifItem({
   menuOpen,
   targets,
   onClick,
+  onPrefetch,
   onToggleMenu,
   onRead,
   onUnread,
@@ -86,7 +87,13 @@ const NotifItem = memo(function NotifItem({
   };
 
   return (
-    <li className={`notif-item${n.is_read ? "" : " unread"}`} onClick={() => onClick(n)}>
+    <li
+      className={`notif-item${n.is_read ? "" : " unread"}`}
+      onClick={() => onClick(n)}
+      onPointerEnter={() => onPrefetch?.(n)}
+      onFocus={() => onPrefetch?.(n)}
+      onTouchStart={() => onPrefetch?.(n)}
+    >
       <span className="notif-dot" />
       <div className={`notif-icon-wrap ${targets[n.record_type] ? n.record_type : "system"}`}>
         <NotifTypeIcon type={n.record_type} />
@@ -152,6 +159,7 @@ const NotificationBell = ({
   timeAgo,
   NOTIF_TARGETS,
   setOpenActionMenuId,
+  onPrefetchNotification, // NEW: warms the snapshot cache before the click
 }) => {
   const isMobile = useMediaQuery("(max-width: 767px)");
 
@@ -186,6 +194,12 @@ const NotificationBell = ({
       window.removeEventListener("orientationchange", measure);
     };
   }, [notifOpen, isMobile, notifWrapperRef]);
+
+  // When the dropdown opens, warm the cache for the first few request notifications.
+  useEffect(() => {
+    if (!notifOpen || !onPrefetchNotification) return;
+    notifications.slice(0, 5).forEach((n) => onPrefetchNotification(n));
+  }, [notifOpen, notifications, onPrefetchNotification]);
 
   const badgeText = unreadCount > 99 ? "99+" : String(unreadCount);
   const statusTitle =
@@ -245,6 +259,7 @@ const NotificationBell = ({
               menuOpen={openActionMenuId === n.id}
               targets={NOTIF_TARGETS}
               onClick={handleNotifClick}
+              onPrefetch={onPrefetchNotification}
               onToggleMenu={toggleActionMenu}
               onRead={markNotificationRead}
               onUnread={markNotificationUnread}
