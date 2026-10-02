@@ -214,8 +214,7 @@
   font-weight: 600;
 }
 
-/* "This request is Completed. Its status can no longer be changed." message: hidden */
-.notif-status-locked { display: none; margin: 8px 0 0; font-size: 13px; color: #64748b; }
+.notif-status-locked { margin: 8px 0 0; font-size: 13px; color: #64748b; }
 
 .notif-status-update-btn {
   align-self: flex-start;
