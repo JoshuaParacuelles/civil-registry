@@ -438,9 +438,30 @@ const Home = () => {
 
       const notifiedByEmail = Boolean(data.email_sent);
       const noEmailNeeded = Boolean(data.email_skipped);
+
+      // Build the message here so it always names the status that was saved
+      // (Being Processed, Completed, ...) instead of relying on the backend text.
+      const statusLabel = REQUEST_STATUS_LABELS[savedStatus] || savedStatus;
+      const citizenEmail = (
+        requestDetail?.data?.requester_email ||
+        selectedNotif?.request_snapshot?.requester_email ||
+        ""
+      ).trim();
+
+      let toastMessage;
+      if (notifiedByEmail) {
+        toastMessage = citizenEmail
+          ? `Status updated to ${statusLabel}. Citizen notified by email (${citizenEmail}).`
+          : `Status updated to ${statusLabel}. Citizen notified by email.`;
+      } else if (noEmailNeeded) {
+        toastMessage = `Status updated to ${statusLabel}.`;
+      } else {
+        toastMessage = `Status updated to ${statusLabel}, but the email notification failed to send. Check server logs.`;
+      }
+
       showStatusToast(
         notifiedByEmail || noEmailNeeded ? "Success" : "Notice",
-        data.message || `Updated to ${data.status_label}.`,
+        toastMessage,
         notifiedByEmail || noEmailNeeded ? "success" : "warning"
       );
 
