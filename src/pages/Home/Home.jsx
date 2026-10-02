@@ -443,9 +443,7 @@ const Home = () => {
       // (Being Processed, Completed, ...) instead of relying on the backend text.
       const statusLabel = REQUEST_STATUS_LABELS[savedStatus] || savedStatus;
       let toastMessage;
-      if (notifiedByEmail) {
-        toastMessage = `Status updated to ${statusLabel}. Citizen notified by email.`;
-      } else if (noEmailNeeded) {
+      if (notifiedByEmail || noEmailNeeded) {
         toastMessage = `Status updated to ${statusLabel}.`;
       } else {
         toastMessage = `Status updated to ${statusLabel}, but the email notification failed to send. Check server logs.`;
