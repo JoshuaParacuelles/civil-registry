@@ -442,17 +442,9 @@ const Home = () => {
       // Build the message here so it always names the status that was saved
       // (Being Processed, Completed, ...) instead of relying on the backend text.
       const statusLabel = REQUEST_STATUS_LABELS[savedStatus] || savedStatus;
-      const citizenEmail = (
-        requestDetail?.data?.requester_email ||
-        selectedNotif?.request_snapshot?.requester_email ||
-        ""
-      ).trim();
-
       let toastMessage;
       if (notifiedByEmail) {
-        toastMessage = citizenEmail
-          ? `Status updated to ${statusLabel}. Citizen notified by email (${citizenEmail}).`
-          : `Status updated to ${statusLabel}. Citizen notified by email.`;
+        toastMessage = `Status updated to ${statusLabel}. Citizen notified by email.`;
       } else if (noEmailNeeded) {
         toastMessage = `Status updated to ${statusLabel}.`;
       } else {
