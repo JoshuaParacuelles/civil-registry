@@ -46,7 +46,6 @@ const detailValue = (v) => (v === null || v === undefined || v === "" ? "—" : 
 const NotificationDetailModal = ({
   notification,
   onClose,
-  onOpenInVerifier,
   canAccess,
   timeAgo,
   sigFailed,
@@ -66,7 +65,7 @@ const NotificationDetailModal = ({
   getSignatureSrc,
   REQUEST_STATUS_OPTIONS,
   REQUEST_STATUS_LABELS,
-  fetchSnapshot, // NEW: async (notification) => latest request snapshot
+  fetchSnapshot, // async (notification) => latest request snapshot
 }) => {
   // Hooks must run before any early return.
   const { key, phase, snapshot, refresh, retry } = useRequestDetail(notification, fetchSnapshot);
@@ -95,8 +94,7 @@ const NotificationDetailModal = ({
 
   const type = notification.record_type;
   const sections = [TYPE_SECTIONS[type], ...COMMON_SECTIONS].filter(Boolean);
-  const target = NOTIF_TARGETS[type];
-  const canOpen = Boolean(target && canAccess(target.permission));
+  const target = NOTIF_TARGETS[type]; // only used for the header icon color now
   const signatureSrc = getSignatureSrc(snap, type, notification.record_id);
   const showSignatureImage = Boolean(snap.has_signature) && !sigFailed;
 
@@ -267,11 +265,6 @@ const NotificationDetailModal = ({
           <button type="button" className="logout-cancel-btn" onClick={onClose}>
             Close
           </button>
-          {canOpen && (
-            <button type="button" className="notif-detail-open-btn" onClick={() => onOpenInVerifier(notification)}>
-              Open in {target.menu}
-            </button>
-          )}
         </div>
       </div>
 

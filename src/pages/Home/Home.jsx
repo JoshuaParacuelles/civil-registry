@@ -479,17 +479,6 @@ const Home = () => {
     }
   };
 
-  const openInVerifier = (notif) => {
-    const target = NOTIF_TARGETS[notif.record_type];
-    if (target && canAccess(target.permission)) {
-      goTo(target.menu);
-      setVitalRecordsOpen(true);
-      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
-      if (viewport === "mobile") setMobileMenuOpen(false);
-    }
-    closeNotifDetails();
-  };
-
   const openRecordPage = useCallback(
     (type) => {
       const target = NOTIF_TARGETS[type];
@@ -721,7 +710,6 @@ const Home = () => {
         notification={modalNotification}
         isOnlineRequest={isOnlineRequest}
         onClose={closeNotifDetails}
-        onOpenInVerifier={openInVerifier}
         canAccess={canAccess}
         timeAgo={timeAgo}
         sigFailed={sigFailed}
