@@ -183,26 +183,29 @@ const NotificationDetailModal = ({
                           />
                         </dd>
                       ) : fieldKey === SIGNATURE_FIELD_KEY && showSignatureImage ? (
-                        <dd>
-                          <img
-                            className="notif-detail-signature"
-                            src={signatureSrc}
-                            alt="Requester signature — click to enlarge"
-                            title="Click to enlarge"
-                            loading="eager"
-                            decoding="sync"
-                            onError={() => setSigFailed(true)}
-                            onClick={() => setSigZoomed(true)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                setSigZoomed(true);
-                              }
-                            }}
-                          />
-                        </dd>
+                        <dd className="notif-detail-signature-wrap">
+  <img
+    className="notif-detail-signature"
+    src={signatureSrc}
+    alt="Requester signature — click to enlarge"
+    title="Click to enlarge"
+    loading="eager"
+    decoding="sync"
+    onError={() => setSigFailed(true)}
+    onClick={() => setSigZoomed(true)}
+    role="button"
+    tabIndex={0}
+    onKeyDown={(e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        setSigZoomed(true);
+      }
+    }}
+  />
+  {snap.signature_printed_name && (
+    <span className="notif-detail-signature-name">{snap.signature_printed_name}</span>
+  )}
+</dd>
                       ) : (
                         <dd>{detailValue(snap[fieldKey])}</dd>
                       )}
