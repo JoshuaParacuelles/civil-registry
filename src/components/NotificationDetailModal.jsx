@@ -184,27 +184,31 @@ const NotificationDetailModal = ({
                         </dd>
                       ) : fieldKey === SIGNATURE_FIELD_KEY && showSignatureImage ? (
                         <dd className="notif-detail-signature-wrap">
-  <img
-    className="notif-detail-signature"
-    src={signatureSrc}
-    alt="Requester signature — click to enlarge"
-    title="Click to enlarge"
-    loading="eager"
-    decoding="sync"
-    onError={() => setSigFailed(true)}
-    onClick={() => setSigZoomed(true)}
-    role="button"
-    tabIndex={0}
-    onKeyDown={(e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        setSigZoomed(true);
-      }
-    }}
-  />
-  {snap.signature_printed_name && (
-    <span className="notif-detail-signature-name">{snap.signature_printed_name}</span>
-  )}
+  <div className="notif-detail-signature-inner">
+    <img
+      className="notif-detail-signature"
+      src={signatureSrc}
+      alt="Requester signature — click to enlarge"
+      title="Click to enlarge"
+      loading="eager"
+      decoding="sync"
+      onError={() => setSigFailed(true)}
+      onClick={() => setSigZoomed(true)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setSigZoomed(true);
+        }
+      }}
+    />
+    {snap.signature_printed_name && snap.signature_printed_name.trim() && (
+      <span className="notif-detail-signature-name">
+        {snap.signature_printed_name.trim()}
+      </span>
+    )}
+  </div>
 </dd>
                       ) : (
                         <dd>{detailValue(snap[fieldKey])}</dd>
@@ -273,12 +277,11 @@ const NotificationDetailModal = ({
 
       {sigZoomed && (
         <div
-          className="sig-zoom-overlay"
-          onClick={(e) => {
-            e.stopPropagation();
-            setSigZoomed(false);
-          }}
-        >
+  key={fieldKey}
+  className={`notif-detail-field${
+    fieldKey === SIGNATURE_FIELD_KEY && showSignatureImage ? " is-signature" : ""
+  }`}
+>
           <img
             className="sig-zoom-img"
             src={signatureSrc}
