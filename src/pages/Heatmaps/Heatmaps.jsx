@@ -24,7 +24,7 @@ import {
   sumStats,
 } from "../../utils/demographics";
 import "./Heatmaps.css";
-import "./HeatmapsDemographics.css";
+
 
 const RAW_BARANGAY_DATA = [
   { name: "Barangay I (Poblacion)", birth: 240, marriage: 95, death: 55 },
@@ -992,7 +992,7 @@ export default function Heatmaps() {
 
   return (
     <div className="heatmaps">
-      <header className="heatmaps__header">
+      <header className={`heatmaps__header${isDemo ? " heatmaps__header--demo" : ""}`}>
         <div>
           <h1>Heatmaps</h1>
           <p>
