@@ -1,12 +1,30 @@
-import React, { useMemo, useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
+} from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { pushToast } from "../../services/toastService";
+import { fetchResidents } from "../../services/demographicsService";
+import {
+  AGE_GROUPS,
+  DEMOGRAPHIC_TYPES,
+  DEMO_STATS,
+  EMPLOYMENT_FILTERS,
+  VOTING_FILTERS,
+  aggregateByBarangay,
+  filterRecords,
+  formatPercent,
+  prepareResidents,
+  sumStats,
+} from "../../utils/demographics";
 import "./Heatmaps.css";
-
-/* ------------------------------------------------------------------ */
-/*  Data                                                              */
-/* ------------------------------------------------------------------ */
+import "./HeatmapsDemographics.css";
 
 const RAW_BARANGAY_DATA = [
   { name: "Barangay I (Poblacion)", birth: 240, marriage: 95, death: 55 },
@@ -26,13 +44,11 @@ const RAW_BARANGAY_DATA = [
   { name: "Bagonbon", birth: 120, marriage: 28, death: 18 },
   { name: "Buluangan", birth: 110, marriage: 25, death: 16 },
   { name: "Nataban", birth: 95, marriage: 20, death: 14 },
-  // No civil registry records submitted yet for this barangay.
   { name: "Palampas", birth: 0, marriage: 0, death: 0 },
 ];
 
-// Real barangay center coordinates for the City of San Carlos, Negros
-// Occidental (source: PSA-derived barangay profiles). Used to plot each
-// barangay at its true position on the OpenStreetMap basemap below.
+const BARANGAY_NAMES = RAW_BARANGAY_DATA.map((b) => b.name);
+
 const BARANGAY_COORDS = {
   "Bagonbon": { lat: 10.5820, lng: 123.3989 },
   "Barangay I (Poblacion)": { lat: 10.4939, lng: 123.4273 },
@@ -54,7 +70,6 @@ const BARANGAY_COORDS = {
   "San Juan (Sipaway)": { lat: 10.4627, lng: 123.4398 },
 };
 
-// The six Poblacion barangays for a short "I"–"VI" marker label.
 const POBLACION_ORDER = [
   "Barangay I (Poblacion)",
   "Barangay II (Poblacion)",
@@ -65,20 +80,12 @@ const POBLACION_ORDER = [
 ];
 const POBLACION_SHORT = { 0: "I", 1: "II", 2: "III", 3: "IV", 4: "V", 5: "VI" };
 
-// Real, documented reference points just outside the city, shown only for
-// orientation (not interactive data points). Coordinates for the two
-// neighboring municipalities are their official town-center coordinates;
-// San Carlos City is bounded by Calatrava to the north and Don Salvador
-// Benedicto to the west (source: San Carlos City CLUP / Wikipedia).
 const REFERENCE_POINTS = [
   { label: "Calatrava", lat: 10.60, lng: 123.48, kind: "town" },
   { label: "Don Salvador Benedicto", lat: 10.55056, lng: 123.23639, kind: "town" },
   { label: "Tañon Strait", lat: 10.49, lng: 123.52, kind: "water" },
 ];
 
-// Bounding box the map is restricted to — the San Carlos City area only,
-// derived from the barangay coordinates above with a comfortable margin so
-// the whole city (mainland + Sipaway Island) stays in view when zoomed out.
 const CITY_BOUNDS = (() => {
   const lats = Object.values(BARANGAY_COORDS).map((c) => c.lat);
   const lngs = Object.values(BARANGAY_COORDS).map((c) => c.lng);
@@ -91,8 +98,6 @@ const CITY_BOUNDS = (() => {
 })();
 const CITY_CENTER = CITY_BOUNDS.getCenter();
 
-// Simulates year-over-year variance so switching "Year" actually changes
-// every number on the page. Swap for a real per-year API response.
 const YEAR_MULTIPLIERS = { "2024": 0.82, "2025": 0.91, "2026": 1 };
 
 const TREND_MONTHS_BASE = [
@@ -103,11 +108,6 @@ const TREND_MONTHS_BASE = [
   { label: "May", birth: 620, death: 101 },
 ];
 
-// Single-hue sequential ramp (light → dark blue of the dashboard accent).
-// Record volume is a magnitude, not good/bad, so a green→red traffic-light
-// scale was misleading — and it collided with the Birth (green) and Death
-// (red) category colors used everywhere else on the page.
-// `text` is the legible label color to place on top of each step.
 const HEAT_SCALE = [
   { max: 150, label: "0 - 150 (Very Low)", color: "#bcd0fb", text: "#1c2233" },
   { max: 250, label: "151 - 250 (Low)", color: "#8fb0f7", text: "#1c2233" },
@@ -116,16 +116,14 @@ const HEAT_SCALE = [
   { max: Infinity, label: "450 and above (Very High)", color: "#1a3a9c", text: "#ffffff" },
 ];
 
+const NO_DATA_COLOR = "#9aa2b5";
+const ALL_BARANGAYS = "All Barangays";
+const VIEW_CIVIL = "civil";
+const VIEW_DEMOGRAPHICS = "demographics";
+
 const CERT_TYPES = ["All Certificates", "Live Birth", "Marriage", "Death"];
 const YEARS = ["2024", "2025", "2026"];
 
-/* ------------------------------------------------------------------ */
-/*  CBMS – PSA cross-reference (sample / illustrative data)           */
-/* ------------------------------------------------------------------ */
-// Stands in for a real CBMS (Community-Based Monitoring System) feed
-// cross-matched against PSA PhilSys data. Swap for a live API response —
-// every field below (philSysId, seniorCitizen, pwd, fourPs) maps directly
-// to a CBMS household/individual profile field.
 const CBMS_RECORDS = [
   { id: "CR-0001", name: "Juan Dela Cruz", barangay: "Barangay I (Poblacion)", recordType: "Live Birth", age: 34, philSysId: true, philSysNo: "6304-XXXX-XXXX", seniorCitizen: false, pwd: false, fourPs: true },
   { id: "CR-0002", name: "Maria Santos", barangay: "Prosperidad", recordType: "Marriage", age: 29, philSysId: true, philSysNo: "6217-XXXX-XXXX", seniorCitizen: false, pwd: false, fourPs: false },
@@ -155,12 +153,34 @@ function heatColor(value) {
   return HEAT_SCALE.find((b) => value <= b.max).color;
 }
 
-// Legible label color for text drawn on top of a heatColor() fill.
 function heatTextColor(value) {
   return HEAT_SCALE.find((b) => value <= b.max).text;
 }
 
-// Returns the number relevant to whichever certificate type is selected.
+function buildDemoScale(maxValue) {
+  const step = Math.max(Math.floor(maxValue / 5), 1);
+  const lastIndex = HEAT_SCALE.length - 1;
+
+  return HEAT_SCALE.map((s, i) => {
+    const isLast = i === lastIndex;
+    const lower = i === 0 ? 0 : step * i + 1;
+    const upper = isLast ? Infinity : step * (i + 1);
+    let label;
+    if (isLast) {
+      label = `${lower} and above`;
+    } else if (lower === upper) {
+      label = `${lower}`;
+    } else {
+      label = `${lower} - ${upper}`;
+    }
+    return { ...s, max: upper, label };
+  });
+}
+
+function colorForScale(scale, value) {
+  return scale.find((b) => value <= b.max).color;
+}
+
 function metricValue(b, certType) {
   if (certType === "Live Birth") return b.birth;
   if (certType === "Marriage") return b.marriage;
@@ -175,11 +195,6 @@ function metricLabel(certType) {
   return "Total Records";
 }
 
-function shortName(name) {
-  return name.replace(" (Poblacion)", "").replace(" (Sipaway)", "");
-}
-
-// Rounds a raw step up to a "nice" axis increment (1, 2, 5 × 10ⁿ).
 function niceStep(raw) {
   const safe = Math.max(raw, 1);
   const pow = Math.pow(10, Math.floor(Math.log10(safe)));
@@ -188,9 +203,15 @@ function niceStep(raw) {
   return m * pow;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Small presentational helpers                                      */
-/* ------------------------------------------------------------------ */
+function buildPopup(title, rows) {
+  const body = rows
+    .map(
+      (r) =>
+        `<div class="hm-popup__row${r.total ? " hm-popup__row--total" : ""}"><span>${r.label}</span><b>${r.value.toLocaleString()}</b></div>`
+    )
+    .join("");
+  return `<div class="hm-popup"><div class="hm-popup__title">${title}</div>${body}</div>`;
+}
 
 function StatCard({ icon, label, value, sub, tone, active, dim }) {
   return (
@@ -253,8 +274,6 @@ function DonutChart({ slices, size = 148, stroke = 26 }) {
   );
 }
 
-// Flat SVG progress ring (replaces the old conic-gradient) used for the
-// barangay reporting-coverage figure.
 function CoverageRing({ pct, size = 46, stroke = 6 }) {
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -288,10 +307,6 @@ function CoverageRing({ pct, size = 46, stroke = 6 }) {
   );
 }
 
-// The chart is drawn at the wrapper's real pixel width (instead of being a
-// fixed viewBox scaled down by CSS), so axis text keeps its size at every
-// breakpoint rather than shrinking to ~5px inside the 4-column layout. It
-// also gets labeled y-axis values, so the gridlines actually mean something.
 function TrendChart({ data, height = 190 }) {
   const wrapRef = useRef(null);
   const [width, setWidth] = useState(420);
@@ -370,35 +385,56 @@ function TrendChart({ data, height = 190 }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Geographic barangay map (real basemap, San Carlos City only)      */
-/* ------------------------------------------------------------------ */
-//
-// Renders an actual street map (OpenStreetMap tiles via Leaflet) restricted
-// to the San Carlos City, Negros Occidental area — the same kind of
-// real-world basemap as a Google Maps embed, but using an API-key-free tile
-// provider. `maxBounds` keeps the person from panning away to unrelated
-// parts of the world; `minZoom`/`maxZoom` keep the whole city (mainland +
-// Sipaway Island) visible without ever zooming out to the whole country.
+function DemographicDetail({ name, stats, onClose }) {
+  return (
+    <div className="demo-detail">
+      <div className="demo-detail__header">
+        <div>
+          <span className="coverage__title">{name}</span>
+          <span className="coverage__sub">
+            All residents · {stats.total.toLocaleString()} total population
+          </span>
+        </div>
+        <button className="link-btn" onClick={onClose}>
+          Close
+        </button>
+      </div>
 
-const BarangayMap = forwardRef(function BarangayMap(
-  { barangayData, certType, activeBarangay, onSelect },
-  ref
-) {
+      <div className="demo-detail__rows">
+        {DEMO_STATS.filter((s) => s.key !== "total").map((s) => {
+          const width = stats.total > 0 ? (stats[s.key] / stats.total) * 100 : 0;
+          return (
+            <div className="demo-detail__row" key={s.key}>
+              <div className="demo-detail__meta">
+                <span>{s.label}</span>
+                <b>
+                  {stats[s.key].toLocaleString()} <i>({formatPercent(stats[s.key], stats.total)}%)</i>
+                </b>
+              </div>
+              <div className="top5__bar-track">
+                <div className="top5__bar-fill" style={{ width: `${width}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onSelect }, ref) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersLayerRef = useRef(null);
 
-  // Expose imperative zoom controls to the parent's +/- buttons.
   useImperativeHandle(ref, () => ({
     zoomIn: () => mapRef.current && mapRef.current.zoomIn(),
     zoomOut: () => mapRef.current && mapRef.current.zoomOut(),
     reset: () => mapRef.current && mapRef.current.fitBounds(CITY_BOUNDS, { animate: true }),
   }));
 
-  // Initialize the map once.
   useEffect(() => {
-    if (mapRef.current || !containerRef.current) return;
+    if (mapRef.current || !containerRef.current) return undefined;
 
     const map = L.map(containerRef.current, {
       center: CITY_CENTER,
@@ -420,7 +456,6 @@ const BarangayMap = forwardRef(function BarangayMap(
 
     map.fitBounds(CITY_BOUNDS, { animate: false });
 
-    // City boundary halo, purely for orientation (San Carlos City area).
     L.rectangle(CITY_BOUNDS, {
       color: "#2e5fe8",
       weight: 1.5,
@@ -431,7 +466,6 @@ const BarangayMap = forwardRef(function BarangayMap(
 
     L.control.scale({ position: "bottomleft", imperial: false }).addTo(map);
 
-    // Reference points just outside the city, for orientation only.
     REFERENCE_POINTS.forEach((p) => {
       const icon = L.divIcon({
         className: "ref-point-icon",
@@ -450,8 +484,6 @@ const BarangayMap = forwardRef(function BarangayMap(
     };
   }, []);
 
-  // Re-draw the barangay markers whenever the data, filter, or selection
-  // changes. Each barangay is plotted at its real coordinates.
   useEffect(() => {
     const map = mapRef.current;
     const layer = markersLayerRef.current;
@@ -459,21 +491,16 @@ const BarangayMap = forwardRef(function BarangayMap(
 
     layer.clearLayers();
 
-    const maxVal = Math.max(...barangayData.map((b) => metricValue(b, certType)), 1);
+    const maxVal = Math.max(...items.map((item) => item.value), 1);
 
-    barangayData.forEach((b) => {
-      const coords = BARANGAY_COORDS[b.name];
+    items.forEach((item) => {
+      const coords = BARANGAY_COORDS[item.name];
       if (!coords) return;
 
-      const val = metricValue(b, certType);
-      const isPoblacion = POBLACION_ORDER.includes(b.name);
-      const isActive = activeBarangay === b.name;
-      const label = isPoblacion
-        ? POBLACION_SHORT[POBLACION_ORDER.indexOf(b.name)]
-        : shortName(b.name);
-
-      const baseRadius = b.hasRecords ? 9 + (val / maxVal) * 11 : 7;
-      const color = b.hasRecords ? heatColor(val) : "#9aa2b5";
+      const poblacionIndex = POBLACION_ORDER.indexOf(item.name);
+      const tooltipTitle = poblacionIndex >= 0 ? POBLACION_SHORT[poblacionIndex] : item.name;
+      const isActive = activeBarangay === item.name;
+      const baseRadius = item.hasData ? 9 + (item.value / maxVal) * 11 : 7;
 
       if (isActive) {
         L.circleMarker([coords.lat, coords.lng], {
@@ -489,54 +516,72 @@ const BarangayMap = forwardRef(function BarangayMap(
         radius: baseRadius,
         color: "#ffffff",
         weight: 2,
-        fillColor: color,
+        fillColor: item.color,
         fillOpacity: 0.92,
       }).addTo(layer);
 
-      marker.bindTooltip(
-        `<b>${isPoblacion ? label : b.name}</b><br/>${
-          b.hasRecords ? `${val} ${metricLabel(certType).toLowerCase()}` : "No records yet"
-        }`,
-        { direction: "top", offset: [0, -baseRadius], opacity: 0.95, className: "hm-tooltip" }
-      );
+      marker.bindTooltip(`<b>${tooltipTitle}</b><br/>${item.tooltip}`, {
+        direction: "top",
+        offset: [0, -baseRadius],
+        opacity: 0.95,
+        className: "hm-tooltip",
+      });
 
-      marker.bindPopup(
-        `<div class="hm-popup">
-           <div class="hm-popup__title">${b.name}</div>
-           <div class="hm-popup__row"><span>Live Birth</span><b>${b.birth}</b></div>
-           <div class="hm-popup__row"><span>Marriage</span><b>${b.marriage}</b></div>
-           <div class="hm-popup__row"><span>Death</span><b>${b.death}</b></div>
-           <div class="hm-popup__row hm-popup__row--total"><span>Total</span><b>${b.total}</b></div>
-         </div>`
-      );
-
-      marker.on("click", () => onSelect(b));
+      marker.bindPopup(item.popup);
+      marker.on("click", () => onSelect(item.name));
       layer.addLayer(marker);
     });
-  }, [barangayData, certType, activeBarangay, onSelect]);
+  }, [items, activeBarangay, onSelect]);
 
   return <div ref={containerRef} className="leaflet-map-surface" role="img" aria-label="Map of San Carlos City barangays" />;
 });
 
-/* ------------------------------------------------------------------ */
-/*  Main component                                                    */
-/* ------------------------------------------------------------------ */
-
 export default function Heatmaps() {
+  const [viewMode, setViewMode] = useState(VIEW_CIVIL);
   const [certType, setCertType] = useState("All Certificates");
   const [year, setYear] = useState("2026");
   const [activeBarangay, setActiveBarangay] = useState(null);
   const [showLateReg, setShowLateReg] = useState(false);
   const mapControlRef = useRef(null);
 
-  // CBMS × PSA cross-reference filters
+  const [demoType, setDemoType] = useState("total");
+  const [ageGroup, setAgeGroup] = useState("all");
+  const [employment, setEmployment] = useState("all");
+  const [voting, setVoting] = useState("all");
+  const [residentRows, setResidentRows] = useState([]);
+  const [residentStatus, setResidentStatus] = useState("idle");
+
   const [cbmsBarangayFilter, setCbmsBarangayFilter] = useState("Follow Map Selection");
   const [cbmsIdFilter, setCbmsIdFilter] = useState("all");
   const [cbmsSeniorOnly, setCbmsSeniorOnly] = useState(false);
   const [cbmsPwdOnly, setCbmsPwdOnly] = useState(false);
   const [cbmsFourPsOnly, setCbmsFourPsOnly] = useState(false);
 
-  // Re-scale the base dataset whenever the Year filter changes.
+  const isDemo = viewMode === VIEW_DEMOGRAPHICS;
+
+  const loadResidents = useCallback(async () => {
+    setResidentStatus("loading");
+    try {
+      const rows = await fetchResidents();
+      setResidentRows(rows);
+      setResidentStatus("ready");
+    } catch (err) {
+      console.error("Resident load failed:", err);
+      setResidentStatus("error");
+      pushToast({
+        title: "Could not load residents",
+        message: "Resident profiling records could not be retrieved. Please try again.",
+        success: false,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isDemo && residentStatus === "idle") {
+      loadResidents();
+    }
+  }, [isDemo, residentStatus, loadResidents]);
+
   const barangayData = useMemo(() => {
     const mult = YEAR_MULTIPLIERS[year] ?? 1;
     return RAW_BARANGAY_DATA.map((b) => {
@@ -548,7 +593,6 @@ export default function Heatmaps() {
     });
   }, [year]);
 
-  // Sort by whichever metric the Certificate Type filter points at.
   const sorted = useMemo(
     () => [...barangayData].sort((a, b) => metricValue(b, certType) - metricValue(a, certType)),
     [barangayData, certType]
@@ -579,20 +623,105 @@ export default function Heatmaps() {
     }));
   }, [year]);
 
-  const top5 = sorted.slice(0, 5);
-  const maxTop5 = metricValue(top5[0], certType) || 1;
+  const classified = useMemo(() => prepareResidents(residentRows, BARANGAY_NAMES), [residentRows]);
+
+  const allStatsByBarangay = useMemo(
+    () => aggregateByBarangay(classified.records, BARANGAY_NAMES),
+    [classified]
+  );
+
+  const filteredStatsByBarangay = useMemo(
+    () =>
+      aggregateByBarangay(
+        filterRecords(classified.records, { ageGroup, employment, voting }),
+        BARANGAY_NAMES
+      ),
+    [classified, ageGroup, employment, voting]
+  );
+
+  const demoTypeLabel = DEMOGRAPHIC_TYPES.find((t) => t.value === demoType).label;
+
+  const demoRows = useMemo(
+    () =>
+      BARANGAY_NAMES.map((name) => {
+        const stats = filteredStatsByBarangay[name];
+        return {
+          name,
+          stats,
+          value: stats[demoType],
+          hasData: allStatsByBarangay[name].total > 0,
+        };
+      }).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name)),
+    [filteredStatsByBarangay, allStatsByBarangay, demoType]
+  );
+
+  const demoTotals = useMemo(
+    () => sumStats(Object.values(filteredStatsByBarangay)),
+    [filteredStatsByBarangay]
+  );
+
+  const demoScale = useMemo(
+    () => buildDemoScale(Math.max(...demoRows.map((r) => r.value), 0)),
+    [demoRows]
+  );
+
+  const demoScope = activeBarangay ? filteredStatsByBarangay[activeBarangay] : demoTotals;
+  const demoSelected = activeBarangay ? demoRows.find((r) => r.name === activeBarangay) : null;
+
+  const mapItems = useMemo(() => {
+    if (isDemo) {
+      return demoRows.map((r) => ({
+        name: r.name,
+        value: r.value,
+        hasData: r.hasData,
+        color: r.hasData ? colorForScale(demoScale, r.value) : NO_DATA_COLOR,
+        tooltip: r.hasData
+          ? `${r.value.toLocaleString()} ${demoTypeLabel.toLowerCase()}`
+          : "No resident records yet",
+        popup: buildPopup(r.name, [
+          ...DEMO_STATS.filter((s) => s.key !== "total").map((s) => ({
+            label: s.label,
+            value: r.stats[s.key],
+          })),
+          { label: "Total Population", value: r.stats.total, total: true },
+        ]),
+      }));
+    }
+
+    return sorted.map((b) => {
+      const val = metricValue(b, certType);
+      return {
+        name: b.name,
+        value: val,
+        hasData: b.hasRecords,
+        color: b.hasRecords ? heatColor(val) : NO_DATA_COLOR,
+        tooltip: b.hasRecords ? `${val} ${metricLabel(certType).toLowerCase()}` : "No records yet",
+        popup: buildPopup(b.name, [
+          { label: "Live Birth", value: b.birth },
+          { label: "Marriage", value: b.marriage },
+          { label: "Death", value: b.death },
+          { label: "Total", value: b.total, total: true },
+        ]),
+      };
+    });
+  }, [isDemo, demoRows, demoScale, demoTypeLabel, sorted, certType]);
+
+  const rankedList = useMemo(
+    () =>
+      isDemo
+        ? demoRows.map((r) => ({ name: r.name, value: r.value }))
+        : sorted.map((b) => ({ name: b.name, value: metricValue(b, certType) })),
+    [isDemo, demoRows, sorted, certType]
+  );
+
+  const top5 = rankedList.slice(0, 5);
+  const maxTop5 = top5.length > 0 ? top5[0].value || 1 : 1;
 
   const selectedBarangay = activeBarangay ? sorted.find((b) => b.name === activeBarangay) : null;
 
-  // Barangays that already have submitted civil registry records vs. those
-  // that don't yet — ordered to match the current metric/sort.
   const reportingBarangays = useMemo(() => sorted.filter((b) => b.hasRecords), [sorted]);
   const pendingBarangays = useMemo(() => sorted.filter((b) => !b.hasRecords), [sorted]);
   const coveragePct = ((reportingBarangays.length / barangayData.length) * 100).toFixed(0);
-
-  /* -------------------------------------------------------------- */
-  /*  CBMS × PSA cross-reference                                    */
-  /* -------------------------------------------------------------- */
 
   const cbmsStats = useMemo(() => {
     const total = CBMS_RECORDS.length;
@@ -613,7 +742,7 @@ export default function Heatmaps() {
   const effectiveCbmsBarangay =
     cbmsBarangayFilter === "Follow Map Selection"
       ? activeBarangay
-      : cbmsBarangayFilter === "All Barangays"
+      : cbmsBarangayFilter === ALL_BARANGAYS
       ? null
       : cbmsBarangayFilter;
 
@@ -629,17 +758,46 @@ export default function Heatmaps() {
     });
   }, [effectiveCbmsBarangay, cbmsIdFilter, cbmsSeniorOnly, cbmsPwdOnly, cbmsFourPsOnly]);
 
-  function handleTileClick(b) {
-    if (!b.hasRecords) {
-      pushToast({
-        title: "No records yet",
-        message: `${b.name} has no submitted civil registry records for ${year}.`,
-        success: false,
-        duration: 3500,
-      });
-      return;
-    }
-    setActiveBarangay(b.name === activeBarangay ? null : b.name);
+  const handleSelectBarangay = useCallback(
+    (name) => {
+      if (isDemo) {
+        if (residentStatus !== "ready") return;
+        if (!allStatsByBarangay[name].total) {
+          pushToast({
+            title: "No resident records",
+            message: `${name} has no resident profiling records.`,
+            success: false,
+            duration: 3500,
+          });
+          return;
+        }
+      } else {
+        const b = barangayData.find((x) => x.name === name);
+        if (!b || !b.hasRecords) {
+          pushToast({
+            title: "No records yet",
+            message: `${name} has no submitted civil registry records for ${year}.`,
+            success: false,
+            duration: 3500,
+          });
+          return;
+        }
+      }
+      setActiveBarangay((prev) => (prev === name ? null : name));
+    },
+    [isDemo, residentStatus, allStatsByBarangay, barangayData, year]
+  );
+
+  function downloadCsv(csv, filename) {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function handleExport() {
@@ -668,6 +826,51 @@ export default function Heatmaps() {
       });
     } catch (err) {
       console.error("Export failed:", err);
+      pushToast({
+        title: "Export failed",
+        message: "Something went wrong while generating the report. Please try again.",
+        success: false,
+      });
+    }
+  }
+
+  function handleExportDemographics() {
+    try {
+      if (residentStatus !== "ready" || classified.records.length === 0) {
+        pushToast({
+          title: "Nothing to export",
+          message: "No resident records are available to export.",
+          success: false,
+        });
+        return;
+      }
+
+      const header = ["No", "Barangay", ...DEMO_STATS.map((s) => s.label)];
+      const rows = demoRows.map((r, i) => [
+        i + 1,
+        `"${r.name}"`,
+        ...DEMO_STATS.map((s) => r.stats[s.key]),
+      ]);
+      const meta = [
+        `Demographic Type,${demoTypeLabel}`,
+        `Age Group,${AGE_GROUPS.find((f) => f.value === ageGroup).label}`,
+        `Employment,${EMPLOYMENT_FILTERS.find((f) => f.value === employment).label}`,
+        `Voting,${VOTING_FILTERS.find((f) => f.value === voting).label}`,
+        `Generated,"${new Date().toLocaleString()}"`,
+        "",
+      ];
+      const csv = [...meta, header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      const filename = `heatmaps-demographics-${demoType}.csv`;
+      downloadCsv(csv, filename);
+
+      pushToast({
+        title: "Report downloaded!",
+        message: `${filename} · ${demoTypeLabel}`,
+        success: true,
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error("Demographics export failed:", err);
       pushToast({
         title: "Export failed",
         message: "Something went wrong while generating the report. Please try again.",
@@ -711,7 +914,7 @@ export default function Heatmaps() {
         r.fourPs ? "Yes" : "No",
       ]);
       const meta = [
-        `Barangay Filter,${effectiveCbmsBarangay || "All Barangays"}`,
+        `Barangay Filter,${effectiveCbmsBarangay || ALL_BARANGAYS}`,
         `PhilSys Filter,${ID_FILTERS.find((f) => f.value === cbmsIdFilter)?.label}`,
         `Generated,${new Date().toLocaleString()}`,
         "",
@@ -736,18 +939,6 @@ export default function Heatmaps() {
     }
   }
 
-  function downloadCsv(csv, filename) {
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
   function handleToggleLateReg() {
     setShowLateReg((v) => {
       const next = !v;
@@ -764,66 +955,176 @@ export default function Heatmaps() {
   }
 
   function clearCbmsFilters() {
-    setCbmsBarangayFilter("All Barangays");
+    setCbmsBarangayFilter(ALL_BARANGAYS);
     setCbmsIdFilter("all");
     setCbmsSeniorOnly(false);
     setCbmsPwdOnly(false);
     setCbmsFourPsOnly(false);
   }
 
+  const mapTitle = isDemo ? demoTypeLabel : metricLabel(certType);
+  const legendScale = isDemo ? demoScale : HEAT_SCALE;
+
+  let legendHint;
+  if (isDemo) {
+    legendHint = demoSelected
+      ? `${demoSelected.name}: ${demoSelected.value.toLocaleString()} ${demoTypeLabel.toLowerCase()} (${formatPercent(
+          demoSelected.value,
+          demoTotals[demoType]
+        )}% of citywide). Click again to clear.`
+      : "Click a barangay marker to highlight it in the table and see its full demographic breakdown below.";
+  } else {
+    legendHint = selectedBarangay
+      ? `${selectedBarangay.name}: ${selectedBarangay.birth} birth, ${selectedBarangay.marriage} marriage, ${selectedBarangay.death} death, ${selectedBarangay.total} total (${((selectedBarangay.total / totals.all) * 100).toFixed(1)}% of citywide). Click again to clear.`
+      : "Click a barangay marker to highlight it in the table and see its breakdown here.";
+  }
+
+  let demoNotice = null;
+  if (isDemo) {
+    if (residentStatus === "loading" || residentStatus === "idle") {
+      demoNotice = { tone: "info", text: "Loading resident records…" };
+    } else if (residentStatus === "error") {
+      demoNotice = { tone: "error", text: "Resident records could not be loaded.", retry: true };
+    } else if (classified.records.length === 0) {
+      demoNotice = { tone: "info", text: "No resident records are available for the Heatmap yet." };
+    }
+  }
+
   return (
     <div className="heatmaps">
-
-      {/* ---------------------------------------------------------- */}
-      {/* Header                                                    */}
-      {/* ---------------------------------------------------------- */}
       <header className="heatmaps__header">
         <div>
           <h1>Heatmaps</h1>
-          <p>Geographic distribution of civil registry records per barangay</p>
+          <p>
+            {isDemo
+              ? "Demographic distribution of residents per barangay"
+              : "Geographic distribution of civil registry records per barangay"}
+          </p>
         </div>
 
         <div className="heatmaps__filters">
-          <label className="filter">
-            <span>Certificate Type</span>
-            <select value={certType} onChange={(e) => setCertType(e.target.value)}>
-              {CERT_TYPES.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="filter">
-            <span>Year</span>
-            <select value={year} onChange={(e) => setYear(e.target.value)}>
-              {YEARS.map((y) => (
-                <option key={y}>{y}</option>
-              ))}
-            </select>
-          </label>
-
-          {/* Display-only, so a div rather than a <label> with no control inside. */}
           <div className="filter">
-            <span>Date Range</span>
-            <div className="filter__range">Jan 1, {year} – May 30, {year}</div>
+            <span>View</span>
+            <div className="toggle-row">
+              <button
+                className={`toggle-chip${!isDemo ? " toggle-chip--active" : ""}`}
+                onClick={() => setViewMode(VIEW_CIVIL)}
+              >
+                Civil Registry
+              </button>
+              <button
+                className={`toggle-chip${isDemo ? " toggle-chip--active" : ""}`}
+                onClick={() => setViewMode(VIEW_DEMOGRAPHICS)}
+              >
+                Demographics
+              </button>
+            </div>
           </div>
 
-          <button className="btn-primary" onClick={handleExport}>
+          {isDemo ? (
+            <>
+              <label className="filter">
+                <span>Demographic Type</span>
+                <select value={demoType} onChange={(e) => setDemoType(e.target.value)}>
+                  {DEMOGRAPHIC_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="filter">
+                <span>Barangay</span>
+                <select
+                  value={activeBarangay || ALL_BARANGAYS}
+                  onChange={(e) => setActiveBarangay(e.target.value === ALL_BARANGAYS ? null : e.target.value)}
+                >
+                  <option value={ALL_BARANGAYS}>{ALL_BARANGAYS}</option>
+                  {BARANGAY_NAMES.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="filter">
+                <span>Age Group</span>
+                <select value={ageGroup} onChange={(e) => setAgeGroup(e.target.value)}>
+                  {AGE_GROUPS.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="filter">
+                <span>Employment Status</span>
+                <select value={employment} onChange={(e) => setEmployment(e.target.value)}>
+                  {EMPLOYMENT_FILTERS.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="filter">
+                <span>Voting Status</span>
+                <select value={voting} onChange={(e) => setVoting(e.target.value)}>
+                  {VOTING_FILTERS.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="filter">
+                <span>Certificate Type</span>
+                <select value={certType} onChange={(e) => setCertType(e.target.value)}>
+                  {CERT_TYPES.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="filter">
+                <span>Year</span>
+                <select value={year} onChange={(e) => setYear(e.target.value)}>
+                  {YEARS.map((y) => (
+                    <option key={y}>{y}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="filter">
+                <span>Date Range</span>
+                <div className="filter__range">Jan 1, {year} – May 30, {year}</div>
+              </div>
+            </>
+          )}
+
+          <button className="btn-primary" onClick={isDemo ? handleExportDemographics : handleExport}>
             <ExportIcon /> Export Report
           </button>
         </div>
       </header>
 
-      {/* ---------------------------------------------------------- */}
-      {/* Top row: heat map + right column                          */}
-      {/* ---------------------------------------------------------- */}
       <section className="heatmaps__top">
-        {/* ---- Heat map card ---- */}
         <div className="card heat-card">
           <div className="card__header">
             <div>
-              <h2>{metricLabel(certType)} per Barangay</h2>
-              <p className="card__subtitle">San Carlos City, Negros Occidental ({year})</p>
+              <h2>{mapTitle} per Barangay</h2>
+              <p className="card__subtitle">
+                {isDemo
+                  ? "San Carlos City, Negros Occidental (Resident Profiling)"
+                  : `San Carlos City, Negros Occidental (${year})`}
+              </p>
             </div>
             <div className="zoom-controls">
               <button onClick={() => mapControlRef.current?.zoomIn()} aria-label="Zoom in" title="Zoom in">
@@ -842,13 +1143,23 @@ export default function Heatmaps() {
             </div>
           </div>
 
+          {demoNotice && (
+            <div className={`demo-status${demoNotice.tone === "error" ? " demo-status--error" : ""}`}>
+              <span>{demoNotice.text}</span>
+              {demoNotice.retry && (
+                <button className="link-btn" onClick={loadResidents}>
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="heat-grid-wrap">
             <BarangayMap
               ref={mapControlRef}
-              barangayData={sorted}
-              certType={certType}
+              items={mapItems}
               activeBarangay={activeBarangay}
-              onSelect={handleTileClick}
+              onSelect={handleSelectBarangay}
             />
           </div>
           <p className="heat-map-note">
@@ -857,182 +1168,255 @@ export default function Heatmaps() {
           </p>
 
           <div className="legend">
-            <span className="legend__title">Legend ({metricLabel(certType)})</span>
+            <span className="legend__title">Legend ({mapTitle})</span>
             <div className="legend__items">
-              {HEAT_SCALE.map((s) => (
+              {legendScale.map((s) => (
                 <div className="legend__item" key={s.label}>
                   <i style={{ background: s.color }} />
                   {s.label}
                 </div>
               ))}
               <div className="legend__item">
-                <i style={{ background: "#9aa2b5" }} />
-                No Records Yet
+                <i style={{ background: NO_DATA_COLOR }} />
+                {isDemo ? "No Resident Records" : "No Records Yet"}
               </div>
             </div>
-            <p className="legend__hint">
-              {selectedBarangay
-                ? `${selectedBarangay.name}: ${selectedBarangay.birth} birth, ${selectedBarangay.marriage} marriage, ${selectedBarangay.death} death, ${selectedBarangay.total} total (${((selectedBarangay.total / totals.all) * 100).toFixed(1)}% of citywide). Click again to clear.`
-                : "Click a barangay marker to highlight it in the table and see its breakdown here."}
-            </p>
+            <p className="legend__hint">{legendHint}</p>
           </div>
 
-          {/* ---- Barangays that already have records ---- */}
-          <div className="coverage">
-            <div className="coverage__summary">
-              <CoverageRing pct={Number(coveragePct)} />
-              <div>
-                <span className="coverage__title">Barangay Reporting Coverage</span>
-                <span className="coverage__sub">
-                  {reportingBarangays.length} of {barangayData.length} barangays have submitted civil registry
-                  records{pendingBarangays.length > 0 ? `, ${pendingBarangays.length} pending` : ""}
-                </span>
+          {isDemo ? (
+            activeBarangay && (
+              <DemographicDetail
+                name={activeBarangay}
+                stats={allStatsByBarangay[activeBarangay]}
+                onClose={() => setActiveBarangay(null)}
+              />
+            )
+          ) : (
+            <div className="coverage">
+              <div className="coverage__summary">
+                <CoverageRing pct={Number(coveragePct)} />
+                <div>
+                  <span className="coverage__title">Barangay Reporting Coverage</span>
+                  <span className="coverage__sub">
+                    {reportingBarangays.length} of {barangayData.length} barangays have submitted civil registry
+                    records{pendingBarangays.length > 0 ? `, ${pendingBarangays.length} pending` : ""}
+                  </span>
+                </div>
               </div>
-            </div>
 
-            <div className="coverage__group">
-              <span className="coverage__label">
-                <i className="coverage__dot coverage__dot--reporting" />
-                Areas with records ({reportingBarangays.length})
-              </span>
-              <div className="coverage__chips">
-                {reportingBarangays.map((b) => (
-                  <button
-                    key={b.name}
-                    className={`chip chip--reporting${activeBarangay === b.name ? " chip--active" : ""}`}
-                    onClick={() => handleTileClick(b)}
-                    title={`View ${b.name} in the table below`}
-                  >
-                    {b.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {pendingBarangays.length > 0 && (
               <div className="coverage__group">
                 <span className="coverage__label">
-                  <i className="coverage__dot coverage__dot--pending" />
-                  Not yet reporting ({pendingBarangays.length})
+                  <i className="coverage__dot coverage__dot--reporting" />
+                  Areas with records ({reportingBarangays.length})
                 </span>
                 <div className="coverage__chips">
-                  {pendingBarangays.map((b) => (
+                  {reportingBarangays.map((b) => (
                     <button
                       key={b.name}
-                      className="chip chip--pending"
-                      onClick={() => handleTileClick(b)}
-                      title={`${b.name} has no submitted records`}
+                      className={`chip chip--reporting${activeBarangay === b.name ? " chip--active" : ""}`}
+                      onClick={() => handleSelectBarangay(b.name)}
+                      title={`View ${b.name} in the table below`}
                     >
                       {b.name}
                     </button>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
+
+              {pendingBarangays.length > 0 && (
+                <div className="coverage__group">
+                  <span className="coverage__label">
+                    <i className="coverage__dot coverage__dot--pending" />
+                    Not yet reporting ({pendingBarangays.length})
+                  </span>
+                  <div className="coverage__chips">
+                    {pendingBarangays.map((b) => (
+                      <button
+                        key={b.name}
+                        className="chip chip--pending"
+                        onClick={() => handleSelectBarangay(b.name)}
+                        title={`${b.name} has no submitted records`}
+                      >
+                        {b.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* ---- Right column: stats + table ---- */}
         <div className="heat-card__side">
-          <div className="stat-grid">
-            <StatCard
-              tone="total"
-              icon={<UsersIcon />}
-              label="Total Records"
-              value={totals.all}
-              sub="All Certificates"
-              active={certType === "All Certificates"}
-            />
-            <StatCard
-              tone="birth"
-              icon={<BirthIcon />}
-              label="Live Birth Records"
-              value={totals.birth}
-              sub={`${((totals.birth / totals.all) * 100).toFixed(2)}% of total`}
-              active={certType === "Live Birth"}
-              dim={certType !== "All Certificates" && certType !== "Live Birth"}
-            />
-            <StatCard
-              tone="marriage"
-              icon={<MarriageIcon />}
-              label="Marriage Records"
-              value={totals.marriage}
-              sub={`${((totals.marriage / totals.all) * 100).toFixed(2)}% of total`}
-              active={certType === "Marriage"}
-              dim={certType !== "All Certificates" && certType !== "Marriage"}
-            />
-            <StatCard
-              tone="death"
-              icon={<DeathIcon />}
-              label="Death Records"
-              value={totals.death}
-              sub={`${((totals.death / totals.all) * 100).toFixed(2)}% of total`}
-              active={certType === "Death"}
-              dim={certType !== "All Certificates" && certType !== "Death"}
-            />
-          </div>
+          {isDemo ? (
+            <>
+              <div className="stat-grid">
+                {DEMO_STATS.map((s) => (
+                  <StatCard
+                    key={s.key}
+                    tone="demo"
+                    icon={s.key === "voting" || s.key === "nonVoting" ? <VoteIcon /> : <UsersIcon />}
+                    label={s.label}
+                    value={demoScope[s.key]}
+                    sub={
+                      s.key === "total"
+                        ? activeBarangay || ALL_BARANGAYS
+                        : `${formatPercent(demoScope[s.key], demoScope.total)}% of total`
+                    }
+                    active={demoType === s.key}
+                    dim={demoType !== "total" && demoType !== s.key}
+                  />
+                ))}
+              </div>
 
-          <div className="card table-card">
-            <div className="card__header">
-              <h2>Records Breakdown per Barangay</h2>
-            </div>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>No</th>
-                    <th>Barangay</th>
-                    <th className={`num${certType === "Live Birth" ? " th--highlight" : ""}`}>Birth</th>
-                    <th className={`num${certType === "Marriage" ? " th--highlight" : ""}`}>Marriage</th>
-                    <th className={`num${certType === "Death" ? " th--highlight" : ""}`}>Death</th>
-                    <th className="num">Total Records</th>
-                    <th className="num">% of Total</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sorted.map((b, i) => (
-                    <tr
-                      key={b.name}
-                      className={activeBarangay === b.name ? "row--active" : ""}
-                      onClick={() => handleTileClick(b)}
-                    >
-                      <td>{i + 1}</td>
-                      <td>{b.name}</td>
-                      <td className={`num${certType === "Live Birth" ? " cell--highlight" : ""}`}>{b.birth}</td>
-                      <td className={`num${certType === "Marriage" ? " cell--highlight" : ""}`}>{b.marriage}</td>
-                      <td className={`num${certType === "Death" ? " cell--highlight" : ""}`}>{b.death}</td>
-                      <td className="num cell--strong">{b.total}</td>
-                      <td className="num">
-                        <span
-                          className="pct-pill"
-                          style={{ background: heatColor(b.total), color: heatTextColor(b.total) }}
+              <div className="card table-card">
+                <div className="card__header">
+                  <h2>Demographics Breakdown per Barangay</h2>
+                </div>
+                <div className="table-scroll">
+                  <table className="demo-table">
+                    <thead>
+                      <tr>
+                        <th>No</th>
+                        <th>Barangay</th>
+                        {DEMO_STATS.map((s) => (
+                          <th key={s.key} className={`num${demoType === s.key ? " th--highlight" : ""}`}>
+                            {s.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {demoRows.map((r, i) => (
+                        <tr
+                          key={r.name}
+                          className={activeBarangay === r.name ? "row--active" : ""}
+                          onClick={() => handleSelectBarangay(r.name)}
                         >
-                          {((b.total / totals.all) * 100).toFixed(2)}%
-                        </span>
-                      </td>
-                      <td>
-                        {b.hasRecords ? (
-                          <span className="status-pill status-pill--yes">Has Records</span>
-                        ) : (
-                          <span className="status-pill status-pill--no">No Records</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="table-footnote">
-              Showing {sorted.length} of {sorted.length} barangays, sorted by {metricLabel(certType).toLowerCase()}
-            </p>
-          </div>
+                          <td>{i + 1}</td>
+                          <td>{r.name}</td>
+                          {DEMO_STATS.map((s) => (
+                            <td
+                              key={s.key}
+                              className={`num${demoType === s.key ? " cell--highlight" : s.key === "total" ? " cell--strong" : ""}`}
+                            >
+                              {r.stats[s.key].toLocaleString()}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="table-footnote">
+                  Showing {demoRows.length} of {demoRows.length} barangays, sorted by {demoTypeLabel.toLowerCase()}
+                  {classified.skipped > 0
+                    ? ` · ${classified.skipped.toLocaleString()} resident record(s) skipped (missing barangay or age)`
+                    : ""}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="stat-grid">
+                <StatCard
+                  tone="total"
+                  icon={<UsersIcon />}
+                  label="Total Records"
+                  value={totals.all}
+                  sub="All Certificates"
+                  active={certType === "All Certificates"}
+                />
+                <StatCard
+                  tone="birth"
+                  icon={<BirthIcon />}
+                  label="Live Birth Records"
+                  value={totals.birth}
+                  sub={`${((totals.birth / totals.all) * 100).toFixed(2)}% of total`}
+                  active={certType === "Live Birth"}
+                  dim={certType !== "All Certificates" && certType !== "Live Birth"}
+                />
+                <StatCard
+                  tone="marriage"
+                  icon={<MarriageIcon />}
+                  label="Marriage Records"
+                  value={totals.marriage}
+                  sub={`${((totals.marriage / totals.all) * 100).toFixed(2)}% of total`}
+                  active={certType === "Marriage"}
+                  dim={certType !== "All Certificates" && certType !== "Marriage"}
+                />
+                <StatCard
+                  tone="death"
+                  icon={<DeathIcon />}
+                  label="Death Records"
+                  value={totals.death}
+                  sub={`${((totals.death / totals.all) * 100).toFixed(2)}% of total`}
+                  active={certType === "Death"}
+                  dim={certType !== "All Certificates" && certType !== "Death"}
+                />
+              </div>
+
+              <div className="card table-card">
+                <div className="card__header">
+                  <h2>Records Breakdown per Barangay</h2>
+                </div>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>No</th>
+                        <th>Barangay</th>
+                        <th className={`num${certType === "Live Birth" ? " th--highlight" : ""}`}>Birth</th>
+                        <th className={`num${certType === "Marriage" ? " th--highlight" : ""}`}>Marriage</th>
+                        <th className={`num${certType === "Death" ? " th--highlight" : ""}`}>Death</th>
+                        <th className="num">Total Records</th>
+                        <th className="num">% of Total</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sorted.map((b, i) => (
+                        <tr
+                          key={b.name}
+                          className={activeBarangay === b.name ? "row--active" : ""}
+                          onClick={() => handleSelectBarangay(b.name)}
+                        >
+                          <td>{i + 1}</td>
+                          <td>{b.name}</td>
+                          <td className={`num${certType === "Live Birth" ? " cell--highlight" : ""}`}>{b.birth}</td>
+                          <td className={`num${certType === "Marriage" ? " cell--highlight" : ""}`}>{b.marriage}</td>
+                          <td className={`num${certType === "Death" ? " cell--highlight" : ""}`}>{b.death}</td>
+                          <td className="num cell--strong">{b.total}</td>
+                          <td className="num">
+                            <span
+                              className="pct-pill"
+                              style={{ background: heatColor(b.total), color: heatTextColor(b.total) }}
+                            >
+                              {((b.total / totals.all) * 100).toFixed(2)}%
+                            </span>
+                          </td>
+                          <td>
+                            {b.hasRecords ? (
+                              <span className="status-pill status-pill--yes">Has Records</span>
+                            ) : (
+                              <span className="status-pill status-pill--no">No Records</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="table-footnote">
+                  Showing {sorted.length} of {sorted.length} barangays, sorted by {metricLabel(certType).toLowerCase()}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
-      {/* ---------------------------------------------------------- */}
-      {/* CBMS × PSA cross-reference                                 */}
-      {/* ---------------------------------------------------------- */}
       <section className="heatmaps__cbms">
         <div className="card cbms-card">
           <div className="card__header">
@@ -1075,7 +1459,7 @@ export default function Heatmaps() {
               <span>Barangay</span>
               <select value={cbmsBarangayFilter} onChange={(e) => setCbmsBarangayFilter(e.target.value)}>
                 <option>Follow Map Selection</option>
-                <option>All Barangays</option>
+                <option>{ALL_BARANGAYS}</option>
                 {barangayData.map((b) => (
                   <option key={b.name}>{b.name}</option>
                 ))}
@@ -1125,7 +1509,7 @@ export default function Heatmaps() {
           {effectiveCbmsBarangay && (
             <p className="cbms-scope">
               Showing individuals in <b>{effectiveCbmsBarangay}</b> only.{" "}
-              <button className="link-btn" onClick={() => setCbmsBarangayFilter("All Barangays")}>
+              <button className="link-btn" onClick={() => setCbmsBarangayFilter(ALL_BARANGAYS)}>
                 View all barangays
               </button>
             </p>
@@ -1187,9 +1571,6 @@ export default function Heatmaps() {
         </div>
       </section>
 
-      {/* ---------------------------------------------------------- */}
-      {/* Bottom row                                                 */}
-      {/* ---------------------------------------------------------- */}
       <section className="heatmaps__bottom">
         <div className="card">
           <h2>Records Distribution by Type</h2>
@@ -1237,21 +1618,18 @@ export default function Heatmaps() {
         </div>
 
         <div className="card">
-          <h2>Top 5 Barangays by {metricLabel(certType)}</h2>
+          <h2>Top 5 Barangays by {mapTitle}</h2>
           <div className="top5">
-            {top5.map((b, i) => {
-              const val = metricValue(b, certType);
-              return (
-                <div className="top5__row" key={b.name}>
-                  <span className="top5__rank">{i + 1}</span>
-                  <span className="top5__name">{b.name}</span>
-                  <div className="top5__bar-track">
-                    <div className="top5__bar-fill" style={{ width: `${(val / maxTop5) * 100}%` }} />
-                  </div>
-                  <span className="top5__value">{val}</span>
+            {top5.map((b, i) => (
+              <div className="top5__row" key={b.name}>
+                <span className="top5__rank">{i + 1}</span>
+                <span className="top5__name">{b.name}</span>
+                <div className="top5__bar-track">
+                  <div className="top5__bar-fill" style={{ width: `${(b.value / maxTop5) * 100}%` }} />
                 </div>
-              );
-            })}
+                <span className="top5__value">{b.value.toLocaleString()}</span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -1321,10 +1699,6 @@ export default function Heatmaps() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Icons (inline SVG, no external deps)                              */
-/* ------------------------------------------------------------------ */
-
 function ExportIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -1348,6 +1722,14 @@ function UsersIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+function VoteIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2" />
+      <path d="m8 12 3 3 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -1388,7 +1770,6 @@ function InfoIcon() {
     </svg>
   );
 }
-// Clock glyph (was a warning triangle, which mislabeled an informational note).
 function NoteIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
