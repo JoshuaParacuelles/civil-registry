@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL || ''
+const API = import.meta.env.VITE_API_BASE_URL || ''
 
 let online = typeof navigator !== 'undefined' ? navigator.onLine : true
 const listeners = new Set()

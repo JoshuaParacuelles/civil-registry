@@ -1,4 +1,3 @@
-// src/context/PermissionContext.jsx
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { lock } from "../offline/offlineAuth";
 import { cacheClear } from "../offline/cache";
@@ -19,7 +18,7 @@ const PermissionContext = createContext({
   hasAccess:            () => false,
   refresh:              async () => {},
   clearPerms:           () => {},
-  logout:               async () => {},
+  logout:              async () => {},
 });
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
@@ -154,6 +153,11 @@ export function PermissionProvider({ children }) {
     });
     return inFlight.current;
   }, [clearPerms]);
+
+  // Initial session check inig mount. Kung wala ni, "Loading..." dili gyud matapos.
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   // Back/forward gikan sa bfcache: ayaw pagsaligi sa daan nga state, i-verify sa server
   useEffect(() => {
