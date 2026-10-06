@@ -124,6 +124,12 @@ const VIEW_DEMOGRAPHICS = "demographics";
 const CERT_TYPES = ["All Certificates", "Live Birth", "Marriage", "Death"];
 const YEARS = ["2024", "2025", "2026"];
 
+/* Skeleton tuning: how many placeholder table rows / ranking rows to draw,
+   and how long the map waits for tiles before giving up on the overlay. */
+const SKELETON_TABLE_ROWS = 8;
+const SKELETON_TOP5_ROWS = 5;
+const MAP_TILE_TIMEOUT_MS = 8000;
+
 const CBMS_RECORDS = [
   { id: "CR-0001", name: "Juan Dela Cruz", barangay: "Barangay I (Poblacion)", recordType: "Live Birth", age: 34, philSysId: true, philSysNo: "6304-XXXX-XXXX", seniorCitizen: false, pwd: false, fourPs: true },
   { id: "CR-0002", name: "Maria Santos", barangay: "Prosperidad", recordType: "Marriage", age: 29, philSysId: true, philSysNo: "6217-XXXX-XXXX", seniorCitizen: false, pwd: false, fourPs: false },
@@ -211,6 +217,100 @@ function buildPopup(title, rows) {
     )
     .join("");
   return `<div class="hm-popup"><div class="hm-popup__title">${title}</div>${body}</div>`;
+}
+
+/* ════════════════════════════════════
+   SKELETON PRIMITIVES
+════════════════════════════════════ */
+
+/* A single shimmering placeholder block. Purely decorative, so it is hidden from screen readers;
+   the surrounding region carries aria-busy / role="status" instead. */
+function Skeleton({ width = "100%", height = 12, radius, className = "", style }) {
+  return (
+    <span
+      className={`skeleton${className ? ` ${className}` : ""}`}
+      style={{ width, height, borderRadius: radius, ...style }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function StatCardSkeleton() {
+  return (
+    <div className="stat-card stat-card--skeleton" aria-hidden="true">
+      <Skeleton width={40} height={40} radius={10} style={{ flexShrink: 0 }} />
+      <div className="stat-card__body skeleton-stack">
+        <Skeleton width="55%" height={24} />
+        <Skeleton width="80%" height={11} />
+        <Skeleton width="60%" height={10} />
+      </div>
+    </div>
+  );
+}
+
+function StatGridSkeleton({ count }) {
+  return (
+    <div className="stat-grid" role="status" aria-live="polite" aria-label="Loading statistics">
+      {Array.from({ length: count }, (_, i) => (
+        <StatCardSkeleton key={i} />
+      ))}
+    </div>
+  );
+}
+
+/* Keeps the real column headers on screen so the table does not jump when data arrives. */
+function DemoTableSkeleton({ columns, rows = SKELETON_TABLE_ROWS }) {
+  return (
+    <div className="table-scroll" role="status" aria-live="polite" aria-label="Loading demographics table">
+      <table className="demo-table table--skeleton">
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Barangay</th>
+            {columns.map((s) => (
+              <th key={s.key} className="num">
+                {s.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }, (_, r) => (
+            <tr key={r}>
+              <td>
+                <Skeleton width={16} height={12} />
+              </td>
+              <td>
+                <Skeleton width={110 + ((r * 23) % 50)} height={12} />
+              </td>
+              {columns.map((s) => (
+                <td key={s.key} className="num">
+                  <Skeleton width={28} height={12} style={{ marginLeft: "auto" }} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Top5Skeleton({ rows = SKELETON_TOP5_ROWS }) {
+  return (
+    <div className="top5" role="status" aria-live="polite" aria-label="Loading top barangays">
+      {Array.from({ length: rows }, (_, i) => (
+        <div className="top5__row" key={i}>
+          <Skeleton width={10} height={11} />
+          <Skeleton className="top5__name" width={`${70 - i * 8}%`} height={12} />
+          <div className="top5__bar-track">
+            <Skeleton height="100%" radius={999} />
+          </div>
+          <Skeleton className="top5__value" width={26} height={12} style={{ marginLeft: "auto" }} />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function StatCard({ icon, label, value, sub, tone, active, dim }) {
@@ -422,10 +522,12 @@ function DemographicDetail({ name, stats, onClose }) {
   );
 }
 
-const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onSelect }, ref) {
+const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onSelect, loading = false }, ref) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersLayerRef = useRef(null);
+  // True until the first batch of OpenStreetMap tiles has finished loading (or errored / timed out).
+  const [tilesLoading, setTilesLoading] = useState(true);
 
   useImperativeHandle(ref, () => ({
     zoomIn: () => mapRef.current && mapRef.current.zoomIn(),
@@ -448,11 +550,19 @@ const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onS
       attributionControl: true,
     });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       subdomains: ["a", "b", "c"],
-    }).addTo(map);
+    });
+
+    // "load" fires once every visible tile has either loaded or failed, so the overlay can never get stuck on an error.
+    const finishTiles = () => setTilesLoading(false);
+    tiles.once("load", finishTiles);
+    // Safety net for very slow or blocked networks.
+    const tileTimeout = window.setTimeout(finishTiles, MAP_TILE_TIMEOUT_MS);
+
+    tiles.addTo(map);
 
     map.fitBounds(CITY_BOUNDS, { animate: false });
 
@@ -479,6 +589,8 @@ const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onS
     mapRef.current = map;
 
     return () => {
+      window.clearTimeout(tileTimeout);
+      tiles.off("load", finishTiles);
       map.remove();
       mapRef.current = null;
     };
@@ -533,7 +645,30 @@ const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onS
     });
   }, [items, activeBarangay, onSelect]);
 
-  return <div ref={containerRef} className="leaflet-map-surface" role="img" aria-label="Map of San Carlos City barangays" />;
+  const showSkeleton = tilesLoading || loading;
+
+  return (
+    <div className="leaflet-map-wrap" aria-busy={showSkeleton}>
+      <div ref={containerRef} className="leaflet-map-surface" role="img" aria-label="Map of San Carlos City barangays" />
+      {/* Always mounted so it can fade out instead of popping away. */}
+      <div
+        className={`map-skeleton${showSkeleton ? "" : " map-skeleton--hidden"}`}
+        role="status"
+        aria-live="polite"
+        aria-hidden={!showSkeleton}
+      >
+        <span className="map-skeleton__pin map-skeleton__pin--1 skeleton" />
+        <span className="map-skeleton__pin map-skeleton__pin--2 skeleton" />
+        <span className="map-skeleton__pin map-skeleton__pin--3 skeleton" />
+        <span className="map-skeleton__pin map-skeleton__pin--4 skeleton" />
+        <span className="map-skeleton__pin map-skeleton__pin--5 skeleton" />
+        <div className="map-skeleton__label">
+          <i className="map-skeleton__spinner" />
+          {loading ? "Loading resident records…" : "Loading map…"}
+        </div>
+      </div>
+    </div>
+  );
 });
 
 export default function Heatmaps() {
@@ -558,6 +693,8 @@ export default function Heatmaps() {
   const [cbmsFourPsOnly, setCbmsFourPsOnly] = useState(false);
 
   const isDemo = viewMode === VIEW_DEMOGRAPHICS;
+  // "idle" is treated as loading too: the fetch is kicked off by an effect right after the first demographics render.
+  const isDemoLoading = isDemo && (residentStatus === "loading" || residentStatus === "idle");
 
   const loadResidents = useCallback(async () => {
     setResidentStatus("loading");
@@ -967,23 +1104,26 @@ export default function Heatmaps() {
 
   let legendHint;
   if (isDemo) {
-    legendHint = demoSelected
-      ? `${demoSelected.name}: ${demoSelected.value.toLocaleString()} ${demoTypeLabel.toLowerCase()} (${formatPercent(
-          demoSelected.value,
-          demoTotals[demoType]
-        )}% of citywide). Click again to clear.`
-      : "Click a barangay marker to highlight it in the table and see its full demographic breakdown below.";
+    if (isDemoLoading) {
+      legendHint = "Loading resident records…";
+    } else {
+      legendHint = demoSelected
+        ? `${demoSelected.name}: ${demoSelected.value.toLocaleString()} ${demoTypeLabel.toLowerCase()} (${formatPercent(
+            demoSelected.value,
+            demoTotals[demoType]
+          )}% of citywide). Click again to clear.`
+        : "Click a barangay marker to highlight it in the table and see its full demographic breakdown below.";
+    }
   } else {
     legendHint = selectedBarangay
       ? `${selectedBarangay.name}: ${selectedBarangay.birth} birth, ${selectedBarangay.marriage} marriage, ${selectedBarangay.death} death, ${selectedBarangay.total} total (${((selectedBarangay.total / totals.all) * 100).toFixed(1)}% of citywide). Click again to clear.`
       : "Click a barangay marker to highlight it in the table and see its breakdown here.";
   }
 
+  // The skeleton already communicates "loading", so the banner only shows for errors and the empty state.
   let demoNotice = null;
-  if (isDemo) {
-    if (residentStatus === "loading" || residentStatus === "idle") {
-      demoNotice = { tone: "info", text: "Loading resident records…" };
-    } else if (residentStatus === "error") {
+  if (isDemo && !isDemoLoading) {
+    if (residentStatus === "error") {
       demoNotice = { tone: "error", text: "Resident records could not be loaded.", retry: true };
     } else if (classified.records.length === 0) {
       demoNotice = { tone: "info", text: "No resident records are available for the Heatmap yet." };
@@ -1160,6 +1300,7 @@ export default function Heatmaps() {
               items={mapItems}
               activeBarangay={activeBarangay}
               onSelect={handleSelectBarangay}
+              loading={isDemoLoading}
             />
           </div>
           <p className="heat-map-note">
@@ -1185,7 +1326,8 @@ export default function Heatmaps() {
           </div>
 
           {isDemo ? (
-            activeBarangay && (
+            activeBarangay &&
+            !isDemoLoading && (
               <DemographicDetail
                 name={activeBarangay}
                 stats={allStatsByBarangay[activeBarangay]}
@@ -1251,70 +1393,85 @@ export default function Heatmaps() {
         <div className="heat-card__side">
           {isDemo ? (
             <>
-              <div className="stat-grid">
-                {DEMO_STATS.map((s) => (
-                  <StatCard
-                    key={s.key}
-                    tone="demo"
-                    icon={s.key === "voting" || s.key === "nonVoting" ? <VoteIcon /> : <UsersIcon />}
-                    label={s.label}
-                    value={demoScope[s.key]}
-                    sub={
-                      s.key === "total"
-                        ? activeBarangay || ALL_BARANGAYS
-                        : `${formatPercent(demoScope[s.key], demoScope.total)}% of total`
-                    }
-                    active={demoType === s.key}
-                    dim={demoType !== "total" && demoType !== s.key}
-                  />
-                ))}
-              </div>
+              {isDemoLoading ? (
+                <StatGridSkeleton count={DEMO_STATS.length} />
+              ) : (
+                <div className="stat-grid">
+                  {DEMO_STATS.map((s) => (
+                    <StatCard
+                      key={s.key}
+                      tone="demo"
+                      icon={s.key === "voting" || s.key === "nonVoting" ? <VoteIcon /> : <UsersIcon />}
+                      label={s.label}
+                      value={demoScope[s.key]}
+                      sub={
+                        s.key === "total"
+                          ? activeBarangay || ALL_BARANGAYS
+                          : `${formatPercent(demoScope[s.key], demoScope.total)}% of total`
+                      }
+                      active={demoType === s.key}
+                      dim={demoType !== "total" && demoType !== s.key}
+                    />
+                  ))}
+                </div>
+              )}
 
-              <div className="card table-card">
+              <div className="card table-card" aria-busy={isDemoLoading}>
                 <div className="card__header">
                   <h2>Demographics Breakdown per Barangay</h2>
                 </div>
-                <div className="table-scroll">
-                  <table className="demo-table">
-                    <thead>
-                      <tr>
-                        <th>No</th>
-                        <th>Barangay</th>
-                        {DEMO_STATS.map((s) => (
-                          <th key={s.key} className={`num${demoType === s.key ? " th--highlight" : ""}`}>
-                            {s.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {demoRows.map((r, i) => (
-                        <tr
-                          key={r.name}
-                          className={activeBarangay === r.name ? "row--active" : ""}
-                          onClick={() => handleSelectBarangay(r.name)}
-                        >
-                          <td>{i + 1}</td>
-                          <td>{r.name}</td>
-                          {DEMO_STATS.map((s) => (
-                            <td
-                              key={s.key}
-                              className={`num${demoType === s.key ? " cell--highlight" : s.key === "total" ? " cell--strong" : ""}`}
+                {isDemoLoading ? (
+                  <>
+                    <DemoTableSkeleton columns={DEMO_STATS} />
+                    <div className="table-footnote">
+                      <Skeleton width="55%" height={11} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="table-scroll">
+                      <table className="demo-table">
+                        <thead>
+                          <tr>
+                            <th>No</th>
+                            <th>Barangay</th>
+                            {DEMO_STATS.map((s) => (
+                              <th key={s.key} className={`num${demoType === s.key ? " th--highlight" : ""}`}>
+                                {s.label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {demoRows.map((r, i) => (
+                            <tr
+                              key={r.name}
+                              className={activeBarangay === r.name ? "row--active" : ""}
+                              onClick={() => handleSelectBarangay(r.name)}
                             >
-                              {r.stats[s.key].toLocaleString()}
-                            </td>
+                              <td>{i + 1}</td>
+                              <td>{r.name}</td>
+                              {DEMO_STATS.map((s) => (
+                                <td
+                                  key={s.key}
+                                  className={`num${demoType === s.key ? " cell--highlight" : s.key === "total" ? " cell--strong" : ""}`}
+                                >
+                                  {r.stats[s.key].toLocaleString()}
+                                </td>
+                              ))}
+                            </tr>
                           ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="table-footnote">
-                  Showing {demoRows.length} of {demoRows.length} barangays, sorted by {demoTypeLabel.toLowerCase()}
-                  {classified.skipped > 0
-                    ? ` · ${classified.skipped.toLocaleString()} resident record(s) skipped (missing barangay or age)`
-                    : ""}
-                </p>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="table-footnote">
+                      Showing {demoRows.length} of {demoRows.length} barangays, sorted by {demoTypeLabel.toLowerCase()}
+                      {classified.skipped > 0
+                        ? ` · ${classified.skipped.toLocaleString()} resident record(s) skipped (missing barangay or age)`
+                        : ""}
+                    </p>
+                  </>
+                )}
               </div>
             </>
           ) : (
@@ -1617,20 +1774,24 @@ export default function Heatmaps() {
           </div>
         </div>
 
-        <div className="card">
+        <div className="card" aria-busy={isDemoLoading}>
           <h2>Top 5 Barangays by {mapTitle}</h2>
-          <div className="top5">
-            {top5.map((b, i) => (
-              <div className="top5__row" key={b.name}>
-                <span className="top5__rank">{i + 1}</span>
-                <span className="top5__name">{b.name}</span>
-                <div className="top5__bar-track">
-                  <div className="top5__bar-fill" style={{ width: `${(b.value / maxTop5) * 100}%` }} />
+          {isDemoLoading ? (
+            <Top5Skeleton />
+          ) : (
+            <div className="top5">
+              {top5.map((b, i) => (
+                <div className="top5__row" key={b.name}>
+                  <span className="top5__rank">{i + 1}</span>
+                  <span className="top5__name">{b.name}</span>
+                  <div className="top5__bar-track">
+                    <div className="top5__bar-fill" style={{ width: `${(b.value / maxTop5) * 100}%` }} />
+                  </div>
+                  <span className="top5__value">{b.value.toLocaleString()}</span>
                 </div>
-                <span className="top5__value">{b.value.toLocaleString()}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="card">
