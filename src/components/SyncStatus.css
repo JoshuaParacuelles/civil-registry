@@ -1,0 +1,30 @@
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.sync-status:hover { background: #f8fafc; }
+.sync-status__light {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.sync-status__light.is-online { background: #22c55e; }
+.sync-status__light.is-offline { background: #f59e0b; }
+.sync-status__label { font-weight: 600; color: #0f172a; }
+.sync-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.chip-pending  { background: #dbeafe; color: #1e3a8a; }
+.chip-syncing  { background: #dcfce7; color: #166534; }
+.chip-failed   { background: #fee2e2; color: #991b1b; }
+.chip-conflict { background: #fef3c7; color: #92400e; }

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1e3a8a">
+  <title>Offline | Civil Registry</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 24px;
+    }
+    .card {
+      max-width: 420px;
+      width: 100%;
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 28px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+    }
+    img { width: 72px; height: 72px; object-fit: contain; margin-bottom: 16px; }
+    h1 { font-size: 1.4rem; color: #1e3a8a; margin-bottom: 8px; }
+    p { font-size: 0.95rem; line-height: 1.5; color: #475569; margin-bottom: 12px; }
+    .note {
+      background: #eff6ff;
+      border-left: 4px solid #1e3a8a;
+      padding: 10px 12px;
+      border-radius: 6px;
+      text-align: left;
+      font-size: 0.85rem;
+      color: #1e3a8a;
+      margin: 16px 0 20px;
+    }
+    button {
+      background: #1e3a8a;
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 12px 24px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:hover { background: #1e40af; }
+    .status { margin-top: 14px; font-size: 0.8rem; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/scc.png" alt="Civil Registry logo">
+    <h1>You're offline</h1>
+    <p>Walay internet connection karon, ug kini nga page wala pa ma-save sa device.</p>
+    <div class="note">
+      Ang imong na-save nga offline data luwas sa device ug
+      automatic nga ma-sync inig balik sa internet.
+    </div>
+    <button onclick="location.href='/'">Open the app</button>
+    <p class="status" id="status">Checking connection...</p>
+  </div>
+
+  <script>
+    const status = document.getElementById('status');
+    function update() {
+      if (navigator.onLine) {
+        status.textContent = 'Back online. Reloading...';
+        setTimeout(() => location.href = '/', 800);
+      } else {
+        status.textContent = 'Still offline.';
+      }
+    }
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    update();
+  </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useState } from "react";
+import SyncStatus from "./SyncStatus";   // 1. idugang
 import "./Topbar.css";
 
 const dateFmt = new Intl.DateTimeFormat("en-PH", {
@@ -46,7 +47,7 @@ const TopbarDate = memo(function TopbarDate() {
   );
 });
 
-const Topbar = ({ activeSubMenu, toggleSidebar, children }) => (
+const Topbar = ({ activeSubMenu, toggleSidebar, onOpenSync, children }) => (  // 2. onOpenSync
   <header className="topbar">
     <div className="topbar-left">
       <button className="topbar-toggle" onClick={toggleSidebar} type="button">
@@ -57,7 +58,7 @@ const Topbar = ({ activeSubMenu, toggleSidebar, children }) => (
 
     <div className="topbar-right">
       <TopbarDate />
-
+      <SyncStatus onClick={onOpenSync} />   {/* 3. idugang */}
       {children}
     </div>
   </header>

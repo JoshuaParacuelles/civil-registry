@@ -1,20 +1,11 @@
+// src/context/PermissionContext.jsx
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { lock } from "../offline/offlineAuth";
+import { cacheClear } from "../offline/cache";
 
 // Relative by default. Only set VITE_API_BASE_URL if your backend truly
-// lives on a different origin (e.g. a separate deployed domain) — leave it
-// unset for local/LAN/devtunnel dev so requests go through the Vite proxy
-// on the same origin the page was loaded from.
+// lives on a different origin — leave it unset for local/LAN/devtunnel dev.
 const API = import.meta.env.VITE_API_BASE_URL || "";
-
-// BUG FIX: cold-start timeout too short.
-// This was 8000ms. Free-tier backends (e.g. Render) that spin down after
-// inactivity can take 50-90+ seconds to wake up on the first request after
-// idling. An 8s timeout meant that first /api/session call reliably
-// aborted mid-wake-up, was treated as "not logged in", and bounced the
-// user straight back to the login page even though login itself had just
-// succeeded. 45s comfortably covers a cold start; a warm server still
-// responds in well under a second either way, so this costs nothing in
-// the common case.
 const FETCH_TIMEOUT_MS = 45000;
 
 const PermissionContext = createContext({
@@ -51,9 +42,7 @@ export function PermissionProvider({ children }) {
   const [error,         setError]         = useState(null);
 
   // BUG FIX: distinguishes "still waking up the free-tier backend" from
-  // ordinary loading, purely so the UI (ProtectedRoute's LoadingScreen)
-  // can tell the user *why* it's taking a while instead of looking stuck
-  // or silently kicking them back to login after a long wait.
+  // ordinary loading, purely so the UI can tell the user why it's taking a while.
   const [waking, setWaking] = useState(false);
 
   const inFlight = useRef(null);
@@ -77,6 +66,8 @@ export function PermissionProvider({ children }) {
     } catch (e) {
       console.warn("[Permissions] logout request failed:", e);
     } finally {
+      lock();
+      cacheClear().catch(() => {});
       clearPerms();
       sessionStorage.clear();
     }
@@ -164,8 +155,17 @@ export function PermissionProvider({ children }) {
     return inFlight.current;
   }, [clearPerms]);
 
+  // Back/forward gikan sa bfcache: ayaw pagsaligi sa daan nga state, i-verify sa server
   useEffect(() => {
-    refresh();
+    const onPageShow = (e) => {
+      if (!e.persisted) return;        // true ra kung gikan sa bfcache
+      if (!navigator.onLine) return;   // offline mode: ayaw i-kick out
+      hasLoadedOnce.current = false;   // treat as first load: LoadingScreen + clearPerms kung expired na ang session
+      refresh();
+    };
+    
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
   }, [refresh]);
 
   useEffect(() => {

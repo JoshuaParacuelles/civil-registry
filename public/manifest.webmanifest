@@ -1,0 +1,13 @@
+{
+  "name": "Civil Registry System",
+  "short_name": "Civil Registry",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "icons": [
+    { "src": "/icons/pwa-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

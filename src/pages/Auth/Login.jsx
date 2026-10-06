@@ -77,7 +77,7 @@ const Login = () => {
 
   useEffect(() => {
     if (sessionStorage.getItem("isAuthenticated") === "true") {
-      window.location.href = "/dashboard";
+     window.location.replace("/dashboard");
     }
   }, []);
 
