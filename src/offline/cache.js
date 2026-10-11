@@ -1,32 +1,40 @@
-// Encrypted read-cache sa API responses (PII gyud ni: civil registry).
-// Mo-save ra kung unlocked (naay key). Gigamit ang db.meta, walay schema change.
-import { db } from './db'
+// src/offline/cache.js
+// Encrypted read-cache of API responses (civil registry data is PII).
+// Only saves while unlocked (a key exists in memory). Uses the 'cache' store in db.js.
+import { getDB } from './db'
 import { getKey } from './offlineAuth'
 import { encryptJSON, decryptJSON } from './crypto'
 
 const P = 'cache:'
+const DEFAULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 export async function cacheSet(key, data) {
   const k = getKey()
-  if (!k) return false // ayaw i-save nga plaintext
+  if (!k) return false // never store plaintext
   const blob = await encryptJSON(k, data)
-  await db.meta.put({ key: P + key, value: { blob, savedAt: Date.now() } })
+  const db = await getDB()
+  await db.put('cache', { key: P + key, blob, savedAt: Date.now() })
   return true
 }
 
-export async function cacheGet(key, maxAgeMs = 7 * 24 * 60 * 60 * 1000) {
+export async function cacheGet(key, maxAgeMs = DEFAULT_MAX_AGE_MS) {
   const k = getKey()
   if (!k) return null
-  const row = await db.meta.get(P + key)
-  if (!row || Date.now() - row.value.savedAt > maxAgeMs) return null
+  const db = await getDB()
+  const row = await db.get('cache', P + key)
+  if (!row || Date.now() - row.savedAt > maxAgeMs) return null
   try {
-    return await decryptJSON(k, row.value.blob)
+    return await decryptJSON(k, row.blob)
   } catch {
-    return null
+    return null // wrong key or corrupted entry
   }
 }
 
+// Used on logout. Removes only cached API responses. The outbox and files stay.
 export async function cacheClear() {
-  const keys = (await db.meta.toCollection().primaryKeys()).filter((k) => String(k).startsWith(P))
-  await db.meta.bulkDelete(keys)
+  const db = await getDB()
+  const keys = (await db.getAllKeys('cache')).filter((k) => String(k).startsWith(P))
+  const tx = db.transaction('cache', 'readwrite')
+  for (const k of keys) tx.store.delete(k)
+  await tx.done
 }

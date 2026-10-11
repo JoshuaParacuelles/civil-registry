@@ -62,10 +62,11 @@ export function OfflineProvider({ children }) {
         duration: 4000,
       });
     } else {
+      // Offline is a status, not an error, so it uses the warning tone (amber), not red.
       pushToast({
-        title: "You're offline",
+        title: 'Offline mode',
         message: 'Changes are saved on this device and will sync when the connection returns.',
-        success: false,
+        tone: 'warning',
         duration: 6000,
       });
     }

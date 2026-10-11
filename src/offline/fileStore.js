@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-export async function sha256(blob) {
-  const buf = await blob.arrayBuffer()
-  const hash = await crypto.subtle.digest('SHA-256', buf)
-  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('')
-=======
 import { getDB } from './db';
 
 // Stores PDFs/attachments chosen while offline. They upload during sync.
@@ -24,5 +18,4 @@ export async function deleteFile(fileId) {
 export async function countFiles() {
   const db = await getDB();
   return db.count('files');
->>>>>>> 0550160 (Asdasd)
 }

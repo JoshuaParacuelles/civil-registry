@@ -1,22 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
-<<<<<<< HEAD
 import { lock } from "../offline/offlineAuth";
 import { cacheClear } from "../offline/cache";
-
-// Relative by default. Only set VITE_API_BASE_URL if your backend truly
-// lives on a different origin — leave it unset for local/LAN/devtunnel dev.
-const API = import.meta.env.VITE_API_BASE_URL || "";
-=======
 import { getAllowedEntities, setSyncScope } from "../offline/syncScope";
 
-// Relative by default. Only set VITE_API_BASE_URL if your backend truly
-// lives on a different origin. Leave it unset for local/LAN/devtunnel dev
-// so requests go through the Vite proxy on the same origin.
 const API = import.meta.env.VITE_API_BASE_URL || "";
 
 // Free-tier backends (e.g. Render) can take 50-90+ seconds to wake up
 // after idling. 45s covers a cold start; a warm server responds quickly.
->>>>>>> 0550160 (Asdasd)
 const FETCH_TIMEOUT_MS = 45000;
 
 // ── Offline support ─────────────────────────────────────────────────────────
@@ -68,7 +58,7 @@ const PermissionContext = createContext({
   hasAccess:            () => false,
   refresh:              async () => {},
   clearPerms:           () => {},
-  logout:              async () => {},
+  logout:               async () => {},
 });
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
@@ -89,15 +79,7 @@ export function PermissionProvider({ children }) {
   const [authenticated, setAuthenticated] = useState(false);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState(null);
-
-<<<<<<< HEAD
-  // BUG FIX: distinguishes "still waking up the free-tier backend" from
-  // ordinary loading, purely so the UI can tell the user why it's taking a while.
-=======
-  // True while the free-tier backend is waking up, so the UI can say why
-  // it is slow instead of looking stuck.
->>>>>>> 0550160 (Asdasd)
-  const [waking, setWaking] = useState(false);
+  const [waking,        setWaking]        = useState(false);
 
   const inFlight = useRef(null);
   const hasLoadedOnce = useRef(false);
@@ -252,31 +234,29 @@ export function PermissionProvider({ children }) {
     return inFlight.current;
   }, [clearPerms, restoreFromCache]);
 
-  // Initial session check inig mount. Kung wala ni, "Loading..." dili gyud matapos.
+  // Initial session check on mount. Without this, "Loading..." never finishes.
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-<<<<<<< HEAD
-  // Back/forward gikan sa bfcache: ayaw pagsaligi sa daan nga state, i-verify sa server
-  useEffect(() => {
-    const onPageShow = (e) => {
-      if (!e.persisted) return;        // true ra kung gikan sa bfcache
-      if (!navigator.onLine) return;   // offline mode: ayaw i-kick out
-      hasLoadedOnce.current = false;   // treat as first load: LoadingScreen + clearPerms kung expired na ang session
-      refresh();
-    };
-    
-    window.addEventListener("pageshow", onPageShow);
-    return () => window.removeEventListener("pageshow", onPageShow);
-=======
+  // Back/forward from the bfcache: don't reuse the old state, verify with the server.
   // Back online: confirm with the server. A 401 here means the session
   // really expired, so the user is sent to login.
   useEffect(() => {
+    const onPageShow = (e) => {
+      if (!e.persisted) return;        // true only when restored from bfcache
+      if (!navigator.onLine) return;   // offline mode: don't kick the user out
+      hasLoadedOnce.current = false;   // treat as first load: LoadingScreen + clearPerms if expired
+      refresh();
+    };
     const onOnline = () => { refresh(); };
+
+    window.addEventListener("pageshow", onPageShow);
     window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
->>>>>>> 0550160 (Asdasd)
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
+    };
   }, [refresh]);
 
   useEffect(() => {
