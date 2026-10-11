@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../services/supabaseClient";
+import { isDbAvailable, subscribeDb } from "../offline/connectivityService";
 
 const NOTIFICATION_TABLE = "notification";
 const READS_TABLE = "notification_reads";
@@ -56,10 +57,24 @@ export const NOTIF_TARGETS = {
   death: { menu: "Death Verifier", permission: "death_verification" },
 };
 
-export default function useNotifications({ username, onOpenVerifier }) {
+const ALL_TYPES = ["birth", "marriage", "death"];
+
+// Maps a user's permission list to the document types they handle.
+// Admins see all types.
+export const typesFromPermissions = (permissions = [], isAdmin = false) => {
+  if (isAdmin) return ALL_TYPES;
+  return ALL_TYPES.filter((t) => permissions.includes(NOTIF_TARGETS[t].permission));
+};
+
+export default function useNotifications({ username, allowedTypes, onOpenVerifier }) {
   // Read state is stored per admin. If username isn't known yet, a placeholder is used
   // and the list refetches automatically once it arrives.
   const reader = username || "unknown";
+
+  // Document types this user handles. Joined into a string so the array
+  // identity doesn't retrigger effects on every render.
+  const typesKey = (allowedTypes || ALL_TYPES).join(",");
+  const typeList = useMemo(() => (typesKey ? typesKey.split(",") : []), [typesKey]);
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -84,16 +99,35 @@ export default function useNotifications({ username, onOpenVerifier }) {
   }, [notifStatus]);
 
   const fetchNotifications = useCallback(async () => {
+    // Database unreachable: skip the direct Supabase calls and show the offline state.
+    if (!isDbAvailable()) {
+      setNotifLoading(false);
+      setNotifStatus("offline");
+      return;
+    }
+
+    // No document types assigned: nothing to show.
+    if (typeList.length === 0) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setNotifLoading(false);
+      return;
+    }
+
     const sequence = ++fetchSeqRef.current;
     try {
       const [listResult, countResult] = await Promise.all([
         supabase
           .from(NOTIFICATION_TABLE)
           .select(NOTIF_SELECT)
+          .in("record_type", typeList)
           .eq(`${READS_TABLE}.username`, reader)
           .order("created_at", { ascending: false })
           .limit(50),
-        supabase.rpc("notification_unread_count", { p_username: reader }),
+        supabase.rpc("notification_unread_count", {
+          p_username: reader,
+          p_types: typeList,
+        }),
       ]);
 
       if (sequence !== fetchSeqRef.current) return;
@@ -128,10 +162,16 @@ export default function useNotifications({ username, onOpenVerifier }) {
     } finally {
       if (sequence === fetchSeqRef.current) setNotifLoading(false);
     }
-  }, [reader]);
+  }, [reader, typeList]);
 
+  // Realtime channel + polling. The channel is only open while the database is
+  // reachable and the user has document types, so the browser does not keep
+  // retrying a WebSocket while offline or for users who see no notifications.
   useEffect(() => {
+    let alive = true;
     let refetchTimer = null;
+    let channel = null;
+
     const scheduleRefetch = () => {
       window.clearTimeout(refetchTimer);
       refetchTimer = window.setTimeout(fetchNotifications, 400);
@@ -157,29 +197,34 @@ export default function useNotifications({ username, onOpenVerifier }) {
       scheduleRefetch();
     };
 
-    fetchNotifications();
+    const connect = () => {
+      if (!alive || channel || !isDbAvailable() || typeList.length === 0) return;
 
-    const channel = supabase
-      .channel("home-notification-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: NOTIFICATION_TABLE }, (payload) => {
-        if (payload.eventType === "INSERT") {
-          const row = { ...payload.new, is_read: false };
-          setNotifications((prev) => (prev.some((n) => n.id === row.id) ? prev : [row, ...prev].slice(0, 50)));
-          setUnreadCount((c) => c + 1);
-        } else if (payload.eventType === "UPDATE") {
-          // Ignore the legacy global is_read/read_at/read_by; read state is per admin now.
-          const rest = { ...payload.new };
-          delete rest.is_read;
-          delete rest.read_at;
-          delete rest.read_by;
-          setNotifications((prev) => prev.map((n) => (n.id === rest.id ? { ...n, ...rest } : n)));
-        } else if (payload.eventType === "DELETE") {
-          const row = payload.old;
-          const removed = notificationsRef.current.find((n) => n.id === row.id);
-          if (removed && !removed.is_read) setUnreadCount((c) => Math.max(0, c - 1));
-          setNotifications((prev) => prev.filter((n) => n.id !== row.id));
-        }
-      })
+      fetchNotifications();
+
+      const ch = supabase
+        .channel("home-notification-realtime")
+        .on("postgres_changes", { event: "*", schema: "public", table: NOTIFICATION_TABLE }, (payload) => {
+          if (payload.eventType === "INSERT") {
+            // Only show new notifications for document types this user handles.
+            if (!typeList.includes(payload.new.record_type)) return;
+            const row = { ...payload.new, is_read: false };
+            setNotifications((prev) => (prev.some((n) => n.id === row.id) ? prev : [row, ...prev].slice(0, 50)));
+            setUnreadCount((c) => c + 1);
+          } else if (payload.eventType === "UPDATE") {
+            // Ignore the legacy global is_read/read_at/read_by; read state is per admin now.
+            const rest = { ...payload.new };
+            delete rest.is_read;
+            delete rest.read_at;
+            delete rest.read_by;
+            setNotifications((prev) => prev.map((n) => (n.id === rest.id ? { ...n, ...rest } : n)));
+          } else if (payload.eventType === "DELETE") {
+            const row = payload.old;
+            const removed = notificationsRef.current.find((n) => n.id === row.id);
+            if (removed && !removed.is_read) setUnreadCount((c) => Math.max(0, c - 1));
+            setNotifications((prev) => prev.filter((n) => n.id !== row.id));
+          }
+        })
         // Read changes are per admin; ignore this client's confirmed optimistic writes.
         .on("postgres_changes", {
           event: "*",
@@ -187,7 +232,9 @@ export default function useNotifications({ username, onOpenVerifier }) {
           table: READS_TABLE,
           filter: `username=eq.${reader}`,
         }, handleReadChange)
-      .subscribe((status) => {
+        .subscribe((status) => {
+          // Ignore status events from a channel we already closed.
+          if (channel !== ch) return;
           if (status === "SUBSCRIBED") {
             statusRef.current = "live";
             setNotifStatus("live");
@@ -198,24 +245,48 @@ export default function useNotifications({ username, onOpenVerifier }) {
             statusRef.current = "connecting";
             setNotifStatus("connecting");
           }
-      });
+        });
+
+      channel = ch;
+    };
+
+    // Closes the realtime channel so the browser stops retrying the WebSocket.
+    const disconnect = () => {
+      if (!channel) return;
+      const ch = channel;
+      channel = null;
+      supabase.removeChannel(ch);
+      statusRef.current = "offline";
+      setNotifStatus("offline");
+    };
+
+    const unsubDb = subscribeDb((ok) => {
+      if (ok) connect();
+      else disconnect();
+    });
+
+    connect();
 
     const poll = setInterval(() => {
-        if (!document.hidden && statusRef.current !== "live") fetchNotifications();
+      if (!document.hidden && statusRef.current !== "live" && isDbAvailable() && typeList.length > 0) {
+        fetchNotifications();
+      }
     }, NOTIF_POLL_MS);
 
     const onVisible = () => {
-      if (!document.hidden) fetchNotifications();
+      if (!document.hidden && isDbAvailable() && typeList.length > 0) fetchNotifications();
     };
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
+      alive = false;
+      unsubDb();
       clearInterval(poll);
       window.clearTimeout(refetchTimer);
       document.removeEventListener("visibilitychange", onVisible);
-      supabase.removeChannel(channel);
+      disconnect();
     };
-  }, [fetchNotifications, reader]);
+  }, [fetchNotifications, reader, typeList]);
 
   useEffect(() => {
     if (notifOpen) fetchNotifications();
@@ -372,14 +443,17 @@ export default function useNotifications({ username, onOpenVerifier }) {
     setUnreadCount(0);
 
     try {
-      const { error } = await supabase.rpc("notification_mark_all_read", { p_username: reader });
+      const { error } = await supabase.rpc("notification_mark_all_read", {
+        p_username: reader,
+        p_types: typeList,
+      });
       if (error) throw error;
     } catch (err) {
       console.error("[Home] Could not mark all notifications as read:", err);
       notificationsRef.current.forEach((n) => pendingRef.current.delete(n.id));
     }
     fetchNotifications();
-  }, [fetchNotifications, reader, unreadCount]);
+  }, [fetchNotifications, reader, typeList, unreadCount]);
 
   // Opening the bell shows what's new; closing it marks what you saw as read (saved to the DB).
   useEffect(() => {

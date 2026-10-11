@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
@@ -6,10 +6,18 @@ import lcrLogo from "../../../assets/images/lcr.jpg";
 import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
 import { computeMarriageAccuracy } from "../../../utils/matchAccuracy";
+import { isOnline, checkNow } from "../../../offline/connectivityService";
+import { newOpId } from "../../../offline/outboxQueue";
+import {
+  useVitalData, loadPdfForRecord, deleteRecordSmart, queueUpload, queueTransaction,
+} from "../../../offline/vitalOffline";
+import { verifyArchivePasswordOffline, refreshOfflineCredential } from "../../../offline/archivePassword";
 
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
+const ENTITY = "marriage";
 const FEE = 75;
 const MAX_UPLOAD = 5;
+
 // Adapter: keeps showNotif("message", "success" | "error") working
 // on top of the shared toastService (which uses success: true/false).
 function useShowNotif() {
@@ -42,8 +50,8 @@ const LOGO_SRC = sccLogo;
 const LOGO_SRC_2 = lcrLogo;
 
 const STEPS = [
-  { key: "select",    label: "Select Record" },
-  { key: "payment",  label: "Review & Print" },
+  { key: "select", label: "Select Record" },
+  { key: "payment", label: "Review & Print" },
   { key: "releasing", label: "Releasing" },
 ];
 
@@ -57,14 +65,14 @@ function useViewport() {
     return () => window.removeEventListener("resize", handler);
   }, []);
   return {
-    isMobile:  width < 480,
-    isTablet:  width >= 480 && width < 768,
+    isMobile: width < 480,
+    isTablet: width >= 480 && width < 768,
     isDesktop: width >= 768,
     width,
   };
 }
 
-// ── FIXED: resilient JSON fetch ────────────────────────────────────────────
+// ── Resilient JSON fetch ───────────────────────────────────────────────────
 // The marriage list endpoints occasionally fail for a moment right after an
 // upload (server busy / DB hiccup). Retry a couple of times before giving up,
 // and surface the server's real error message instead of a blank Error().
@@ -159,14 +167,14 @@ function formatParentDisplayName(first, middle, last, fullName = "") {
 function getGroomDisplayName(record) {
   return formatParentDisplayName(
     record?.groom_first_name, record?.groom_middle_name,
-    record?.groom_last_name,  record?.groom_full_name,
+    record?.groom_last_name, record?.groom_full_name,
   );
 }
 
 function getBrideDisplayName(record) {
   return formatParentDisplayName(
     record?.bride_first_name, record?.bride_middle_name,
-    record?.bride_last_name,  record?.bride_full_name,
+    record?.bride_last_name, record?.bride_full_name,
   );
 }
 
@@ -181,7 +189,7 @@ function getRecordDisplayName(record) {
 }
 
 function getRecordIdentityKey(record) {
-  const name  = getRecordDisplayName(record).trim().toUpperCase();
+  const name = getRecordDisplayName(record).trim().toUpperCase();
   const groom = getGroomDisplayName(record).trim().toUpperCase();
   const bride = getBrideDisplayName(record).trim().toUpperCase();
   return `${name}|${groom}|${bride}`;
@@ -202,7 +210,7 @@ function getMatchedSpouseName(record, searchLast) {
 }
 
 function normalizeForSearch(record) {
-  const name     = getRecordDisplayName(record);
+  const name = getRecordDisplayName(record);
   const fileName = (record.file_name || "").replace(/\.pdf$/i, "")
     .replace(/[_,]+/g, " ").replace(/-+/g, " ").trim();
   const groom = getGroomDisplayName(record);
@@ -212,25 +220,25 @@ function normalizeForSearch(record) {
 
 function matchesSearch(record, query) {
   if (!query || !query.trim()) return true;
-  const haystack      = normalizeForSearch(record);
+  const haystack = normalizeForSearch(record);
   const haystackWords = haystack.split(/\s+/).filter(Boolean);
-  const queryWords    = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  const queryWords = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
   return queryWords.every((qw) => haystackWords.some((hw) => hw === qw));
 }
 
-// UPDATED: first/last name of one spouse (prefix = "groom" or "bride"),
-// used by the accuracy calculation. The middle name is folded into the
-// first name so a search like "anna marie santos" can match records where
-// "Marie" / "Marie Santos" is stored in the middle-name field.
+// First/last name of one spouse (prefix = "groom" or "bride"), used by the
+// accuracy calculation. The middle name is folded into the first name so a
+// search like "anna marie santos" can match records where "Marie" /
+// "Marie Santos" is stored in the middle-name field.
 function getSpouseNameParts(record, prefix) {
-  const first  = cleanNamePart(record?.[`${prefix}_first_name`]);
+  const first = cleanNamePart(record?.[`${prefix}_first_name`]);
   const middle = cleanNamePart(record?.[`${prefix}_middle_name`]);
-  const last   = cleanNamePart(record?.[`${prefix}_last_name`]);
+  const last = cleanNamePart(record?.[`${prefix}_last_name`]);
 
   if (first || last) {
     return {
       firstName: [first, middle].filter(Boolean).join(" "),
-      lastName:  last,
+      lastName: last,
     };
   }
 
@@ -245,7 +253,7 @@ function getSpouseNameParts(record, prefix) {
   }
   return {
     firstName: parts.slice(0, -1).join(" "),
-    lastName:  parts[parts.length - 1],
+    lastName: parts[parts.length - 1],
   };
 }
 
@@ -268,7 +276,7 @@ function getRecordLastNames(record) {
     const clean = (record?.file_name || "").replace(/\.pdf$/i, "").trim();
     if (clean) {
       const parts = clean.includes(",") ? [clean.split(",")[0].trim()] : clean.split(/[\s_]+/);
-      const last  = parts[parts.length - 1];
+      const last = parts[parts.length - 1];
       if (last) names.push(last.toUpperCase());
     }
   }
@@ -304,8 +312,8 @@ function looksLikePdfBytes(bytes) {
 }
 
 function base64ToBytes(b64) {
-  const cleaned     = (b64 || "").replace(/\s/g, "");
-  const byteChars   = atob(cleaned);
+  const cleaned = (b64 || "").replace(/\s/g, "");
+  const byteChars = atob(cleaned);
   const byteNumbers = new Array(byteChars.length);
   for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
   return new Uint8Array(byteNumbers);
@@ -367,7 +375,7 @@ function getPdfBlobUrl(pdfData) {
   if (!pdfData) return "";
   try {
     if (typeof pdfData === "string") {
-      if (pdfData.startsWith("blob:"))   return pdfData;
+      if (pdfData.startsWith("blob:")) return pdfData;
       if (pdfData.startsWith("http://") || pdfData.startsWith("https://")) return pdfData;
     }
     const blob = createPdfBlobFromData(pdfData);
@@ -385,7 +393,7 @@ function printPdfFromData(pdfData) {
       const blob = createPdfBlobFromData(pdfData);
       if (!blob) { reject(new Error("This PDF is corrupted or invalid and cannot be printed.")); return; }
       const blobUrl = URL.createObjectURL(blob);
-      const iframe  = document.createElement("iframe");
+      const iframe = document.createElement("iframe");
       iframe.className = "print-iframe";
       iframe.setAttribute("aria-hidden", "true");
       let cleaned = false;
@@ -428,22 +436,11 @@ const OfficeLogo = ({ className = "" }) => {
     );
   }
   return (
-    <svg
-      className={className}
-      viewBox="0 0 100 100"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg className={className} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
       <circle cx="50" cy="50" r="47" fill="#f8fafc" stroke="#1a3c6e" strokeWidth="2.5" />
       <circle cx="50" cy="50" r="39" fill="none" stroke="#1a3c6e" strokeWidth="1.2" />
-      <path
-        d="M50 20 L54 32 L67 32 L57 40 L61 53 L50 45 L39 53 L43 40 L33 32 L46 32 Z"
-        fill="#1a3c6e"
-      />
-      <text
-        x="50" y="72" textAnchor="middle"
-        fontFamily="Times New Roman, serif" fontSize="8.5" fontWeight="700"
-        fill="#1a3c6e" letterSpacing="0.5"
-      >
+      <path d="M50 20 L54 32 L67 32 L57 40 L61 53 L50 45 L39 53 L43 40 L33 32 L46 32 Z" fill="#1a3c6e" />
+      <text x="50" y="72" textAnchor="middle" fontFamily="Times New Roman, serif" fontSize="8.5" fontWeight="700" fill="#1a3c6e" letterSpacing="0.5">
         OFFICE SEAL
       </text>
     </svg>
@@ -457,12 +454,12 @@ function NegativeCertDocument({ certData }) {
     verifiedBy, amountPaid, todayDate, orNumber, datePaid,
   } = certData;
 
-  const dateStr   = dateOfMarriage ? `on ${formatCertDate(dateOfMarriage)} ` : "";
-  const fatherStr = (fatherName  || "[Father's Name]").toUpperCase();
-  const motherStr = (motherName  || "[Mother's Name]").toUpperCase();
-  const city      = cityMunicipality || "this city/municipality";
-  const reqName   = (requestorName || "[Requestor's Name]").toUpperCase();
-  const year      = dateOfMarriage ? new Date(dateOfMarriage).getFullYear() : new Date().getFullYear();
+  const dateStr = dateOfMarriage ? `on ${formatCertDate(dateOfMarriage)} ` : "";
+  const fatherStr = (fatherName || "[Father's Name]").toUpperCase();
+  const motherStr = (motherName || "[Mother's Name]").toUpperCase();
+  const city = cityMunicipality || "this city/municipality";
+  const reqName = (requestorName || "[Requestor's Name]").toUpperCase();
+  const year = dateOfMarriage ? new Date(dateOfMarriage).getFullYear() : new Date().getFullYear();
 
   return (
     <div className="neg-print-page">
@@ -472,20 +469,20 @@ function NegativeCertDocument({ certData }) {
       <p className="neg-print-date">{todayDate}</p>
       <p className="neg-print-salutation">TO WHOM IT MAY CONCERN:</p>
       <p className="neg-print-para">
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of marriage of&nbsp;
+        We certify that this office has no records of marriage of{" "}
         <strong className="neg-cert-doc__highlight">{(subjectName || "").toUpperCase()}</strong>
-        &nbsp;who is alleged to have been married {dateStr}in {city} from parents,&nbsp;
+        {" "}who is alleged to have been married {dateStr}in {city} from parents,{" "}
         <strong className="neg-cert-doc__highlight">{fatherStr}</strong> and{" "}
         <strong className="neg-cert-doc__highlight">{motherStr}</strong> hence, we cannot issue,
         as requested, a true copy of his/her Certificate of Marriage or transcription from
         the Register of Marriages.
       </p>
       <p className="neg-print-para">
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Marriage for the
+        We also certify that the records of Marriage for the
         year <strong>{year}</strong> are still intact in the archives of this office.
       </p>
       <p className="neg-print-para">
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This certification is issued to&nbsp;
+        This certification is issued to{" "}
         <strong className="neg-cert-doc__highlight">{reqName}</strong> upon his/her request.
       </p>
       <div className="neg-print-sig-block">
@@ -540,9 +537,12 @@ function printNegativeCertificate(certData) {
   html, body { width: 100%; height: 100%; }
   body {
     font-family: "Times New Roman", Times, serif;
-    font-size: 12pt; color: #000; background: #fff;
+    font-size: 12pt;
+    color: #000;
+    background: #fff;
     padding: 1.2in 1in 1in 1in;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
     line-height: 1.6;
   }
   .neg-print-page { width: 100%; position: relative; }
@@ -566,7 +566,6 @@ function printNegativeCertificate(certData) {
   .neg-print-payment-colon { min-width: 8pt; flex-shrink: 0; margin-right: 4pt; }
   .neg-print-payment-value { flex: 1; font-size: 12pt; color: #000; }
   .neg-print-payment-blank { flex: 1; min-width: 100pt; height: 14pt; display: inline-block; }
-
   .neg-cert-doc__highlight { font-weight: bold; color: #000; }
 </style>
 </head>
@@ -578,7 +577,9 @@ function printNegativeCertificate(certData) {
       document.body.appendChild(iframe);
       iframe.onload = () => {
         const doc = iframe.contentDocument || iframe.contentWindow.document;
-        doc.open(); doc.write(fullHtml); doc.close();
+        doc.open();
+        doc.write(fullHtml);
+        doc.close();
         setTimeout(() => {
           iframe.contentWindow.focus();
           iframe.contentWindow.print();
@@ -729,8 +730,7 @@ const ConfirmModal = ({
 const NegCertField = ({ label, htmlFor, required, error, children }) => (
   <div className="negcert-info-modal__field">
     <label className="negcert-info-modal__label" htmlFor={htmlFor}>
-      {label}
-      {required && <span className="negcert-info-modal__required"> *</span>}
+      {label} {required && <span className="negcert-info-modal__required"> *</span>}
     </label>
     {children}
     {error && <span className="negcert-info-modal__error">&#9888; {error}</span>}
@@ -739,22 +739,22 @@ const NegCertField = ({ label, htmlFor, required, error, children }) => (
 
 const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) => {
   const [dateOfMarriage, setDateOfMarriage] = useState("");
-  const [fatherName,     setFatherName]     = useState("");
-  const [motherName,     setMotherName]     = useState("");
-  const [dobError,       setDobError]       = useState("");
-  const [fatherError,    setFatherError]    = useState("");
-  const [motherError,    setMotherError]    = useState("");
+  const [fatherName, setFatherName] = useState("");
+  const [motherName, setMotherName] = useState("");
+  const [dobError, setDobError] = useState("");
+  const [fatherError, setFatherError] = useState("");
+  const [motherError, setMotherError] = useState("");
 
   const handleSubmit = () => {
     let valid = true;
-    if (!dateOfMarriage)    { setDobError("Date of marriage is required.");  valid = false; } else setDobError("");
+    if (!dateOfMarriage) { setDobError("Date of marriage is required."); valid = false; } else setDobError("");
     if (!fatherName.trim()) { setFatherError("Father's name is required."); valid = false; } else setFatherError("");
     if (!motherName.trim()) { setMotherError("Mother's name is required."); valid = false; } else setMotherError("");
     if (!valid) return;
     onSubmit({
       dateOfMarriage,
-      fatherName:    fatherName.trim(),
-      motherName:    motherName.trim(),
+      fatherName: fatherName.trim(),
+      motherName: motherName.trim(),
       requestorName: requestorName || subjectName || "",
     });
   };
@@ -766,7 +766,7 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
           <div className="negcert-info-modal__hdr-text">
             <h3 className="negcert-info-modal__title">Negative Certificate Details</h3>
             <p className="negcert-info-modal__sub">
-              For&nbsp;<strong className="negcert-info-modal__name">{subjectName || "this person"}</strong>
+              For <strong className="negcert-info-modal__name">{subjectName || "this person"}</strong>
             </p>
           </div>
         </div>
@@ -824,7 +824,7 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
 };
 
 const PdfModal = ({ pdfData, pdfError, fileName, onClose, showNotif }) => {
-  const [pdfUrl,   setPdfUrl]   = useState("");
+  const [pdfUrl, setPdfUrl] = useState("");
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
@@ -867,7 +867,7 @@ const PdfModal = ({ pdfData, pdfError, fileName, onClose, showNotif }) => {
                 {printing ? "Printing…" : "Print"}
               </button>
             )}
-            <button className="hdr-btn hdr-btn--close" onClick={onClose}>&#10005; Close</button>
+            <button className="hdr-btn hdr-btn--close" onClick={onClose}>✕ Close</button>
           </div>
         </div>
         <div className="pdf-body">
@@ -896,9 +896,9 @@ const StepBar = ({ current }) => {
       <div className="ubr-stepbar">
         <div className="ubr-stepbar__inner">
           {STEPS.map((s, i) => {
-            const done   = i < idx;
+            const done = i < idx;
             const active = i === idx;
-            const mod    = done ? "done" : active ? "active" : "pending";
+            const mod = done ? "done" : active ? "active" : "pending";
             const isLast = i === STEPS.length - 1;
             const segDone = i < idx;
             return (
@@ -928,23 +928,38 @@ const StepBar = ({ current }) => {
 
 const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
   const [pwInput, setPwInput] = useState("");
-  const [showPw,  setShowPw]  = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const unlockOffline = async (pw) => {
+    const result = await verifyArchivePasswordOffline(module, pw);
+    if (result === "ok")          { showNotif("Unlocked offline.", "success"); onUnlock(); }
+    else if (result === "wrong")  showNotif("Incorrect password.", "error");
+    else if (result === "locked") showNotif("Too many wrong attempts. Try again in 5 minutes.", "error");
+    else if (result === "unset")  showNotif("No password is set for this module yet.", "error");
+    else showNotif("This device hasn't saved the password data yet. Open the app once while online and logged in.", "error");
+  };
+
   const handleSubmit = async () => {
-    if (!pwInput.trim()) { showNotif("Password is required.", "error"); return; }
+    const pw = pwInput.trim();
+    if (!pw) { showNotif("Password is required.", "error"); return; }
     setLoading(true);
     try {
-      const res  = await fetch(`${API}/auth/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ module, password: pwInput }),
-      });
-      const data = await res.json();
-      if (data.success) onUnlock();
+      if (!isOnline()) { await unlockOffline(pw); return; }
+      let res;
+      try {
+        res = await fetch(`${API}/auth/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ module, password: pw }),
+        });
+      } catch { await unlockOffline(pw); return; }
+      if (res.status >= 500) { await unlockOffline(pw); return; }
+
+      const data = await res.json().catch(() => ({}));
+      if (data.success) { refreshOfflineCredential(); onUnlock(); }
       else showNotif(data.message || "Incorrect password.", "error");
-    } catch { showNotif("Cannot reach server.", "error"); }
-    finally { setLoading(false); }
+    } finally { setLoading(false); }
   };
 
   return (
@@ -978,7 +993,7 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
           </button>
         </div>
         <button className="btn btn-primary pw-gate__submit-btn" onClick={handleSubmit} disabled={loading}>
-          {loading ? (<><div className="spinner spinner--sm" />&nbsp;Verifying…</>) : "Unlock & View Records →"}
+          {loading ? (<><div className="spinner spinner--sm" /> Verifying…</>) : "Unlock & View Records →"}
         </button>
       </div>
     </div>
@@ -1002,9 +1017,9 @@ const NegativeCertPreview = ({
   orNumber, onOrNumberChange, onPrint,
 }) => {
   const todayDate = formatTodayLong();
-  const officer   = OFFICE_CONFIG.certifyingOfficer;
-  const verified  = OFFICE_CONFIG.verifiedBy;
-  const year      = dateOfMarriage ? new Date(dateOfMarriage).getFullYear() : new Date().getFullYear();
+  const officer = OFFICE_CONFIG.certifyingOfficer;
+  const verified = OFFICE_CONFIG.verifiedBy;
+  const year = dateOfMarriage ? new Date(dateOfMarriage).getFullYear() : new Date().getFullYear();
 
   return (
     <div className="neg-cert-preview-wrap">
@@ -1027,7 +1042,7 @@ const NegativeCertPreview = ({
           <p className="neg-cert-doc__date">{todayDate}</p>
           <p className="neg-cert-doc__salutation">TO WHOM IT MAY CONCERN:</p>
           <p className="neg-cert-doc__para">
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of marriage of{" "}
+            We certify that this office has no records of marriage of{" "}
             <strong className="neg-cert-doc__highlight">{(subjectName || "").toUpperCase()}</strong>{" "}
             who is alleged to have been married on{" "}
             {dateOfMarriage
@@ -1045,10 +1060,10 @@ const NegativeCertPreview = ({
             }{" "}hence, we cannot issue, as requested, a true copy of his/her Certificate of Marriage or transcription from the Register of Marriages.
           </p>
           <p className="neg-cert-doc__para">
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Marriage for the year <strong>{year}</strong> are still intact in the archives of this office.
+            We also certify that the records of Marriage for the year <strong>{year}</strong> are still intact in the archives of this office.
           </p>
           <p className="neg-cert-doc__para">
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This certification is issued to{" "}
+            This certification is issued to{" "}
             {requestorName
               ? <strong className="neg-cert-doc__highlight">{requestorName.toUpperCase()}</strong>
               : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[REQUESTOR'S NAME]</strong>
@@ -1153,42 +1168,42 @@ function uploadWithProgress(url, formData, onProgress) {
       let data = {};
       try { data = JSON.parse(xhr.responseText || "{}"); } catch { /* non-JSON body */ }
       if (xhr.status >= 200 && xhr.status < 300) { onProgress(100); resolve(data); }
-      else reject(new Error(data.error || "Upload failed"));
+      else { const e = new Error(data.error || "Upload failed"); e.status = xhr.status; reject(e); }
     };
     xhr.onerror = () => reject(new Error("Cannot reach server."));
     xhr.send(formData);
   });
 }
 
-// FIXED: inline layout for the "matching surname records" list. Marriage names
+// Inline layout for the "matching surname records" list. Marriage names
 // are "Groom & Bride" and much longer than Birth/Death names, so without this
 // the date dropped under the name and the modal grew past the screen (the
 // Done button got cut off).
-const MATCH_LIST_STYLE  = { maxHeight: 260, overflowY: "auto" };
-const MATCH_ROW_STYLE   = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "nowrap", gap: 12 };
-const MATCH_LEFT_STYLE  = { display: "flex", alignItems: "center", flexWrap: "nowrap", gap: 8, flex: "1 1 auto", minWidth: 0 };
-const MATCH_ICON_STYLE  = { flexShrink: 0, display: "inline-flex" };
-const MATCH_NAME_STYLE  = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const MATCH_LIST_STYLE = { maxHeight: 260, overflowY: "auto" };
+const MATCH_ROW_STYLE = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "nowrap", gap: 12 };
+const MATCH_LEFT_STYLE = { display: "flex", alignItems: "center", flexWrap: "nowrap", gap: 8, flex: "1 1 auto", minWidth: 0 };
+const MATCH_ICON_STYLE = { flexShrink: 0, display: "inline-flex" };
+const MATCH_NAME_STYLE = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const MATCH_BADGE_STYLE = { flexShrink: 0, whiteSpace: "nowrap" };
-const MATCH_DATE_STYLE  = { flexShrink: 0, whiteSpace: "nowrap" };
+const MATCH_DATE_STYLE = { flexShrink: 0, whiteSpace: "nowrap" };
 
 const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
-  const [stage,           setStage]           = useState("upload");
-  const [queue,           setQueue]           = useState([]);
+  const [stage, setStage] = useState("upload");
+  const [queue, setQueue] = useState([]);
   const [uploadedRecords, setUploadedRecords] = useState([]);
-  const [matches,         setMatches]         = useState([]);
-  const [isUploading,     setIsUploading]     = useState(false);
+  const [matches, setMatches] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
   const fileRef = useRef(null);
 
-  const slotsLeft    = MAX_UPLOAD - queue.length;
+  const slotsLeft = MAX_UPLOAD - queue.length;
   const limitReached = queue.length >= MAX_UPLOAD;
 
   const overallProgress = queue.length
-    ? queue.reduce((sum, q) => sum + (q.status === "done" ? 100 : q.status === "uploading" ? (q.progress || 0) : 0), 0) / queue.length
+    ? queue.reduce((sum, q) => sum + (q.status === "done" || q.status === "queued" ? 100 : q.status === "uploading" ? (q.progress || 0) : 0), 0) / queue.length
     : 0;
 
   const getLimitClass = () => {
-    if (limitReached)                   return "upl-limit-badge--reached";
+    if (limitReached) return "upl-limit-badge--reached";
     if (queue.length >= MAX_UPLOAD - 1) return "upl-limit-badge--warn";
     return "upl-limit-badge--ok";
   };
@@ -1221,34 +1236,43 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
     setIsUploading(true);
     const uploaded = [];
     for (const item of queue) {
+      if (item.status === "done" || item.status === "queued") continue;
       setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "uploading", progress: 0 } : qi));
+
+      const saveOffline = async () => {
+        const op = await queueUpload(ENTITY, `${API}/records`, item.file);
+        uploaded.push({ id: `offline-${op.opId}`, file_name: item.file.name,
+          uploaded_at: new Date(op.createdAt).toISOString(), _pending: true });
+        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "queued", progress: 100 } : qi));
+      };
+
       try {
+        if (!isOnline()) { await saveOffline(); continue; }
         const fd = new FormData();
         fd.append("file", item.file);
         const data = await uploadWithProgress(`${API}/records`, fd, (pct) =>
-          setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, progress: pct } : qi)),
-        );
+          setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, progress: pct } : qi)));
         uploaded.push(data);
         setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "done", progress: 100 } : qi));
       } catch (err) {
-        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "error", error: err.message } : qi));
-        showNotif(`Failed to upload "${item.file.name}": ${err.message}`, "error");
+        let failure = err;
+        if (err.message === "Cannot reach server." || (err.status >= 500 && !(await checkNow()))) {
+          try { await saveOffline(); continue; } catch (e2) { failure = e2; }
+        }
+        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "error", error: failure.message } : qi));
+        showNotif(`Failed to upload "${item.file.name}": ${failure.message}`, "error");
       }
     }
     setIsUploading(false);
     if (uploaded.length > 0) {
       setUploadedRecords(uploaded);
-
-      // FIXED: give the server a moment to settle after the last upload
-      // before refetching the lists (fetchers also retry on failure).
       setTimeout(() => onUploadSuccess(), 400);
-
-      // Show ONLY the files that were just uploaded (not every record that
-      // happens to share a surname).
       setMatches(uploaded.map((r) => ({ ...r, uploaded_at: r.uploaded_at || new Date().toISOString() })));
-
       setStage("results");
-      showNotif(`${uploaded.length} file${uploaded.length > 1 ? "s" : ""} uploaded!`, "success");
+      const queuedCount = uploaded.filter((u) => u._pending).length;
+      showNotif(queuedCount
+        ? `${queuedCount} file${queuedCount > 1 ? "s" : ""} saved on this device. They will upload automatically when you're back online.`
+        : `${uploaded.length} file${uploaded.length > 1 ? "s" : ""} uploaded!`, "success");
     }
   };
 
@@ -1265,7 +1289,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                 : `${uploadedRecords.length} file${uploadedRecords.length > 1 ? "s" : ""} uploaded successfully`}
             </div>
           </div>
-          <button className="upl-close" onClick={onClose} aria-label="Close upload dialog">&#10005;</button>
+          <button className="upl-close" onClick={onClose} aria-label="Close upload dialog">✕</button>
         </div>
 
         {stage === "upload" && (
@@ -1330,9 +1354,10 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                         <UploadProgressBar value={item.progress || 0} width={140} height={8} />
                       )}
                       {item.status === "done"      && "Done"}
+                      {item.status === "queued"    && "Saved offline"}
                       {item.status === "error"     && `Error: ${item.error || "Unknown"}`}
                     </span>
-                    {!isUploading && item.status !== "done" && (
+                    {!isUploading && item.status !== "done" && item.status !== "queued" && (
                       <button className="upl-queue__remove" onClick={() => removeFromQueue(item.id)} title="Remove" aria-label={`Remove ${ensurePdfName(item.file.name)} from queue`}>
                         &#10005;
                       </button>
@@ -1346,7 +1371,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
               <button
                 className="btn btn-primary"
                 onClick={handleUploadAll}
-                disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done")}
+                disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done" || q.status === "queued")}
               >
                 {isUploading
                   ? `Uploading… ${Math.round(overallProgress)}%`
@@ -1432,8 +1457,8 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
 };
 
 const InlinePdfViewer = ({ pdfData, pdfError, record, onPrint, loadingPdf, showNotif }) => {
-  const displayName             = record ? getRecordDisplayName(record) : "";
-  const [pdfUrl,   setPdfUrl]   = useState("");
+  const displayName = record ? getRecordDisplayName(record) : "";
+  const [pdfUrl, setPdfUrl] = useState("");
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
@@ -1500,11 +1525,11 @@ const InlinePdfViewer = ({ pdfData, pdfError, record, onPrint, loadingPdf, showN
   );
 };
 
-// UPDATED: now has a checkbox for bulk selection (selected / onToggle props).
+// Checkbox for bulk selection (selected / onToggle props).
 const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
-  const groom       = getGroomDisplayName(record);
-  const bride       = getBrideDisplayName(record);
+  const groom = getGroomDisplayName(record);
+  const bride = getBrideDisplayName(record);
   return (
     <div className={`mobile-record-card${selected ? " mobile-record-card--selected" : ""}`}>
       <div className="mobile-record-card__top">
@@ -1527,7 +1552,7 @@ const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, on
       <div className="mobile-record-card__date">{formatDate(record.archived_at)}</div>
       <div className="mobile-record-card__actions">
         <button className="tbl-btn tbl-btn--blue" onClick={onView}>View</button>
-        <button className="tbl-btn tbl-btn--red"  onClick={onDelete}>Delete</button>
+        <button className="tbl-btn tbl-btn--red" onClick={onDelete}>Delete</button>
       </div>
     </div>
   );
@@ -1535,41 +1560,43 @@ const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, on
 
 /* ── Main Component ──────────────────────────────────────────────────────── */
 export default function UnifiedMarriageRegistry({ initialView = null }) {
-  const [tab,             setTab]             = useState(initialView === "archive" ? "archive" : "transaction");
-  const [confirmModal,    setConfirmModal]    = useState(null);
+  const [tab, setTab] = useState(initialView === "archive" ? "archive" : "transaction");
+  const [confirmModal, setConfirmModal] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [pdfModal,        setPdfModal]        = useState(null);
-  const [negCertModal,    setNegCertModal]    = useState(null);
-  const [negCertInfo,     setNegCertInfo]     = useState({ fatherName: "", motherName: "", dateOfMarriage: "", requestorName: "" });
-  const [orNumber,        setOrNumber]        = useState("");
+  const [pdfModal, setPdfModal] = useState(null);
+  const [negCertModal, setNegCertModal] = useState(null);
+  const [negCertInfo, setNegCertInfo] = useState({ fatherName: "", motherName: "", dateOfMarriage: "", requestorName: "" });
+  const [orNumber, setOrNumber] = useState("");
 
   const showNotif = useShowNotif();
 
-  const [step,           setStep]           = useState("select");
-  const [srchFirstName,  setSrchFirstName]  = useState("");
-  const [srchLastName,   setSrchLastName]   = useState("");
-  const [hasSearched,    setHasSearched]    = useState(false);
+  const [step, setStep] = useState("select");
+  const [srchFirstName, setSrchFirstName] = useState("");
+  const [srchLastName, setSrchLastName] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
   const [firstNameError, setFirstNameError] = useState("");
-  const [lastNameError,  setLastNameError]  = useState("");
+  const [lastNameError, setLastNameError] = useState("");
   const [selectedRecord, setSelectedRecord] = useState(null);
-  const [recordStatus,   setRecordStatus]   = useState(null);
-  const [subjectName,    setSubjectName]    = useState("");
-  const [payRef,         setPayRef]         = useState("");
-  const [processing,     setProcessing]     = useState(false);
+  const [recordStatus, setRecordStatus] = useState(null);
+  const [subjectName, setSubjectName] = useState("");
+  const [payRef, setPayRef] = useState("");
+  const [processing, setProcessing] = useState(false);
 
-  const [step2PdfData,     setStep2PdfData]     = useState(null);
-  const [step2PdfError,    setStep2PdfError]    = useState("");
-  const [step2PdfLoading,  setStep2PdfLoading]  = useState(false);
+  const [step2PdfData, setStep2PdfData] = useState(null);
+  const [step2PdfError, setStep2PdfError] = useState("");
+  const [step2PdfLoading, setStep2PdfLoading] = useState(false);
   const [previewLoadingId, setPreviewLoadingId] = useState(null);
 
-  const [allRecords,         setAllRecords]         = useState([]);
-  const [allArchivedRecords, setAllArchivedRecords] = useState([]);
-  const [loadingRecords,     setLoadingRecords]     = useState(false);
-  const [archiveSearch,      setArchiveSearch]      = useState("");
-  const [archiveUnlocked,    setArchiveUnlocked]    = useState(false);
+  const { allRecords, allArchivedRecords, loadingRecords, fetchRecords, fetchArchived } = useVitalData({
+    entity: ENTITY, api: API, fetchJson: fetchJsonWithRetry,
+    toBlob: createPdfBlobFromData, showNotif,
+  });
 
-  // ADDED: bulk selection (Archive tab)
-  const [selectedIds,  setSelectedIds]  = useState(new Set());
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const [archiveUnlocked, setArchiveUnlocked] = useState(false);
+
+  // Bulk selection (Archive tab)
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { isMobile, isTablet } = useViewport();
@@ -1584,53 +1611,10 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
       .map((r) => ({ ...r, _isArchived: true })),
   ];
 
-  const recordsAbortRef  = useRef(null);
-  const archivedAbortRef = useRef(null);
-
-  // FIXED: uses fetchJsonWithRetry and shows the real server error.
-  const fetchRecords = useCallback(async () => {
-    if (recordsAbortRef.current) recordsAbortRef.current.abort();
-    const controller = new AbortController();
-    recordsAbortRef.current = controller;
-
-    setLoadingRecords(true);
-    try {
-      const data = await fetchJsonWithRetry(`${API}/records`, { signal: controller.signal });
-      setAllRecords(Array.isArray(data) ? data : []);
-    } catch (err) {
-      if (err?.name !== "AbortError") {
-        showNotif(`Failed to load records. ${err?.message || ""}`.trim(), "error");
-      }
-    } finally {
-      if (recordsAbortRef.current === controller) setLoadingRecords(false);
-    }
-  }, []);
-
-  const fetchArchived = useCallback(async () => {
-    if (archivedAbortRef.current) archivedAbortRef.current.abort();
-    const controller = new AbortController();
-    archivedAbortRef.current = controller;
-
-    setLoadingRecords(true);
-    try {
-      const data = await fetchJsonWithRetry(`${API}/archived`, { signal: controller.signal });
-      const arr  = Array.isArray(data) ? data : [];
-      setAllArchivedRecords(arr);
-    } catch (err) {
-      if (err?.name !== "AbortError") {
-        showNotif(`Failed to load archived records. ${err?.message || ""}`.trim(), "error");
-      }
-    } finally {
-      if (archivedAbortRef.current === controller) setLoadingRecords(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchRecords(); fetchArchived(); }, [fetchRecords, fetchArchived]);
-
   const handleSearch = () => {
     let valid = true;
     if (!srchFirstName.trim()) { setFirstNameError("First name is required."); valid = false; } else setFirstNameError("");
-    if (!srchLastName.trim())  { setLastNameError("Last name is required.");   valid = false; } else setLastNameError("");
+    if (!srchLastName.trim()) { setLastNameError("Last name is required."); valid = false; } else setLastNameError("");
     if (!valid) return;
     setHasSearched(true);
   };
@@ -1641,7 +1625,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   const searchResults = hasSearched && searchLN
     ? allRecordsForSearch.filter((r) => {
         const lastNames = getRecordLastNames(r);
-        const qWords    = searchLN.split(/\s+/).filter(Boolean);
+        const qWords = searchLN.split(/\s+/).filter(Boolean);
         return lastNames.some((ln) => {
           const lnWords = ln.split(/\s+/).filter(Boolean);
           return qWords.every((qw) => lnWords.some((lw) => lw === qw));
@@ -1652,7 +1636,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   const sortedResults = [...searchResults].sort((a, b) => {
     const aFNs = getRecordFirstNames(a); const bFNs = getRecordFirstNames(b);
     if (!a._isArchived && b._isArchived) return -1;
-    if (a._isArchived  && !b._isArchived) return 1;
+    if (a._isArchived && !b._isArchived) return 1;
     const aExact = searchFN && aFNs.includes(searchFN);
     const bExact = searchFN && bFNs.includes(searchFN);
     if (aExact && !bExact) return -1;
@@ -1693,11 +1677,8 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   const handlePreviewPdf = async (id, record) => {
     setPreviewLoadingId(id);
     try {
-      const res  = await fetch(`${API}/records/${id}`);
-      if (!res.ok) throw new Error("Failed to load PDF.");
-      const data = await res.json();
-      if (!data?.pdf_data) throw new Error(data?.pdf_error || "No PDF data returned by the server.");
-      setPdfModal({ pdfData: data.pdf_data, pdfError: data.pdf_error || null, fileName: getRecordDisplayName(record || data), id });
+      const pdfData = await loadPdfForRecord(ENTITY, API, id, record, createPdfBlobFromData);
+      setPdfModal({ pdfData, pdfError: null, fileName: getRecordDisplayName(record), id });
     } catch (err) { showNotif(err.message, "error"); }
     finally { setPreviewLoadingId(null); }
   };
@@ -1706,14 +1687,11 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     if (!record) { setStep2PdfData(null); setStep2PdfError(""); return; }
     setStep2PdfLoading(true);
     try {
-      const res  = await fetch(`${API}/records/${record.id}`);
-      if (!res.ok) throw new Error("Failed to load PDF.");
-      const data = await res.json();
-      if (!data?.pdf_data) throw new Error(data?.pdf_error || "No PDF data returned by the server.");
-      setStep2PdfData(data.pdf_data);
-      setStep2PdfError(data.pdf_error || "");
-    } catch (err) { showNotif(err.message, "error"); setStep2PdfData(null); setStep2PdfError(err.message); }
-    finally { setStep2PdfLoading(false); }
+      setStep2PdfData(await loadPdfForRecord(ENTITY, API, record.id, record, createPdfBlobFromData));
+      setStep2PdfError("");
+    } catch (err) {
+      showNotif(err.message, "error"); setStep2PdfData(null); setStep2PdfError(err.message);
+    } finally { setStep2PdfLoading(false); }
   };
 
   const handleProceedToPayment = async () => {
@@ -1723,7 +1701,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   };
 
   const isPositive = recordStatus === "ACTIVE";
-  const issuedDoc  = isPositive
+  const issuedDoc = isPositive
     ? "Certified True Copy of Marriage Certificate (Actual)"
     : "Certificate of No Marriage Record (Negative Certificate)";
 
@@ -1734,14 +1712,14 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     }
     printNegativeCertificate({
       subjectName,
-      dateOfMarriage:    negCertInfo.dateOfMarriage || null,
-      fatherName:        negCertInfo.fatherName     || null,
-      motherName:        negCertInfo.motherName     || null,
-      requestorName:     negCertInfo.requestorName  || null,
-      cityMunicipality:  OFFICE_CONFIG.cityMunicipality,
+      dateOfMarriage: negCertInfo.dateOfMarriage || null,
+      fatherName: negCertInfo.fatherName || null,
+      motherName: negCertInfo.motherName || null,
+      requestorName: negCertInfo.requestorName || null,
+      cityMunicipality: OFFICE_CONFIG.cityMunicipality,
       certifyingOfficer: OFFICE_CONFIG.certifyingOfficer,
-      verifiedBy:        OFFICE_CONFIG.verifiedBy,
-      amountPaid:        OFFICE_CONFIG.amountPaid,
+      verifiedBy: OFFICE_CONFIG.verifiedBy,
+      amountPaid: OFFICE_CONFIG.amountPaid,
       orNumber: orNumber.trim(),
       datePaid: formatTodayLong(),
       todayDate: formatTodayLong(),
@@ -1757,32 +1735,41 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
 
   const handleCompleteTransaction = async () => {
     setProcessing(true);
+    const opId = newOpId();
+    const url = `${API}/records/complete`;
+    const payload = {
+      searchOperator: subjectName, recordStatus,
+      recordId: selectedRecord && !selectedRecord._pending ? selectedRecord.id : null,
+      paymentMethod: "cash", paymentReference: payRef,
+      paymentAmount: FEE, documentIssued: issuedDoc,
+      orNumber: orNumber.trim() || null,
+      groom_first_name: selectedRecord?.groom_first_name || "",
+      groom_middle_name: selectedRecord?.groom_middle_name || "",
+      groom_last_name: selectedRecord?.groom_last_name || "",
+      bride_first_name: selectedRecord?.bride_first_name || "",
+      bride_middle_name: selectedRecord?.bride_middle_name || "",
+      bride_last_name: selectedRecord?.bride_last_name || "",
+    };
+    const saveOffline = async () => {
+      await queueTransaction(ENTITY, url, payload, subjectName, opId);
+      showNotif("No connection. Transaction saved on this device and will sync automatically.", "success");
+      return true;
+    };
     try {
-      const res = await fetch(`${API}/records/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          searchOperator: subjectName, recordStatus,
-          recordId: selectedRecord?.id || null,
-          paymentMethod: "cash", paymentReference: payRef,
-          paymentAmount: FEE, documentIssued: issuedDoc,
-          orNumber: orNumber.trim() || null,
-          groom_first_name:  selectedRecord?.groom_first_name  || "",
-          groom_middle_name: selectedRecord?.groom_middle_name || "",
-          groom_last_name:   selectedRecord?.groom_last_name   || "",
-          bride_first_name:  selectedRecord?.bride_first_name  || "",
-          bride_middle_name: selectedRecord?.bride_middle_name || "",
-          bride_last_name:   selectedRecord?.bride_last_name   || "",
-        }),
-      });
+      if (!isOnline()) return await saveOffline();
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Offline-Op-Id": opId },
+          body: JSON.stringify(payload),
+        });
+      } catch { return await saveOffline(); }
+      if (res.status >= 500 && !(await checkNow())) return await saveOffline(); // server/DB down
 
       let data = {};
-      try { data = await res.json(); } catch { /* non-JSON body — data stays {} */ }
-
-      if (!res.ok || data?.error) {
-        throw new Error(data?.error || "Failed to save the transaction. Please try again.");
-      }
-
+      try { data = await res.json(); } catch { /* non-JSON */ }
+      if (!res.ok || data?.error) throw new Error(data?.error || "Failed to save the transaction. Please try again.");
       showNotif("Transaction completed successfully!", "success");
       return true;
     } catch (err) {
@@ -1806,11 +1793,8 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
 
   const handleViewPdf = async (id, record) => {
     try {
-      const res  = await fetch(`${API}/records/${id}`);
-      if (!res.ok) throw new Error("Failed to load PDF.");
-      const data = await res.json();
-      if (!data?.pdf_data) throw new Error(data?.pdf_error || "No PDF data returned by the server.");
-      setPdfModal({ pdfData: data.pdf_data, pdfError: data.pdf_error || null, fileName: getRecordDisplayName(record || data), id });
+      const pdfData = await loadPdfForRecord(ENTITY, API, id, record, createPdfBlobFromData);
+      setPdfModal({ pdfData, pdfError: null, fileName: getRecordDisplayName(record), id });
     } catch (err) { showNotif(err.message, "error"); }
   };
 
@@ -1822,10 +1806,11 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     onConfirm: async () => {
       setConfirmModal(null);
       try {
-        const res = await fetch(`${API}/records/${id}`, { method: "DELETE" });
-        if (!res.ok) throw new Error((await res.json()).error || "Delete failed");
-        showNotif(`"${getRecordDisplayName(record)}" deleted.`, "success");
-        fetchArchived();
+        const result = await deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record));
+        const name = getRecordDisplayName(record);
+        if (result === "queued") showNotif(`"${name}" deleted offline. It will be removed from the server when you're back online.`, "success");
+        else if (result === "removed") showNotif(`"${name}" removed from the upload queue.`, "success");
+        else { showNotif(`"${name}" deleted.`, "success"); fetchArchived(); }
       } catch (err) { showNotif(err.message, "error"); }
     },
   });
@@ -1834,9 +1819,9 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     ? allArchivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
     : allArchivedRecords;
 
-  // ── ADDED: Bulk selection (Archive) ──────────────────────────────────────
-  const filteredIds  = filteredArchived.map((r) => r.id);
-  const allSelected  = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  // ── Bulk selection (Archive) ─────────────────────────────────────────────
+  const filteredIds = filteredArchived.map((r) => r.id);
+  const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
   const someSelected = !allSelected && filteredIds.some((id) => selectedIds.has(id));
 
   const toggleSelect = (id) =>
@@ -1851,7 +1836,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allSelected) filteredIds.forEach((id) => next.delete(id));
-      else             filteredIds.forEach((id) => next.add(id));
+      else filteredIds.forEach((id) => next.add(id));
       return next;
     });
 
@@ -1862,7 +1847,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     setSelectedIds((prev) => {
       if (prev.size === 0) return prev;
       const valid = new Set(allArchivedRecords.map((r) => r.id));
-      const next  = new Set([...prev].filter((id) => valid.has(id)));
+      const next = new Set([...prev].filter((id) => valid.has(id)));
       return next.size === prev.size ? prev : next;
     });
   }, [allArchivedRecords]);
@@ -1870,6 +1855,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   const handleBulkDelete = () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
+    const byId = new Map(allArchivedRecords.map((r) => [r.id, r]));
     setConfirmModal({
       title: "Permanently Delete Selected",
       message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
@@ -1879,20 +1865,15 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
         setConfirmModal(null);
         setBulkDeleting(true);
         const results = await Promise.allSettled(
-          ids.map(async (id) => {
-            const res = await fetch(`${API}/records/${id}`, { method: "DELETE" });
-            if (!res.ok) throw new Error("Delete failed");
-            return id;
-          }),
+          ids.map((id) => deleteRecordSmart(ENTITY, API, id, byId.get(id), getRecordDisplayName(byId.get(id)))),
         );
-        const failed  = results.filter((r) => r.status === "rejected").length;
+        const failed = results.filter((r) => r.status === "rejected").length;
+        const queued = results.filter((r) => r.status === "fulfilled" && r.value === "queued").length;
         const deleted = ids.length - failed;
-
-        if (deleted > 0) showNotif(`${deleted} record${deleted !== 1 ? "s" : ""} deleted.`, "success");
-        if (failed  > 0) showNotif(`${failed} record${failed !== 1 ? "s" : ""} could not be deleted.`, "error");
-
+        if (deleted > 0) showNotif(`${deleted} record${deleted !== 1 ? "s" : ""} deleted` + (queued ? ` (${queued} will finish syncing when you're back online).` : "."), "success");
+        if (failed > 0) showNotif(`${failed} record${failed !== 1 ? "s" : ""} could not be deleted.`, "error");
         clearSelection();
-        await fetchArchived();
+        if (isOnline()) await fetchArchived();
         setBulkDeleting(false);
       },
     });
@@ -2030,7 +2011,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
                                     selectedRecord?.id === r.id &&
                                     !!selectedRecord?._isArchived === !!r._isArchived;
 
-                                  // ADDED: accuracy % — scores the better-matching spouse
+                                  // Accuracy % — scores the better-matching spouse
                                   const accuracy = computeMarriageAccuracy(
                                     { lastName: srchLastName, firstName: srchFirstName },
                                     getSpouseNameParts(r, "groom"),
@@ -2253,7 +2234,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
                 </div>
               </div>
               <div className="tab-card">
-                {/* ADDED: bulk action bar — only visible when something is selected */}
+                {/* Bulk action bar — only visible when something is selected */}
                 {selectedIds.size > 0 && (
                   <div className="bulk-bar">
                     <span className="bulk-bar__count">{selectedIds.size} selected</span>

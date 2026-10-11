@@ -1,7 +1,8 @@
+// src/pages/Auth/Login.jsx
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./Login.css";
-
+import { saveOfflineCredential, verifyOfflineLogin } from "../../offline/adapters/offlineLogin";
 import { pushToast } from "../../services/toastService";
 
 import bgImage from "../../assets/images/home.jpg";
@@ -75,12 +76,14 @@ const Login = () => {
   const [lockSecondsRemaining, setLockSecondsRemaining] = useState(0);
   const countdownRef = useRef(null);
 
+  // Already signed in this browser session -> go straight to dashboard
   useEffect(() => {
     if (sessionStorage.getItem("isAuthenticated") === "true") {
      window.location.replace("/dashboard");
     }
   }, []);
 
+  // Lock countdown timer
   useEffect(() => {
     if (!isLocked || lockSecondsRemaining <= 0) {
       clearInterval(countdownRef.current);
@@ -125,6 +128,9 @@ const Login = () => {
         sessionStorage.setItem("isAuthenticated", "true");
         sessionStorage.setItem("username", loggedUsername);
 
+        // Save hashed credential on this device for future offline login
+        await saveOfflineCredential(loggedUsername, password, userObj);
+
         pushToast({ title: "Login successful!", message: msg, success: true, duration: 2000 });
 
         setTimeout(() => {
@@ -143,6 +149,57 @@ const Login = () => {
       }
     } catch (error) {
       console.error("Login error:", error);
+
+      const status = error?.response?.status;
+      const serverDown = !error.response || status >= 500 || !navigator.onLine;
+
+      if (serverDown) {
+        const res = await verifyOfflineLogin(username, password);
+
+        if (res.ok) {
+          const u = res.user || {};
+          const offlineUsername = u.username || username;
+          const offlineIsAdmin =
+            Boolean(u.is_admin) || String(u.role || "").toLowerCase().includes("admin");
+
+          sessionStorage.setItem("isAuthenticated", "true");
+          sessionStorage.setItem("username", offlineUsername);
+
+          // Same shape PermissionContext writes (writeSessionCache), so the
+          // admin flag and role survive an offline reload.
+          localStorage.setItem("cr_session_cache_v1", JSON.stringify({
+            username: offlineUsername,
+            role: u.role || (offlineIsAdmin ? "Administrator" : "User"),
+            permissions: Array.isArray(u.permissions) ? u.permissions : [],
+            isAdmin: offlineIsAdmin,
+            savedAt: Date.now(),
+          }));
+
+          pushToast({
+            title: "Offline login",
+            message: "Signed in using saved credentials.",
+            success: true,
+            duration: 2000,
+          });
+          setTimeout(() => { window.location.href = "/dashboard"; }, 400);
+          return;
+        }
+
+        const msgs = {
+          no_record: "Server unavailable. Log in online at least once on this device first.",
+          locked: "Too many offline attempts. Try again in a minute.",
+          bad_password: "Invalid username or password.",
+        };
+        pushToast({
+          title: "Login failed",
+          message: msgs[res.reason] || "Server error. Please try again later.",
+          success: false,
+        });
+        setLoading(false);
+        return;
+      }
+
+      // 4xx from the server (wrong password, locked, etc.)
       const backendMessage =
         error?.response?.data?.message || "Server error. Please try again later.";
       const locked = backendMessage.toLowerCase().includes("locked");

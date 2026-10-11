@@ -1,6 +1,9 @@
 import React, { memo } from "react";
 import "./Sidebar.css";
 
+// Badge shows up to 99; anything higher reads "99+". The exact count stays in the tooltip.
+const formatBadgeCount = (n) => (n > 99 ? "99+" : String(n));
+
 const Sidebar = ({
   activeSubMenu,
   settingsOpen,
@@ -27,6 +30,8 @@ const Sidebar = ({
   trackingIcon,
   accountIcon,
   logoutIcon,
+  syncIcon,
+  offlinePendingCount = 0,
 }) => {
   const vitalIsActive = VITAL_CHILDREN ? VITAL_CHILDREN.includes(activeSubMenu) : false;
   const settingsIsActive = SETTINGS_CHILDREN ? SETTINGS_CHILDREN.includes(activeSubMenu) : false;
@@ -38,6 +43,8 @@ const Sidebar = ({
     viewport === "tablet" && tabletExpanded ? "tablet-expanded" : "",
     viewport === "tablet" && !tabletExpanded ? "collapsed" : "",
   ].filter(Boolean).join(" ");
+
+  const pendingLabel = `${offlinePendingCount} not yet synced`;
 
   return (
     <aside id="main-sidebar" className={sidebarClasses} aria-label="Main navigation">
@@ -125,6 +132,27 @@ const Sidebar = ({
               <li role="menuitem" className={activeSubMenu === MENU_KEYS.DOCUMENT_TRACKING ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.DOCUMENT_TRACKING)}>
                 <img src={trackingIcon} alt="" className="menu-icon" width="18" height="18" />
                 {showLabels && <span>Document Tracking</span>}
+              </li>
+              <hr className="menu-separator" />
+            </>
+          )}
+
+          {canAccess("offline_sync") && (
+            <>
+              {showLabels && <p className="sidebar-group-label">OFFLINE DATA</p>}
+              <li
+                role="menuitem"
+                className={activeSubMenu === MENU_KEYS.OFFLINE_SYNC ? "active" : ""}
+                onClick={() => handleMenuClick(MENU_KEYS.OFFLINE_SYNC)}
+                title={pendingLabel}
+              >
+                <img src={syncIcon} alt="" className="menu-icon menu-icon--sync" width="18" height="18" />
+                {showLabels && <span>Offline Data &amp; Sync</span>}
+                {showLabels && offlinePendingCount > 0 && (
+                  <span className="sync-badge" aria-label={pendingLabel}>
+                    {formatBadgeCount(offlinePendingCount)}
+                  </span>
+                )}
               </li>
               <hr className="menu-separator" />
             </>

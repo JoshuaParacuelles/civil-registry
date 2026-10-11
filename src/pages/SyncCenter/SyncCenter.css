@@ -1,0 +1,89 @@
+.sc-page { 
+  padding: 24px; color: #1e293b;
+   --sc-sticky-top: 75px;   /* taas ng topbar; ayusin kung iba sa iyo */
+}
+ 
+
+.sc-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.sc-title { margin: 0; font-size: 20px; font-weight: 800; color: #1a3c6e; }
+.sc-sub { margin: 4px 0 0; font-size: 13px; color: #64748b; }
+.sc-header__right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sc-last { font-size: 12px; color: #64748b; }
+
+.sc-pill { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.sc-pill.on { background: #dcfce7; color: #166534; }
+.sc-pill.off { background: #fef3c7; color: #92400e; }
+
+.sc-btn { padding: 7px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; color: #1e293b; }
+.sc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sc-btn--primary { background: #1a3c6e; border-color: #1a3c6e; color: #fff; }
+.sc-btn--danger { color: #b91c1c; border-color: #fca5a5; }
+
+.sc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.sc-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; }
+.sc-card__value { font-size: 24px; font-weight: 800; color: #1a3c6e; }
+.sc-card__label { font-size: 12px; color: #64748b; margin-top: 2px; }
+.sc-card--ok .sc-card__value { color: #15803d; }
+.sc-card--bad .sc-card__value { color: #b91c1c; }
+.sc-card--warn .sc-card__value { color: #b45309; }
+
+.sc-progress { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.sc-progress__text { font-size: 13px; margin-bottom: 8px; }
+.sc-bar { height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+.sc-bar > div { height: 100%; background: #10b981; transition: width 0.2s ease; }
+
+.sc-notice { padding: 10px 12px; border-radius: 10px; font-size: 13px; margin-bottom: 12px; }
+.sc-notice--ok { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.sc-notice--info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+.sc-notice--warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.sc-notice--error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+.sc-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.sc-tab { padding: 7px 12px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-size: 13px; color: #334155; }
+.sc-tab.active { background: #1a3c6e; border-color: #1a3c6e; color: #fff; }
+.sc-tab__count { font-weight: 700; margin-left: 4px; }
+
+.sc-table-wrap { overflow-x: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
+.sc-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+.sc-table th, .sc-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+.sc-table th { background: #f8fafc; font-size: 12px; color: #475569; }
+.sc-row--failed { background: #fef2f2; }
+.sc-row--conflict { background: #fffbeb; }
+.sc-label { max-width: 280px; word-break: break-word; }
+.sc-err { color: #b91c1c; font-size: 12px; display: block; }
+.sc-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.sc-empty { padding: 28px; text-align: center; color: #64748b; background: #fff; border: 1px dashed #cbd5e1; border-radius: 12px; }
+
+@media (max-width: 640px) {
+  .sc-page { padding: 14px; }
+}
+/* ─── STICKY HEADER + STATS ─────────────────────────────────────────── */
+/* Stays pinned while the table scrolls. The negative margin and matching
+   padding let the background run edge to edge across .sc-page's padding. */
+.sc-page {
+  --sc-sticky-top: 75px;   /* taas ng topbar; ayusin kung iba sa iyo */
+}
+
+.sc-sticky {
+  position: sticky;
+  top: var(--sc-sticky-top);
+  z-index: 20;
+  background: #f1f5f9;
+  margin: -24px -24px 16px;
+  padding: 24px 24px 12px;
+  box-shadow: 0 6px 14px -8px rgba(15, 23, 42, 0.25);
+}
+
+.sc-sticky .sc-header { margin-bottom: 14px; }
+.sc-sticky .sc-cards { margin-bottom: 0; }
+
+@media (max-width: 640px) {
+  /* Pinned header would take too much of a phone screen, so scroll normally there. */
+  .sc-sticky {
+    position: static;
+    margin: -14px -14px 12px;
+    padding: 14px 14px 4px;
+    box-shadow: none;
+  }
+}

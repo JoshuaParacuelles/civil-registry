@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
@@ -6,6 +6,22 @@ import lcrLogo from "../../../assets/images/lcr.jpg";
 import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
+import useOnlineStatus from "../../../hooks/useOnlineStatus";
+import { isOnline } from "../../../offline/connectivityService";
+import { subscribeSyncState } from "../../../offline/syncEngine";
+import { newOpId, removeOp } from "../../../offline/outboxQueue";
+import { getFile } from "../../../offline/fileStore";
+import {
+  saveList, loadList,
+  getCachedPdf, cachePdf, startPdfPrefetch,
+  useBirthPending,
+  queueBirthUpload, queueBirthDelete, queueBirthTransaction,
+} from "../../../offline/birthOffline";
+import {
+  verifyArchivePasswordOffline,
+  refreshOfflineCredential,
+} from "../../../offline/archivePassword";
+
 
 // Relative by default — resolves against whatever origin loaded the page
 // (localhost, LAN IP, or an HTTPS devtunnel) and goes through Vite's
@@ -377,6 +393,87 @@ function printPdfFromData(pdfData) {
   });
 }
 
+// ── OFFLINE helpers ────────────────────────────────────────────────────────
+
+// Online: fetch and refresh the local copy. Offline (or server down): use the
+// copy saved on this device.
+async function loadListWithFallback(path, cacheName, signal) {
+  if (isOnline()) {
+    try {
+      const data = await fetchJsonWithRetry(path, { signal });
+      const arr  = Array.isArray(data) ? data : [];
+      await saveList(cacheName, arr);
+      return { data: arr, fromCache: false };
+    } catch (err) {
+      if (err?.name === "AbortError") throw err;
+      const cached = await loadList(cacheName);
+      if (cached) return { data: cached.data, fromCache: true, savedAt: cached.savedAt };
+      throw err;
+    }
+  }
+  const cached = await loadList(cacheName);
+  if (cached) return { data: cached.data, fromCache: true, savedAt: cached.savedAt };
+  return { data: [], fromCache: true, empty: true };   // no more thrown error
+}
+
+// Returns something PdfModal / InlinePdfViewer can show (a Blob when possible).
+async function loadPdfForRecord(id, record) {
+  // 1. Uploaded while offline and still waiting to sync
+  if (record?._pendingFileId) {
+    const f = await getFile(record._pendingFileId);
+    if (!f?.blob) throw new Error("This queued file is no longer on the device.");
+    return f.blob;
+  }
+  // 2. Online: ask the server first, exactly like before. This keeps the
+  //    "VIEW" audit entry (GET /records/<id> logs it) and refreshes the local copy.
+  if (isOnline()) {
+    let res = null;
+    try { res = await fetch(`${API}/records/${id}`); }
+    catch { /* network dropped: fall through to the saved copy */ }
+
+    if (res && res.ok) {
+      const data = await res.json();
+      if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
+      const blob = createPdfBlobFromData(data.pdf_data);
+      if (blob) { cachePdf(id, blob); return blob; }
+      return data.pdf_data; // let the viewer show its own "corrupted" message
+    }
+    if (res && res.status < 500) throw new Error("Failed to load PDF."); // real 4xx answer
+    // network failure or 5xx (server/DB down): use the saved copy below
+  }
+
+  // 3. Offline (or server down): use the copy saved on this device
+  const cached = await getCachedPdf(id);
+  if (cached) return cached;
+  throw new Error(
+    isOnline()
+      ? "Server unreachable and this PDF isn't saved on this device."
+      : "This PDF isn't saved on this device yet. Connect once so it can be downloaded for offline use.",
+  );
+}
+
+// Delete now if online, otherwise queue it. Returns "deleted" | "queued" | "removed".
+async function deleteRecordSmart(id, record) {
+  if (record?._pendingOpId) {            // never reached the server: just cancel the upload
+    await removeOp(record._pendingOpId);
+    return "removed";
+  }
+  const queueIt = async () => {
+    await queueBirthDelete(`${API}/records/${id}`, getRecordDisplayName(record));
+    return "queued";
+  };
+  if (!isOnline()) return queueIt();
+  let res;
+  try { res = await fetch(`${API}/records/${id}`, { method: "DELETE" }); }
+  catch { return queueIt(); }
+  if (!res.ok) {
+    let msg = "";
+    try { msg = (await res.json()).error; } catch { /* non-JSON */ }
+    throw new Error(msg || "Delete failed");
+  }
+  return "deleted";
+}
+
 // ── Office Logo ─────────────────────────────────────────────────────────
 const OfficeLogo = ({ className = "" }) => {
   return (
@@ -687,6 +784,8 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
   const [dobError,    setDobError]    = useState("");
   const [fatherError, setFatherError] = useState("");
   const [motherError, setMotherError] = useState("");
+  const [noLocalCopy, setNoLocalCopy] = useState(false);
+  const [cacheSavedAt, setCacheSavedAt] = useState(null);
 
   const handleSubmit = () => {
     let valid = true;
@@ -867,27 +966,58 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
   const [showPw,  setShowPw]  = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // OFFLINE MODE → offline password only
+  const unlockOffline = async (pw) => {
+    const result = await verifyArchivePasswordOffline(module, pw);
+    if (result === "ok") {
+      showNotif("Unlocked offline.", "success");
+      onUnlock();
+    } else if (result === "wrong") {
+      showNotif("Incorrect password.", "error");
+    } else if (result === "locked") {
+      showNotif("Too many wrong attempts. Try again in 5 minutes.", "error");
+    } else if (result === "unset") {
+      showNotif("No password is set for this module yet.", "error");
+    } else {
+      showNotif("This device hasn't saved the password data yet. Open the app once while online and logged in, then try again.", "error");
+}
+  };
+
   const handleSubmit = async () => {
-    if (!pwInput.trim()) { showNotif("Password is required.", "error"); return; }
+    const pw = pwInput.trim();
+    if (!pw) { showNotif("Password is required.", "error"); return; }
     setLoading(true);
     try {
-      const res  = await fetch(`${API}/auth/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ module, password: pwInput }),
-      });
-      const data = await res.json();
-      if (data.success) onUnlock();
-      else showNotif(data.message || "Incorrect password.", "error");
-    } catch { showNotif("Cannot reach server.", "error"); }
-    finally { setLoading(false); }
+      // OFFLINE MODE
+      if (!isOnline()) { await unlockOffline(pw); return; }
+
+      // ONLINE MODE → password stored in the database
+      let res;
+      try {
+        res = await fetch(`${API}/auth/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ module, password: pw }),
+        });
+      } catch {
+        await unlockOffline(pw);            // network dropped mid-request
+        return;
+      }
+      if (res.status >= 500) { await unlockOffline(pw); return; } // server/DB down
+
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        refreshOfflineCredential(module, API); // keep the offline hash fresh
+        onUnlock();
+      } else {
+        showNotif(data.message || "Incorrect password.", "error");
+      }
+    } finally { setLoading(false); }
   };
 
   return (
     <div className="pw-gate">
-      <div className="pw-gate__icon">
-        <IconLock />
-      </div>
+      <div className="pw-gate__icon"><IconLock /></div>
       <p className="pw-gate__desc">{description}</p>
       <div className="pw-gate__form">
         <label className="pw-lbl" htmlFor="pw-gate-input">Administrator Password</label>
@@ -1120,7 +1250,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
 
   // ADDED: overall progress across the whole queue
   const overallProgress = queue.length
-    ? queue.reduce((sum, q) => sum + (q.status === "done" ? 100 : q.status === "uploading" ? (q.progress || 0) : 0), 0) / queue.length
+    ? queue.reduce((sum, q) => sum + (q.status === "done" || q.status === "queued" ? 100 : q.status === "uploading" ? (q.progress || 0) : 0), 0) / queue.length
     : 0;
 
   const getLimitClass = () => {
@@ -1152,14 +1282,28 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
 
   const removeFromQueue = (id) => setQueue((q) => q.filter((item) => item.id !== id));
 
-  // UPDATED: uses XHR upload with real per-file progress
+  // UPDATED: XHR upload with real per-file progress; falls back to the
+  // offline outbox when there is no connection.
   const handleUploadAll = async () => {
     if (queue.length === 0) { showNotif("Please add at least one file.", "error"); return; }
     setIsUploading(true);
     const uploaded = [];
     for (const item of queue) {
+      if (item.status === "done" || item.status === "queued") continue;
       setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "uploading", progress: 0 } : qi));
+
+      // Offline path: keep the PDF on this device; it uploads during sync.
+      const saveOffline = async () => {
+        const op = await queueBirthUpload(`${API}/records`, item.file);
+        uploaded.push({
+          id: `offline-${op.opId}`, file_name: item.file.name,
+          uploaded_at: new Date(op.createdAt).toISOString(), _pending: true,
+        });
+        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "queued", progress: 100 } : qi));
+      };
+
       try {
+        if (!isOnline()) { await saveOffline(); continue; }
         const fd = new FormData();
         fd.append("file", item.file);
         const data = await uploadWithProgress(`${API}/records`, fd, (pct) =>
@@ -1168,24 +1312,27 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
         uploaded.push(data);
         setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "done", progress: 100 } : qi));
       } catch (err) {
-        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "error", error: err.message } : qi));
-        showNotif(`Failed to upload "${item.file.name}": ${err.message}`, "error");
+        let failure = err;
+        if (err.message === "Cannot reach server.") {
+          try { await saveOffline(); continue; } catch (e2) { failure = e2; }
+        }
+        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "error", error: failure.message } : qi));
+        showNotif(`Failed to upload "${item.file.name}": ${failure.message}`, "error");
       }
     }
     setIsUploading(false);
     if (uploaded.length > 0) {
       setUploadedRecords(uploaded);
-
-      // Give the server a moment to settle after the last upload before
-      // refetching the lists (fetchers also retry on failure).
       setTimeout(() => onUploadSuccess(), 400);
-
-      // Show ONLY the files that were just uploaded (not every record that
-      // happens to share a surname).
       setMatches(uploaded.map((r) => ({ ...r, uploaded_at: r.uploaded_at || new Date().toISOString() })));
-
       setStage("results");
-      showNotif(`${uploaded.length} file${uploaded.length > 1 ? "s" : ""} uploaded!`, "success");
+      const queuedCount = uploaded.filter((u) => u._pending).length;
+      showNotif(
+        queuedCount
+          ? `${queuedCount} file${queuedCount > 1 ? "s" : ""} saved on this device. They will upload automatically when you're back online.`
+          : `${uploaded.length} file${uploaded.length > 1 ? "s" : ""} uploaded!`,
+        "success",
+      );
     }
   };
 
@@ -1267,6 +1414,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                         <UploadProgressBar value={item.progress || 0} width={140} height={8} />
                       )}
                       {item.status === "done"      && "Done"}
+                      {item.status === "queued"    && "Saved offline"}
                       {item.status === "error"     && `Error: ${item.error || "Unknown"}`}
                     </span>
                     {!isUploading && item.status !== "done" && (
@@ -1283,7 +1431,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
               <button
                 className="btn btn-primary"
                 onClick={handleUploadAll}
-                disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done")}
+                disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done" || q.status === "queued")}
               >
                 {isUploading
                   ? `Uploading… ${Math.round(overallProgress)}%`
@@ -1445,6 +1593,7 @@ const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, on
         />
         <span className="mobile-record-card__num">#{index + 1}</span>
         <span className="mobile-record-card__name">{displayName}</span>
+        {record._pending && <span className="archived-badge">Pending</span>}
       </div>
       {(father || mother) && (
         <div className="mobile-record-card__parents">
@@ -1472,6 +1621,8 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   const [orNumber,        setOrNumber]        = useState("");
 
   const showNotif = useShowNotif();
+  const online    = useOnlineStatus();
+  const pending   = useBirthPending(API);
 
   const [step,           setStep]           = useState("select");
   const [srchFirstName,  setSrchFirstName]  = useState("");
@@ -1502,18 +1653,31 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   const { isMobile, isTablet } = useViewport();
   const useCards = isMobile || isTablet;
 
-  const activeIdentityKeys = new Set(allRecords.map(getRecordIdentityKey));
+  // Server/cached lists + changes still waiting to sync:
+  //   queued uploads show up immediately, queued deletes disappear immediately.
+  const activeRecords = useMemo(
+    () => allRecords.filter((r) => !pending.deleteIds.has(String(r.id))),
+    [allRecords, pending.deleteIds],
+  );
+  const archivedRecords = useMemo(
+    () => [
+      ...pending.uploads,
+      ...allArchivedRecords.filter((r) => !pending.deleteIds.has(String(r.id))),
+    ],
+    [allArchivedRecords, pending.uploads, pending.deleteIds],
+  );
+
+  const activeIdentityKeys = new Set(activeRecords.map(getRecordIdentityKey));
 
   const allRecordsForSearch = [
-    ...allRecords,
-    ...allArchivedRecords
+    ...activeRecords,
+    ...archivedRecords
       .filter((r) => !activeIdentityKeys.has(getRecordIdentityKey(r)))
       .map((r) => ({ ...r, _isArchived: true })),
   ];
   const recordsAbortRef  = useRef(null);
   const archivedAbortRef = useRef(null);
 
-  // UPDATED: uses fetchJsonWithRetry and shows the real server error.
   const fetchRecords = useCallback(async () => {
     if (recordsAbortRef.current) recordsAbortRef.current.abort();
     const controller = new AbortController();
@@ -1521,8 +1685,9 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
 
     setLoadingRecords(true);
     try {
-      const data = await fetchJsonWithRetry(`${API}/records`, { signal: controller.signal });
-      setAllRecords(Array.isArray(data) ? data : []);
+      const { data, fromCache } = await loadListWithFallback(`${API}/records`, "records", controller.signal);
+      setAllRecords(data);
+      if (fromCache && isOnline()) showNotif("Server unreachable. Showing records saved on this device.", "error");
     } catch (err) {
       if (err?.name !== "AbortError") {
         showNotif(`Failed to load records. ${err?.message || ""}`.trim(), "error");
@@ -1539,9 +1704,9 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
 
     setLoadingRecords(true);
     try {
-      const data = await fetchJsonWithRetry(`${API}/archived`, { signal: controller.signal });
-      const arr  = Array.isArray(data) ? data : [];
-      setAllArchivedRecords(arr);
+      const { data, fromCache } = await loadListWithFallback(`${API}/archived`, "archived", controller.signal);
+      setAllArchivedRecords(data);
+      if (fromCache && isOnline()) showNotif("Server unreachable. Showing archive saved on this device.", "error");
     } catch (err) {
       if (err?.name !== "AbortError") {
         showNotif(`Failed to load archived records. ${err?.message || ""}`.trim(), "error");
@@ -1552,6 +1717,45 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   }, []);
 
   useEffect(() => { fetchRecords(); fetchArchived(); }, [fetchRecords, fetchArchived]);
+
+  useEffect(() => {
+    if (online) refreshOfflineCredential("archive_birth", API);
+  }, [online]);
+
+    // Keep the offline password hash current whenever we are online (no unlock needed).
+  useEffect(() => {
+    if (online) refreshOfflineCredential("archive_birth", API);
+  }, [online]);
+
+  // Connection came back → refresh lists from the server.
+  const wasOnlineRef = useRef(online);
+  useEffect(() => {
+    if (online && !wasOnlineRef.current) { fetchRecords(); fetchArchived(); }
+    wasOnlineRef.current = online;
+  }, [online, fetchRecords, fetchArchived]);
+
+  // While the outbox drains, refresh as items sync (debounced), so the list
+  // gradually swaps "pending" rows for the real server rows.
+  useEffect(() => {
+    let timer;
+    let last = { done: 0, syncing: false };
+    const unsub = subscribeSyncState((s) => {
+      const progressed = s.done > last.done || (last.syncing && !s.syncing);
+      last = { done: s.done, syncing: s.syncing };
+      if (!progressed) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => { fetchRecords(); fetchArchived(); }, 800);
+    });
+    return () => { unsub(); clearTimeout(timer); };
+  }, [fetchRecords, fetchArchived]);
+
+  // Background-download PDFs (one at a time) so they open offline.
+  useEffect(() => {
+    if (!online) return undefined;
+    const ids = [...allRecords, ...allArchivedRecords].map((r) => r.id);
+    if (ids.length === 0) return undefined;
+    return startPdfPrefetch(ids, { api: API, toBlob: createPdfBlobFromData });
+  }, [online, allRecords, allArchivedRecords]);
 
   const handleSearch = () => {
     let valid = true;
@@ -1615,11 +1819,8 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   const handlePreviewPdf = async (id, record) => {
     setPreviewLoadingId(id);
     try {
-      const res  = await fetch(`${API}/records/${id}`);
-      if (!res.ok) throw new Error("Failed to load PDF.");
-      const data = await res.json();
-      if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
-      setPdfModal({ pdfData: data.pdf_data, fileName: getRecordDisplayName(record || data), id });
+      const pdfData = await loadPdfForRecord(id, record);
+      setPdfModal({ pdfData, fileName: getRecordDisplayName(record), id });
     } catch (err) { showNotif(err.message, "error"); }
     finally { setPreviewLoadingId(null); }
   };
@@ -1627,13 +1828,8 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   const loadStep2Pdf = async (record) => {
     if (!record) { setStep2PdfData(null); return; }
     setStep2PdfLoading(true);
-    try {
-      const res  = await fetch(`${API}/records/${record.id}`);
-      if (!res.ok) throw new Error("Failed to load PDF.");
-      const data = await res.json();
-      if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
-      setStep2PdfData(data.pdf_data);
-    } catch (err) { showNotif(err.message, "error"); setStep2PdfData(null); }
+    try { setStep2PdfData(await loadPdfForRecord(record.id, record)); }
+    catch (err) { showNotif(err.message, "error"); setStep2PdfData(null); }
     finally { setStep2PdfLoading(false); }
   };
 
@@ -1676,25 +1872,46 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
     showNotif("Document reviewed. Proceeding to release.", "success");
   };
 
-  // Only report success when the server actually confirms the write, and
-  // return a boolean so the caller only resets on confirmed success.
+  // Only report success when the server actually confirms the write (or the
+  // transaction is safely queued on this device), and return a boolean so the
+  // caller only resets on success.
   const handleCompleteTransaction = async () => {
     setProcessing(true);
+    // Same id is used for the online attempt AND the queued copy, so the
+    // server (routes/sync.py) can never apply the same transaction twice.
+    const opId = newOpId();
+    const url  = `${API}/records/complete`;
+    const payload = {
+      searchOperator: subjectName, recordStatus,
+      // A record that is itself still queued has no server id yet.
+      recordId: selectedRecord && !selectedRecord._pending ? selectedRecord.id : null,
+      paymentMethod: "cash", paymentReference: payRef,
+      paymentAmount: FEE, documentIssued: issuedDoc,
+      orNumber: orNumber.trim() || null,
+      first_name:  selectedRecord?.child_first_name  || srchFirstName.trim(),
+      middle_name: selectedRecord?.child_middle_name || "",
+      last_name:   selectedRecord?.child_last_name   || srchLastName.trim(),
+    };
+
+    const saveOffline = async () => {
+      await queueBirthTransaction(url, payload, subjectName, opId);
+      showNotif("No connection. Transaction saved on this device and will sync automatically.", "success");
+      return true;
+    };
+
     try {
-      const res = await fetch(`${API}/records/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          searchOperator: subjectName, recordStatus,
-          recordId: selectedRecord?.id || null,
-          paymentMethod: "cash", paymentReference: payRef,
-          paymentAmount: FEE, documentIssued: issuedDoc,
-          orNumber: orNumber.trim() || null,
-          first_name:  selectedRecord?.child_first_name  || srchFirstName.trim(),
-          middle_name: selectedRecord?.child_middle_name || "",
-          last_name:   selectedRecord?.child_last_name   || srchLastName.trim(),
-        }),
-      });
+      if (!isOnline()) return await saveOffline();
+
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Offline-Op-Id": opId },
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        return await saveOffline();   // network dropped
+      }
 
       let data = {};
       try { data = await res.json(); } catch { /* non-JSON body — data stays {} */ }
@@ -1726,11 +1943,8 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
 
   const handleViewPdf = async (id, record) => {
     try {
-      const res  = await fetch(`${API}/records/${id}`);
-      if (!res.ok) throw new Error("Failed to load PDF.");
-      const data = await res.json();
-      if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
-      setPdfModal({ pdfData: data.pdf_data, fileName: getRecordDisplayName(record || data), id });
+      const pdfData = await loadPdfForRecord(id, record);
+      setPdfModal({ pdfData, fileName: getRecordDisplayName(record), id });
     } catch (err) { showNotif(err.message, "error"); }
   };
 
@@ -1742,17 +1956,18 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
     onConfirm: async () => {
       setConfirmModal(null);
       try {
-        const res = await fetch(`${API}/records/${id}`, { method: "DELETE" });
-        if (!res.ok) throw new Error((await res.json()).error || "Delete failed");
-        showNotif(`"${getRecordDisplayName(record)}" deleted.`, "success");
-        fetchArchived();
+        const result = await deleteRecordSmart(id, record);
+        const name = getRecordDisplayName(record);
+        if (result === "queued")      showNotif(`"${name}" deleted offline. It will be removed from the server when you're back online.`, "success");
+        else if (result === "removed") showNotif(`"${name}" removed from the upload queue.`, "success");
+        else { showNotif(`"${name}" deleted.`, "success"); fetchArchived(); }
       } catch (err) { showNotif(err.message, "error"); }
     },
   });
 
   const filteredArchived = archiveSearch.trim()
-    ? allArchivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
-    : allArchivedRecords;
+    ? archivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
+    : archivedRecords;
 
   // ── ADDED: Bulk selection (Archive) ──────────────────────────────────────
   const filteredIds  = filteredArchived.map((r) => r.id);
@@ -1781,15 +1996,16 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   useEffect(() => {
     setSelectedIds((prev) => {
       if (prev.size === 0) return prev;
-      const valid = new Set(allArchivedRecords.map((r) => r.id));
+      const valid = new Set(archivedRecords.map((r) => r.id));
       const next  = new Set([...prev].filter((id) => valid.has(id)));
       return next.size === prev.size ? prev : next;
     });
-  }, [allArchivedRecords]);
+  }, [archivedRecords]);
 
   const handleBulkDelete = () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
+    const byId = new Map(archivedRecords.map((r) => [r.id, r]));
     setConfirmModal({
       title: "Permanently Delete Selected",
       message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
@@ -1798,21 +2014,22 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
       onConfirm: async () => {
         setConfirmModal(null);
         setBulkDeleting(true);
-        const results = await Promise.allSettled(
-          ids.map(async (id) => {
-            const res = await fetch(`${API}/records/${id}`, { method: "DELETE" });
-            if (!res.ok) throw new Error("Delete failed");
-            return id;
-          }),
-        );
+        const results = await Promise.allSettled(ids.map((id) => deleteRecordSmart(id, byId.get(id))));
         const failed  = results.filter((r) => r.status === "rejected").length;
+        const queued  = results.filter((r) => r.status === "fulfilled" && r.value === "queued").length;
         const deleted = ids.length - failed;
 
-        if (deleted > 0) showNotif(`${deleted} record${deleted !== 1 ? "s" : ""} deleted.`, "success");
-        if (failed  > 0) showNotif(`${failed} record${failed !== 1 ? "s" : ""} could not be deleted.`, "error");
+        if (deleted > 0) {
+          showNotif(
+            `${deleted} record${deleted !== 1 ? "s" : ""} deleted` +
+            (queued ? ` (${queued} will finish syncing when you're back online).` : "."),
+            "success",
+          );
+        }
+        if (failed > 0) showNotif(`${failed} record${failed !== 1 ? "s" : ""} could not be deleted.`, "error");
 
         clearSelection();
-        await fetchArchived();
+        if (isOnline()) await fetchArchived();
         setBulkDeleting(false);
       },
     });
@@ -1839,7 +2056,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
         <UploadModal
           onClose={() => setShowUploadModal(false)}
           onUploadSuccess={() => { fetchRecords(); fetchArchived(); }}
-          allRecords={[...allRecords, ...allArchivedRecords]}
+          allRecords={[...activeRecords, ...archivedRecords]}
           showNotif={showNotif}
         />
       )}
@@ -2101,7 +2318,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
                       >
                         ← Back
                       </button>
-                      {/* Only reset if the completion actually succeeded on the server. */}
+                      {/* Only reset if the completion actually succeeded (server or queued). */}
                       <button
                         className="btn btn-primary btn-primary--wide btn-thick"
                         onClick={async () => {
@@ -2276,6 +2493,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
                                 <div className="tbl-file">
                                   <span className="tbl-file__icon"><IconDocument /></span>
                                   <span className="tbl-file-name">{getRecordDisplayName(r)}</span>
+                                  {r._pending && <span className="archived-badge">Pending sync</span>}
                                 </div>
                               </td>
                               <td><RelativesChips record={r} /></td>

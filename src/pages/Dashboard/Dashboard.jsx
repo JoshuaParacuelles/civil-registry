@@ -1,26 +1,9 @@
 import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import useAnalyticsData from "../../hooks/useAnalyticsData";
+import useOnlineStatus from "../../hooks/useOnlineStatus";
 import "./Dashboard.css";
 
 /* ══ CONSTANTS ═══════════════════════════════════════════════════════════════ */
-// Relative path — resolves against whatever origin loaded the page
-// (localhost, your LAN IP, or the HTTPS devtunnel), and goes through
-// Vite's dev-server proxy to Flask on localhost:5000. Never build an
-// absolute http://host:5000 URL here — it breaks on LAN and is blocked
-// as mixed content behind an HTTPS tunnel.
-const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/analytics`;
-const STALE_MS = 60_000;
-const analyticsCache = new Map();
-const ENDPOINTS = {
-  summary:           `${API}/summary`,
-  byYear:            `${API}/records-by-year`,
-  byMonth:           `${API}/records-by-month`,
-  reqByYear:         `${API}/requests-by-year`,
-  reqByMonth:        `${API}/requests-by-month`,
-  topMunicipalities: `${API}/top-municipalities`,
-  growthRate:        `${API}/growth-rate`,
-  today:             `${API}/dashboard-today`,
-};
-
 const COLORS = {
   birth:        "#378ADD",
   marriage:     "#1D9E75",
@@ -45,99 +28,6 @@ const fmtPct  = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Number(v).toFi
 const fmtPHP  = (v) => `₱${phpFmt.format(Number(v || 0))}`;
 const EMPTY_ARRAY = Object.freeze([]);
 const safeArr = (v) => (Array.isArray(v) ? v : EMPTY_ARRAY);
-
-const getAnalyticsCacheKey = () => {
-  try {
-    return sessionStorage.getItem("username") || "anonymous";
-  } catch {
-    return "session-unavailable";
-  }
-};
-
-/* ══ DATA HOOK ═══════════════════════════════════════════════════════════════
-   Each failed endpoint is tagged with `{ __failed: true, __error }`
-   (message pulled from the backend's JSON `error` field when present, else
-   the HTTP status or network error text). `safeArr()` still treats these as
-   empty for chart rendering, but `fetchAll` also collects every failure
-   into a single readable message and puts it in `error`, which the
-   error-banner at the top of the dashboard displays — so a
-   Supabase/RLS/network problem shows up as a visible error instead of a
-   misleading "0" everywhere. If NO error banner shows but everything still
-   reads 0, that means every request succeeded and the underlying tables are
-   genuinely empty — hit /api/analytics/debug-counts to confirm.
-   ══════════════════════════════════════════════════════════════════════════ */
-function useAnalyticsData() {
-  const [data, setData] = useState(() => analyticsCache.get(getAnalyticsCacheKey())?.data || {});
-  const [loading, setLoading] = useState(() => !analyticsCache.get(getAnalyticsCacheKey())?.data?.summary);
-  const [error, setError]     = useState(null);
-  const acRef = useRef(null);
-
-  const fetchAll = useCallback(async ({ force = false } = {}) => {
-    const cacheKey = getAnalyticsCacheKey();
-    const cached = analyticsCache.get(cacheKey);
-    if (!force && cached?.ts && Date.now() - cached.ts < STALE_MS) {
-      setData(cached.data);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-
-    acRef.current?.abort();
-    const controller = new AbortController();
-    acRef.current = controller;
-    if (!cached?.data?.summary) setLoading(true);
-    setError(null);
-
-    const failures = [];
-    await Promise.all(Object.entries(ENDPOINTS).map(async ([key, url]) => {
-      let value;
-      try {
-        const response = await fetch(url, { credentials: "include", signal: controller.signal });
-        if (!response.ok) {
-          let message = `HTTP ${response.status} ${response.statusText || ""}`.trim();
-          try {
-            const body = await response.json();
-            if (body?.error) message = body.error;
-          } catch {
-            // Keep the HTTP status when the response body isn't JSON.
-          }
-          throw new Error(message);
-        }
-        value = await response.json();
-      } catch (requestError) {
-        if (requestError.name === "AbortError") return;
-        failures.push(`${key} (${requestError.message || "Network error"})`);
-        value = { __failed: true, __error: requestError.message || "Network error" };
-      }
-
-      if (controller.signal.aborted || acRef.current !== controller) return;
-      const latest = analyticsCache.get(cacheKey);
-      const nextData = { ...(latest?.data || {}), [key]: value };
-      analyticsCache.set(cacheKey, { data: nextData, ts: latest?.ts || 0 });
-      setData(nextData);
-      if (key === "summary") setLoading(false);
-    }));
-
-    if (controller.signal.aborted || acRef.current !== controller) return;
-    if (failures.length) {
-      setError(`${failures.length} analytics endpoint(s) failed: ${failures.join(", ")}`);
-      const latest = analyticsCache.get(cacheKey);
-      if (latest) analyticsCache.set(cacheKey, { ...latest, ts: 0 });
-    } else {
-      const latest = analyticsCache.get(cacheKey);
-      if (latest) analyticsCache.set(cacheKey, { ...latest, ts: Date.now() });
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetchAll();
-    return () => acRef.current?.abort();
-  }, [fetchAll]);
-
-  const refetch = useCallback(() => fetchAll({ force: true }), [fetchAll]);
-  return { data, loading, error, refetch };
-}
 
 const useContainerWidth = (fallback = 560) => {
   const ref = useRef(null);
@@ -954,8 +844,20 @@ const MemoMunicipalityTable = memo(MunicipalityTable);
 
 /* ══ MAIN ANALYTICS DASHBOARD ════════════════════════════════════════════════ */
 const AnalyticsDashboard = ({ recordLinks = {} }) => {
-  const { data, loading, error, refetch } = useAnalyticsData();
+  const { data, loading, error, refetch, stale } = useAnalyticsData();
+  const online = useOnlineStatus();
+  const lastLiveAtRef = useRef(null);
   const [tab, setTab] = useState("overview");
+
+  // Remember when live (non-cached) data was last on screen, for the banner timestamp.
+  useEffect(() => {
+    if (online && !stale?.fromCache && data?.summary && !data.summary.__failed) {
+      lastLiveAtRef.current = Date.now();
+    }
+  }, [online, stale?.fromCache, data]);
+
+  const showOfflineBanner = !online || !!stale?.fromCache;
+  const savedAt = stale?.cachedAt || lastLiveAtRef.current;
 
   const summary  = data.summary  || {};
   const byYear   = safeArr(data.byYear);
@@ -1080,6 +982,14 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
   return (
     <div className="an-wrapper">
+      {showOfflineBanner && (
+        <div className="an-error-banner" style={{ background: "#fffbeb", color: "#92400e", borderColor: "#fde68a" }}>
+          📴 Offline mode: showing data saved on this device
+          {savedAt ? ` (${new Date(savedAt).toLocaleString("en-PH")})` : ""}.
+          <button className="an-error-retry" onClick={refetch} style={{ marginLeft: 12 }}>Retry</button>
+        </div>
+      )}
+
       {error && (
         <div className="an-error-banner">
           ⚠ {error}

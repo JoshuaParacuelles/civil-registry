@@ -1,10 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import pwa from './vite.pwa.js'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), pwa],
+  plugins: [react(), tailwindcss()],
   build: {
     rollupOptions: {
       output: {
@@ -21,12 +20,13 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     allowedHosts: ['.devtunnels.ms'],
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5000',
-        changeOrigin: true,
-        secure: false,
-      }
-    }
-  }
+    proxy: apiProxy,
+  },
+  preview: {
+    host: true,
+    port: 4173,
+    strictPort: false,
+    allowedHosts: ['.devtunnels.ms'],
+    proxy: apiProxy,
+  },
 })

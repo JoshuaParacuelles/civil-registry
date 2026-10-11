@@ -798,6 +798,19 @@ function AssignModal({
     u => u.username === typedName && resolveCategory(u) !== activeCategory
   );
 
+  // Roles already held by someone ELSE in this category. The user being
+  // edited keeps their own current role selectable (they're excluded from
+  // the taken set), so reassigning them doesn't hide their own role.
+  const takenRoleIds = new Set(
+    userRoles
+      .filter(u =>
+        resolveCategory(u) === activeCategory &&
+        u.username !== typedName &&
+        u.role_id != null
+      )
+      .map(u => String(u.role_id))
+  );
+
   // ─── PER-CATEGORY PASSWORDS (FIX) ─────────────────────────────────────────
   // "New credential" is decided per CATEGORY, not per username. Password
   // fields must appear (and a password must be required) whenever THIS
@@ -834,13 +847,10 @@ function AssignModal({
       if (activeCategory === "document") return false;
       return !adminHeldByOther;   // admin role only selectable if free (or held by this same user)
     }
-    // NEW: non-admin roles are further scoped to the active credential
-    // category — only roles whose permissions include at least one module
-    // from the selected category (Vital Record Management / Document
-    // Tracking) are offered here. This is what makes the Registration /
-    // Civil Registrar / Posting Period / Records Division / Assign
-    // Registry Number / Releasing roles appear specifically under the
-    // Document Tracking Credentials tab, and nowhere else.
+
+    // Non-admin roles: hide any role already assigned to another user in
+    // this category, then keep only roles that belong to this category.
+    if (takenRoleIds.has(String(r.id))) return false;
     return (Array.isArray(r.permissions) ? r.permissions : [])
       .some(m => categoryModules.includes(m));
   });
@@ -950,7 +960,9 @@ function AssignModal({
               </div>
             ) : visibleRoles.length === 0 ? (
               <div className="rm-input" style={{ color: "var(--rm-text-3)", fontSize: "0.875rem" }}>
-                No roles available for this category yet.
+                {takenRoleIds.size > 0
+                  ? "Every role in this category is already assigned."
+                  : "No roles available for this category yet."}
               </div>
             ) : (
               <>

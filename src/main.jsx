@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
 import { PermissionProvider } from "./context/PermissionContext";
+import { OfflineProvider } from "./context/OfflineContext";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import Login from "./pages/Auth/Login";
 import AccessDenied from "./pages/AccountSettings/AccessDenied";
@@ -21,12 +22,20 @@ const Home = lazy(loadHome);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
+<<<<<<< HEAD
     <ConnectivityProvider>
       {/* Router wraps PermissionProvider so Navigate works inside ProtectedRoute */}
       <Router>
         <ToastContainer />
         <OfflineBanner />
         <PermissionProvider>
+=======
+    {/* Router wraps PermissionProvider so Navigate works inside ProtectedRoute */}
+    <Router>
+      <ToastContainer />
+      <PermissionProvider>
+        <OfflineProvider>
+>>>>>>> 0550160 (Asdasd)
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<Navigate to="/login" replace />} />
@@ -50,13 +59,23 @@ ReactDOM.createRoot(document.getElementById("root")).render(
               <Route path="heatmaps" element={<></>} />
               <Route path="document-tracking" element={<></>} />
               <Route path="settings/*" element={<></>} />
+<<<<<<< HEAD
+=======
+              <Route path="offline-sync" element={<></>} />
+>>>>>>> 0550160 (Asdasd)
             </Route>
 
             {/* Catch-all */}
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
+<<<<<<< HEAD
         </PermissionProvider>
       </Router>
     </ConnectivityProvider>
+=======
+        </OfflineProvider>
+      </PermissionProvider>
+    </Router>
+>>>>>>> 0550160 (Asdasd)
   </React.StrictMode>
 );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
@@ -6,8 +6,15 @@ import lcrLogo from "../../../assets/images/lcr.jpg";
 import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
+import { isOnline, checkNow } from "../../../offline/connectivityService";
+import { newOpId } from "../../../offline/outboxQueue";
+import {
+  useVitalData, loadPdfForRecord, deleteRecordSmart, queueUpload, queueTransaction,
+} from "../../../offline/vitalOffline";
+import { verifyArchivePasswordOffline, refreshOfflineCredential } from "../../../offline/archivePassword";
 
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/death`;
+const ENTITY = "death";
 const FEE = 75;
 const MAX_UPLOAD = 5;
 
@@ -22,6 +29,7 @@ function useShowNotif() {
     });
   };
 }
+
 // ── Office details ─────────────────────────────────────────────────────────
 const OFFICE_CONFIG = {
   cityMunicipality: "this city/municipality",
@@ -806,23 +814,96 @@ const StepBar = ({ current }) => {
 
 const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
   const [pwInput, setPwInput] = useState("");
-  const [showPw,  setShowPw]  = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!pwInput.trim()) { showNotif("Password is required.", "error"); return; }
-    setLoading(true);
+  const unlockOffline = async (pw) => {
     try {
-      const res  = await fetch(`${API}/auth/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ module, password: pwInput }),
-      });
-      const data = await res.json();
-      if (data.success) onUnlock();
-      else showNotif(data.message || "Incorrect password.", "error");
-    } catch { showNotif("Cannot reach server.", "error"); }
-    finally { setLoading(false); }
+      const result = await verifyArchivePasswordOffline(module, pw);
+
+      if (result === "ok") {
+        showNotif("Unlocked offline.", "success");
+        onUnlock();
+      } else if (result === "wrong") {
+        showNotif("Incorrect password.", "error");
+      } else if (result === "locked") {
+        showNotif(
+          "Too many wrong attempts. Try again in 5 minutes.",
+          "error"
+        );
+      } else if (result === "unset") {
+        showNotif(
+          "No password is set for this module yet.",
+          "error"
+        );
+      } else {
+        showNotif(
+          "This device hasn't saved the password data yet. Open the app once while online and logged in.",
+          "error"
+        );
+      }
+    } catch (error) {
+      console.error("Offline archive password verification failed:", error);
+      showNotif("Unable to verify the offline password.", "error");
+    }
+  };
+
+  const handleSubmit = async () => {
+    const pw = pwInput.trim();
+
+    if (!pw) {
+      showNotif("Password is required.", "error");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (!isOnline()) {
+        await unlockOffline(pw);
+        return;
+      }
+
+      let res;
+
+      try {
+        res = await fetch(`${API}/auth/verify`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            module,
+            password: pw,
+          }),
+        });
+      } catch {
+        await unlockOffline(pw);
+        return;
+      }
+
+      if (res.status >= 500) {
+        await unlockOffline(pw);
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+
+      if (data.success) {
+        refreshOfflineCredential();
+        onUnlock();
+      } else {
+        showNotif(
+          data.message || "Incorrect password.",
+          "error"
+        );
+      }
+    } catch (error) {
+      console.error("Archive password verification failed:", error);
+      showNotif("Unable to verify the archive password.", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -830,9 +911,17 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
       <div className="pw-gate__icon">
         <IconLock />
       </div>
+
       <p className="pw-gate__desc">{description}</p>
+
       <div className="pw-gate__form">
-        <label className="pw-lbl" htmlFor="archive-admin-password">Administrator Password</label>
+        <label
+          className="pw-lbl"
+          htmlFor="archive-admin-password"
+        >
+          Administrator Password
+        </label>
+
         <div className="pw-input-wrap">
           <input
             id="archive-admin-password"
@@ -840,24 +929,43 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
             type={showPw ? "text" : "password"}
             value={pwInput}
             onChange={(e) => setPwInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !loading) {
+                handleSubmit();
+              }
+            }}
             placeholder="Enter password"
             className="pw-input"
             autoComplete="current-password"
             autoFocus
+            disabled={loading}
           />
+
           <button
             className="pw-toggle"
             type="button"
             onClick={() => setShowPw((v) => !v)}
             title={showPw ? "Hide password" : "Show password"}
             aria-label={showPw ? "Hide password" : "Show password"}
+            disabled={loading}
           >
             {showPw ? <IconEyeOff /> : <IconEye />}
           </button>
         </div>
-        <button className="btn btn-primary pw-gate__submit-btn" onClick={handleSubmit} disabled={loading}>
-          {loading ? (<><div className="spinner spinner--sm" />&nbsp;Verifying…</>) : "Unlock & View Records →"}
+
+        <button
+          className="btn btn-primary pw-gate__submit-btn"
+          onClick={handleSubmit}
+          disabled={loading}
+        >
+          {loading ? (
+            <>
+              <div className="spinner spinner--sm" />
+              &nbsp;Verifying…
+            </>
+          ) : (
+            "Unlock & View Records →"
+          )}
         </button>
       </div>
     </div>
@@ -1032,7 +1140,7 @@ function uploadWithProgress(url, formData, onProgress) {
       let data = {};
       try { data = JSON.parse(xhr.responseText || "{}"); } catch { /* non-JSON body */ }
       if (xhr.status >= 200 && xhr.status < 300) { onProgress(100); resolve(data); }
-      else reject(new Error(data.error || "Upload failed"));
+      else { const e = new Error(data.error || "Upload failed"); e.status = xhr.status; reject(e); }
     };
     xhr.onerror = () => reject(new Error("Cannot reach server."));
     xhr.send(formData);
@@ -1061,7 +1169,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
   const limitReached = queue.length >= MAX_UPLOAD;
 
   const overallProgress = queue.length
-    ? queue.reduce((sum, q) => sum + (q.status === "done" ? 100 : q.status === "uploading" ? (q.progress || 0) : 0), 0) / queue.length
+    ? queue.reduce((sum, q) => sum + (q.status === "done" || q.status === "queued" ? 100 : q.status === "uploading" ? (q.progress || 0) : 0), 0) / queue.length
     : 0;
 
   const getLimitClass = () => {
@@ -1098,33 +1206,43 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
     setIsUploading(true);
     const uploaded = [];
     for (const item of queue) {
+      if (item.status === "done" || item.status === "queued") continue;
       setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "uploading", progress: 0 } : qi));
+
+      const saveOffline = async () => {
+        const op = await queueUpload(ENTITY, `${API}/records`, item.file);
+        uploaded.push({ id: `offline-${op.opId}`, file_name: item.file.name,
+          uploaded_at: new Date(op.createdAt).toISOString(), _pending: true });
+        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "queued", progress: 100 } : qi));
+      };
+
       try {
+        if (!isOnline()) { await saveOffline(); continue; }
         const fd = new FormData();
         fd.append("file", item.file);
         const data = await uploadWithProgress(`${API}/records`, fd, (pct) =>
-          setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, progress: pct } : qi)),
-        );
+          setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, progress: pct } : qi)));
         uploaded.push(data);
         setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "done", progress: 100 } : qi));
       } catch (err) {
-        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "error", error: err.message } : qi));
-        showNotif(`Failed to upload "${item.file.name}": ${err.message}`, "error");
+        let failure = err;
+        if (err.message === "Cannot reach server." || (err.status >= 500 && !(await checkNow()))) {
+          try { await saveOffline(); continue; } catch (e2) { failure = e2; }
+        }
+        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "error", error: failure.message } : qi));
+        showNotif(`Failed to upload "${item.file.name}": ${failure.message}`, "error");
       }
     }
     setIsUploading(false);
     if (uploaded.length > 0) {
       setUploadedRecords(uploaded);
-
-      // Give the server a moment to settle before refetching the lists
-      // (the fetchers also retry on failure).
       setTimeout(() => onUploadSuccess(), 400);
-
-      // Show ONLY the files that were just uploaded.
       setMatches(uploaded.map((r) => ({ ...r, uploaded_at: r.uploaded_at || new Date().toISOString() })));
-
       setStage("results");
-      showNotif(`${uploaded.length} file${uploaded.length > 1 ? "s" : ""} uploaded!`, "success");
+      const queuedCount = uploaded.filter((u) => u._pending).length;
+      showNotif(queuedCount
+        ? `${queuedCount} file${queuedCount > 1 ? "s" : ""} saved on this device. They will upload automatically when you're back online.`
+        : `${uploaded.length} file${uploaded.length > 1 ? "s" : ""} uploaded!`, "success");
     }
   };
 
@@ -1209,9 +1327,10 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                         <UploadProgressBar value={item.progress || 0} width={140} height={8} />
                       )}
                       {item.status === "done"      && "Done"}
+                      {item.status === "queued"    && "Saved offline"}
                       {item.status === "error"     && `Error: ${item.error || "Unknown"}`}
                     </span>
-                    {!isUploading && item.status !== "done" && (
+                    {!isUploading && item.status !== "done" && item.status !== "queued" && (
                       <button className="upl-queue__remove" onClick={() => removeFromQueue(item.id)} title="Remove" aria-label={`Remove ${ensurePdfName(item.file.name)} from queue`}>
                         &#10005;
                       </button>
@@ -1225,7 +1344,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
               <button
                 className="btn btn-primary"
                 onClick={handleUploadAll}
-                disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done")}
+                disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done" || q.status === "queued")}
               >
                 {isUploading
                   ? `Uploading… ${Math.round(overallProgress)}%`
@@ -1364,7 +1483,7 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
   );
 };
 
-// UPDATED: now has a checkbox for bulk selection (selected / onToggle props).
+// Checkbox for bulk selection (selected / onToggle props).
 const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete, onRestore, restoring }) => {
   const displayName = getRecordDisplayName(record);
   const father      = getFatherDisplayName(record);
@@ -1433,18 +1552,17 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const [step2PdfLoading,  setStep2PdfLoading]  = useState(false);
   const [previewLoadingId, setPreviewLoadingId] = useState(null);
 
-  const [allRecords,         setAllRecords]         = useState([]);
-  const [allArchivedRecords, setAllArchivedRecords] = useState([]);
-  const [loadingRecords,     setLoadingRecords]     = useState(false);
+  const { allRecords, allArchivedRecords, loadingRecords, fetchRecords, fetchArchived } = useVitalData({
+    entity: ENTITY, api: API, fetchJson: fetchJsonWithRetry,
+    toBlob: createPdfBlobFromData, showNotif,
+  });
+
   const [archiveSearch,      setArchiveSearch]      = useState("");
   const [archiveUnlocked,    setArchiveUnlocked]    = useState(false);
 
-  // ADDED: bulk selection (Archive tab)
+  // Bulk selection (Archive tab)
   const [selectedIds,  setSelectedIds]  = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
-
-  const fetchRecordsAbortRef  = useRef(null);
-  const fetchArchivedAbortRef = useRef(null);
 
   const { isMobile, isTablet } = useViewport();
   const useCards = isMobile || isTablet;
@@ -1457,46 +1575,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
       .filter((r) => !activeIdentityKeys.has(getRecordIdentityKey(r)))
       .map((r) => ({ ...r, _isArchived: true })),
   ];
-
-  // Uses fetchJsonWithRetry and shows the real server error.
-  const fetchRecords = useCallback(async () => {
-    if (fetchRecordsAbortRef.current) fetchRecordsAbortRef.current.abort();
-    const controller = new AbortController();
-    fetchRecordsAbortRef.current = controller;
-
-    setLoadingRecords(true);
-    try {
-      const data = await fetchJsonWithRetry(`${API}/records`, { signal: controller.signal });
-      setAllRecords(Array.isArray(data) ? data : []);
-    } catch (err) {
-      if (err?.name !== "AbortError") {
-        showNotif(`Failed to load records. ${err?.message || ""}`.trim(), "error");
-      }
-    } finally {
-      if (fetchRecordsAbortRef.current === controller) setLoadingRecords(false);
-    }
-  }, []);
-
-  const fetchArchived = useCallback(async () => {
-    if (fetchArchivedAbortRef.current) fetchArchivedAbortRef.current.abort();
-    const controller = new AbortController();
-    fetchArchivedAbortRef.current = controller;
-
-    setLoadingRecords(true);
-    try {
-      const data = await fetchJsonWithRetry(`${API}/archived`, { signal: controller.signal });
-      const arr  = Array.isArray(data) ? data : [];
-      setAllArchivedRecords(arr);
-    } catch (err) {
-      if (err?.name !== "AbortError") {
-        showNotif(`Failed to load archived records. ${err?.message || ""}`.trim(), "error");
-      }
-    } finally {
-      if (fetchArchivedAbortRef.current === controller) setLoadingRecords(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchRecords(); fetchArchived(); }, [fetchRecords, fetchArchived]);
 
   const handleSearch = () => {
     let valid = true;
@@ -1518,7 +1596,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
       })
     : [];
 
-  // ADDED: accuracy of a record vs. what was searched (used for the badge and the sort tiebreaker)
+  // Accuracy of a record vs. what was searched (used for the badge and the sort tiebreaker)
   const getAccuracy = (r) =>
     computeAccuracy(
       { lastName: srchLastName, firstName: srchFirstName },
@@ -1534,7 +1612,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     if (aExact && !bExact) return -1;
     if (!aExact && bExact) return 1;
 
-    // ADDED: tiebreaker — higher accuracy first, then alphabetical
+    // Tiebreaker: higher accuracy first, then alphabetical
     const diff = getAccuracy(b) - getAccuracy(a);
     if (diff !== 0) return diff;
     return aFN.localeCompare(bFN);
@@ -1573,11 +1651,8 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const handlePreviewPdf = async (id, record) => {
     setPreviewLoadingId(id);
     try {
-      const res  = await fetch(`${API}/records/${id}`);
-      if (!res.ok) throw new Error("Failed to load PDF.");
-      const data = await res.json();
-      if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
-      setPdfModal({ pdfData: data.pdf_data, fileName: getRecordDisplayName(record || data), id });
+      const pdfData = await loadPdfForRecord(ENTITY, API, id, record, createPdfBlobFromData);
+      setPdfModal({ pdfData, fileName: getRecordDisplayName(record), id });
     } catch (err) { showNotif(err.message, "error"); }
     finally { setPreviewLoadingId(null); }
   };
@@ -1586,11 +1661,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     if (!record) { setStep2PdfData(null); return; }
     setStep2PdfLoading(true);
     try {
-      const res  = await fetch(`${API}/records/${record.id}`);
-      if (!res.ok) throw new Error("Failed to load PDF.");
-      const data = await res.json();
-      if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
-      setStep2PdfData(data.pdf_data);
+      setStep2PdfData(await loadPdfForRecord(ENTITY, API, record.id, record, createPdfBlobFromData));
     } catch (err) { showNotif(err.message, "error"); setStep2PdfData(null); }
     finally { setStep2PdfLoading(false); }
   };
@@ -1636,29 +1707,38 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
 
   const handleCompleteTransaction = async () => {
     setProcessing(true);
+    const opId = newOpId();
+    const url = `${API}/records/complete`;
+    const payload = {
+      searchOperator: subjectName, recordStatus,
+      recordId: selectedRecord && !selectedRecord._pending ? selectedRecord.id : null,
+      paymentMethod: "cash", paymentReference: payRef,
+      paymentAmount: FEE, documentIssued: issuedDoc,
+      orNumber: orNumber.trim() || null,
+      first_name:  selectedRecord?.deceased_first_name  || srchFirstName.trim(),
+      middle_name: selectedRecord?.deceased_middle_name || "",
+      last_name:   selectedRecord?.deceased_last_name   || srchLastName.trim(),
+    };
+    const saveOffline = async () => {
+      await queueTransaction(ENTITY, url, payload, subjectName, opId);
+      showNotif("No connection. Transaction saved on this device and will sync automatically.", "success");
+      return true;
+    };
     try {
-      const res = await fetch(`${API}/records/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          searchOperator: subjectName, recordStatus,
-          recordId: selectedRecord?.id || null,
-          paymentMethod: "cash", paymentReference: payRef,
-          paymentAmount: FEE, documentIssued: issuedDoc,
-          orNumber: orNumber.trim() || null,
-          first_name:  selectedRecord?.deceased_first_name  || srchFirstName.trim(),
-          middle_name: selectedRecord?.deceased_middle_name || "",
-          last_name:   selectedRecord?.deceased_last_name   || srchLastName.trim(),
-        }),
-      });
+      if (!isOnline()) return await saveOffline();
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Offline-Op-Id": opId },
+          body: JSON.stringify(payload),
+        });
+      } catch { return await saveOffline(); }
+      if (res.status >= 500 && !(await checkNow())) return await saveOffline(); // server/DB down
 
       let data = {};
-      try { data = await res.json(); } catch { /* non-JSON body — data stays {} */ }
-
-      if (!res.ok || data?.error) {
-        throw new Error(data?.error || "Failed to save the transaction. Please try again.");
-      }
-
+      try { data = await res.json(); } catch { /* non-JSON */ }
+      if (!res.ok || data?.error) throw new Error(data?.error || "Failed to save the transaction. Please try again.");
       showNotif("Transaction completed successfully!", "success");
       return true;
     } catch (err) {
@@ -1682,11 +1762,8 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
 
   const handleViewPdf = async (id, record) => {
     try {
-      const res  = await fetch(`${API}/records/${id}`);
-      if (!res.ok) throw new Error("Failed to load PDF.");
-      const data = await res.json();
-      if (!data?.pdf_data) throw new Error("No PDF data returned by the server.");
-      setPdfModal({ pdfData: data.pdf_data, fileName: getRecordDisplayName(record || data), id });
+      const pdfData = await loadPdfForRecord(ENTITY, API, id, record, createPdfBlobFromData);
+      setPdfModal({ pdfData, fileName: getRecordDisplayName(record), id });
     } catch (err) { showNotif(err.message, "error"); }
   };
 
@@ -1698,10 +1775,11 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     onConfirm: async () => {
       setConfirmModal(null);
       try {
-        const res = await fetch(`${API}/records/${id}`, { method: "DELETE" });
-        if (!res.ok) throw new Error((await res.json()).error || "Delete failed");
-        showNotif(`"${getRecordDisplayName(record)}" deleted.`, "success");
-        fetchArchived();
+        const result = await deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record));
+        const name = getRecordDisplayName(record);
+        if (result === "queued") showNotif(`"${name}" deleted offline. It will be removed from the server when you're back online.`, "success");
+        else if (result === "removed") showNotif(`"${name}" removed from the upload queue.`, "success");
+        else { showNotif(`"${name}" deleted.`, "success"); fetchArchived(); }
       } catch (err) { showNotif(err.message, "error"); }
     },
   });
@@ -1710,7 +1788,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     ? allArchivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
     : allArchivedRecords;
 
-  // ── ADDED: Bulk selection (Archive) ──────────────────────────────────────
+  // ── Bulk selection (Archive) ─────────────────────────────────────────────
   const filteredIds  = filteredArchived.map((r) => r.id);
   const allSelected  = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
   const someSelected = !allSelected && filteredIds.some((id) => selectedIds.has(id));
@@ -1746,6 +1824,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const handleBulkDelete = () => {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
+    const byId = new Map(allArchivedRecords.map((r) => [r.id, r]));
     setConfirmModal({
       title: "Permanently Delete Selected",
       message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
@@ -1755,20 +1834,15 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
         setConfirmModal(null);
         setBulkDeleting(true);
         const results = await Promise.allSettled(
-          ids.map(async (id) => {
-            const res = await fetch(`${API}/records/${id}`, { method: "DELETE" });
-            if (!res.ok) throw new Error("Delete failed");
-            return id;
-          }),
+          ids.map((id) => deleteRecordSmart(ENTITY, API, id, byId.get(id), getRecordDisplayName(byId.get(id)))),
         );
         const failed  = results.filter((r) => r.status === "rejected").length;
+        const queued  = results.filter((r) => r.status === "fulfilled" && r.value === "queued").length;
         const deleted = ids.length - failed;
-
-        if (deleted > 0) showNotif(`${deleted} record${deleted !== 1 ? "s" : ""} deleted.`, "success");
+        if (deleted > 0) showNotif(`${deleted} record${deleted !== 1 ? "s" : ""} deleted` + (queued ? ` (${queued} will finish syncing when you're back online).` : "."), "success");
         if (failed  > 0) showNotif(`${failed} record${failed !== 1 ? "s" : ""} could not be deleted.`, "error");
-
         clearSelection();
-        await fetchArchived();
+        if (isOnline()) await fetchArchived();
         setBulkDeleting(false);
       },
     });
@@ -1908,7 +1982,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                                     selectedRecord?.id === r.id &&
                                     !!selectedRecord?._isArchived === !!r._isArchived;
 
-                                  // ADDED: accuracy % of this record vs. what was searched
+                                  // Accuracy % of this record vs. what was searched
                                   const accuracy = getAccuracy(r);
 
                                   return (
@@ -2127,7 +2201,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                 </div>
               </div>
               <div className="tab-card">
-                {/* ADDED: bulk action bar — only visible when something is selected */}
+                {/* Bulk action bar — only visible when something is selected */}
                 {selectedIds.size > 0 && (
                   <div className="bulk-bar">
                     <span className="bulk-bar__count">{selectedIds.size} selected</span>

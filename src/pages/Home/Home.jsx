@@ -2,7 +2,6 @@ import { Suspense, lazy, useEffect, useState, useCallback, useMemo, useRef } fro
 import { useNavigate, useLocation } from "react-router-dom";
 import AccessDenied from "../AccountSettings/AccessDenied";
 import LoadingScreen from "../../routes/LoadingScreen";
-
 const ChangePassword = lazy(() => import("../AccountSettings/ChangePassword"));
 const AuditLogs = lazy(() => import("../AccountSettings/AuditLogs"));
 const RoleManagement = lazy(() => import("../AccountSettings/RoleManagement"));
@@ -13,8 +12,10 @@ const PaymentInventory = lazy(() => import("../Dashboard/Dashboard"));
 const Heatmaps = lazy(() => import("../Heatmaps/Heatmaps"));
 const ExternalIndividualsLookup = lazy(() => import("../ExternalIndividuals/ExternalIndividualsLookup"));
 const DocumentTracking = lazy(() => import("../DocumentTracking/DocumentTracking"));
+const SyncCenter = lazy(() => import("../SyncCenter/SyncCenter"));
 
 import { usePermissions } from "../../context/PermissionContext";
+import { useOffline } from "../../context/OfflineContext";
 
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/Topbar";
@@ -33,6 +34,7 @@ import heatmapsIcon from "../../assets/icons/sidebar/heatmap.png";
 import trackingIcon from "../../assets/icons/sidebar/tracking.png";
 import accountIcon from "../../assets/icons/sidebar/account.png";
 import logoutIcon from "../../assets/icons/sidebar/logout.png";
+import syncIcon from "../../assets/icons/sidebar/sync.png";
 
 import "./Home.css";
 
@@ -49,6 +51,7 @@ const MENU_KEYS = {
   ACCOUNT:           "Update Account",
   AUDIT:             "Audit Logs",
   ROLE_MANAGEMENT:   "Role Management",
+  OFFLINE_SYNC:      "Offline Data & Sync",
 };
 
 const VITAL_CHILDREN    = [MENU_KEYS.BIRTH, MENU_KEYS.MARRIAGE, MENU_KEYS.DEATH, MENU_KEYS.SCIMS];
@@ -67,6 +70,7 @@ const MENU_ROUTES = {
   [MENU_KEYS.ACCOUNT]:           "/settings/update-account",
   [MENU_KEYS.AUDIT]:             "/settings/audit-logs",
   [MENU_KEYS.ROLE_MANAGEMENT]:   "/settings/role-management",
+  [MENU_KEYS.OFFLINE_SYNC]:      "/offline-sync",
 };
 
 const ROUTE_TO_MENU = Object.fromEntries(
@@ -83,6 +87,8 @@ const NOTIF_TARGETS = {
   marriage: { menu: MENU_KEYS.MARRIAGE, permission: "marriage_verification" },
   death:    { menu: MENU_KEYS.DEATH,    permission: "death_verification" },
 };
+
+const NOTIF_TYPE_KEYS = Object.keys(NOTIF_TARGETS);
 
 // REJECTED is selectable too (the backend requires a remark for it).
 const REQUEST_STATUS_OPTIONS = ["PENDING", "PROCESSING", "COMPLETED", "REJECTED"];
@@ -208,6 +214,7 @@ const getPersistedSubmenuState = (key) => {
 const Home = () => {
   const { hasAccess, is_admin: isAdminUser, loading, logout } = usePermissions();
   const username = getStoredUsername();
+  const offline = useOffline();
 
   const canAccess = useCallback(
     (mod) => {
@@ -216,6 +223,14 @@ const Home = () => {
       catch { return false; }
     },
     [isAdminUser, hasAccess]
+  );
+
+  // Document types this user is assigned, from their verifier permissions.
+  // Admins get all types. Document Tracking personnel have none, so they
+  // receive no notifications. While permissions load this is empty.
+  const allowedTypes = useMemo(
+    () => (loading ? [] : NOTIF_TYPE_KEYS.filter((t) => canAccess(NOTIF_TARGETS[t].permission))),
+    [loading, canAccess]
   );
 
   // ROUTING: the URL is now the single source of truth for the active page.
@@ -264,7 +279,11 @@ const Home = () => {
     deleteNotification,
     timeAgo,
     setOpenActionMenuId,
-  } = useNotifications({ username, onOpenVerifier: null });
+  } = useNotifications({
+    username,
+    allowedTypes,
+    onOpenVerifier: null,
+  });
 
   const [selectedNotif, setSelectedNotif] = useState(null);
   const [sigFailed, setSigFailed]         = useState(false);
@@ -620,6 +639,8 @@ const Home = () => {
         return canAccess("audit_logs") ? <AuditLogs /> : <AccessDenied />;
       case MENU_KEYS.ROLE_MANAGEMENT:
         return canAccess("role_management") ? <RoleManagement /> : <AccessDenied />;
+      case MENU_KEYS.OFFLINE_SYNC:
+        return canAccess("offline_sync") ? <SyncCenter /> : <AccessDenied />;
       case MENU_KEYS.DASHBOARD:
       default:
         return <PaymentInventory recordLinks={recordLinks} />;
@@ -673,30 +694,34 @@ const Home = () => {
         trackingIcon={trackingIcon}
         accountIcon={accountIcon}
         logoutIcon={logoutIcon}
+        syncIcon={syncIcon}
+        offlinePendingCount={offline.counts.pending}
       />
 
       <div className="main-content-wrapper">
         <Topbar activeSubMenu={activeSubMenu} toggleSidebar={toggleSidebar}>
-          <NotificationBell
-            notifOpen={notifOpen}
-            notifWrapperRef={notifWrapperRef}
-            toggleNotifDropdown={toggleNotifDropdown}
-            unreadCount={unreadCount}
-            notifStatus={notifStatus}
-            notifLoading={notifLoading}
-            notifications={notifications}
-            openActionMenuId={openActionMenuId}
-            toggleActionMenu={toggleActionMenu}
-            markAllNotificationsRead={markAllNotificationsRead}
-            markNotificationRead={markNotificationRead}
-            markNotificationUnread={markNotificationUnread}
-            deleteNotification={deleteNotification}
-            handleNotifClick={handleNotifClick}
-            timeAgo={timeAgo}
-            NOTIF_TARGETS={NOTIF_TARGETS}
-            setOpenActionMenuId={setOpenActionMenuId}
-            onPrefetchNotification={handlePrefetchNotification}
-          />
+          {(isAdminUser || allowedTypes.length > 0) && (
+            <NotificationBell
+              notifOpen={notifOpen}
+              notifWrapperRef={notifWrapperRef}
+              toggleNotifDropdown={toggleNotifDropdown}
+              unreadCount={unreadCount}
+              notifStatus={notifStatus}
+              notifLoading={notifLoading}
+              notifications={notifications}
+              openActionMenuId={openActionMenuId}
+              toggleActionMenu={toggleActionMenu}
+              markAllNotificationsRead={markAllNotificationsRead}
+              markNotificationRead={markNotificationRead}
+              markNotificationUnread={markNotificationUnread}
+              deleteNotification={deleteNotification}
+              handleNotifClick={handleNotifClick}
+              timeAgo={timeAgo}
+              NOTIF_TARGETS={NOTIF_TARGETS}
+              setOpenActionMenuId={setOpenActionMenuId}
+              onPrefetchNotification={handlePrefetchNotification}
+            />
+          )}
         </Topbar>
 
         <main className="main-content">

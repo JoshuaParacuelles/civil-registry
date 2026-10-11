@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "Civil Registry System",
   "short_name": "Civil Registry",
   "start_url": "/",
@@ -11,3 +12,17 @@
     { "src": "/icons/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
+=======
+  "name": "Local Civil Registry - San Carlos City",
+  "short_name": "Civil Registry",
+  "description": "Civil registry records, document tracking and dashboard. Works offline.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a3c6e",
+  "icons": [
+    { "src": "/scc.png", "sizes": "any", "type": "image/png", "purpose": "any" }
+  ]
+}
+>>>>>>> 0550160 (Asdasd)

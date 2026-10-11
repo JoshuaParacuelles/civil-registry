@@ -2,11 +2,11 @@ import { useState, useMemo, memo, useEffect, useRef, useCallback, useDeferredVal
 import { usePermissions } from "../../context/PermissionContext";
 import { supabase } from "../../services/supabaseClient";
 import { pushToast } from "../../services/toastService";
+import { isDbAvailable, subscribeDb } from "../../offline/connectivityService";
+import { subscribeSyncState } from "../../offline/syncEngine";
+import { trackingRead, trackingWrite, apiFetch } from "../../offline/adapters/documentTrackingOffline";
+import useOnlineStatus from "../../hooks/useOnlineStatus";
 import "./DocumentTracking.css";
-
-// Same-origin by default (goes through the Vite proxy in dev). Only set
-// VITE_API_BASE_URL if the backend lives on a different origin.
-const API = import.meta.env.VITE_API_BASE_URL || "";
 
 // Debounce for realtime-triggered refetches so a burst of related writes
 // collapses into a single refetch.
@@ -18,8 +18,8 @@ const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
 
 // Text shown for a stage with nobody assigned.
 const UNSIGNED_LABEL = "Unsigned";
+
 // Shared toast helper (same shared toastService used by Login / Vital Records).
-// Plain function, not a hook, so it can be used inside useCallback without deps.
 function notify(message, type = "success") {
   const ok = type === "success";
   pushToast({
@@ -29,6 +29,7 @@ function notify(message, type = "success") {
     duration: 4000,
   });
 }
+
 const STATUS_STYLES = {
   "In review": { fg: "var(--blue-ink)", bg: "var(--blue-soft)" },
   "Approved": { fg: "var(--green-ink)", bg: "var(--green-soft)" },
@@ -43,12 +44,10 @@ const DOC_TYPES = ["Birth Certificate", "Marriage Certificate", "Death Certifica
 // Matches RELEASE_DESTINATIONS in routes/document.py.
 const RELEASE_DESTINATIONS = ["Owner's Copy", "Hospital", "PSA", "Archive Office"];
 
-// Matches POSTING_PERIOD_DAYS in routes/document.py (display only; the
-// backend decides whether the period has really elapsed).
+// Matches POSTING_PERIOD_DAYS in routes/document.py (display only).
 const POSTING_PERIOD_DAYS = 10;
 
-// Stage identification by label text — mirrors _is_registry_number_stage(),
-// _is_releasing_stage() and _is_posting_period_stage() in routes/document.py.
+// Stage identification by label text — mirrors routes/document.py.
 function isRegistryNumberStageLabel(label) {
   return (label || "").toLowerCase().includes("registry number");
 }
@@ -60,8 +59,7 @@ function isPostingPeriodStageLabel(label) {
 }
 
 // Maps a stage label to its document_stage_* permission — mirrors
-// _stage_permission_for_label() in routes/document.py. Unknown labels
-// return null (unrestricted), same as the backend.
+// _stage_permission_for_label() in routes/document.py.
 function stagePermissionForLabel(label) {
   const l = (label || "").trim().toLowerCase();
   if (l.includes("registration")) return "document_stage_registration";
@@ -102,6 +100,7 @@ function mapDocumentSummary(row) {
     docNumber: row.doc_number || `DOC-${row.id}`,
     title: row.title ?? row.document_title ?? "Untitled document",
     owner: row.owner ?? row.owner_name ?? row.handler_name ?? row.assigned_handler_name ?? "Unassigned",
+    activeStage: row.active_stage ?? null,
     type: row.type ?? row.doc_type ?? row.document_type ?? "—",
     status: row.status ?? "In review",
     updated: formatDate(row.updated_at ?? row.updated),
@@ -162,7 +161,10 @@ const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect }) {
         </span>
         <span className="dt-row-title">{doc.title}</span>
         <span className="dt-row-meta">
-          <span>Handling <strong>{doc.owner}</strong></span>
+          <span>
+            Handling <strong>{doc.owner}</strong>
+            {doc.activeStage ? <> · {doc.activeStage}</> : null}
+          </span>
           <span>Updated {doc.updated}</span>
         </span>
       </div>
@@ -175,33 +177,14 @@ const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect }) {
   );
 });
 
-async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
-  let body = null;
-  try {
-    body = await res.json();
-  } catch {
-    // no JSON body — fine for some 2xx responses
-  }
-  if (!res.ok) {
-    const message = body?.error || `Request failed (${res.status})`;
-    throw new Error(message);
-  }
-  return body;
-}
-
 export default function DocumentTracking() {
   // ROLE POLICY:
   //  - Administrator: view-only on stages; can create/delete documents.
   //  - Non-admin: can work a stage (complete / request changes / reject /
   //    comment) only when the stage has a handler AND their role carries
   //    that stage's document_stage_* permission.
-  // Mirrors block_if_admin() / block_if_no_stage_permission() on the backend.
   const { is_admin, hasAccess } = usePermissions();
+  const dbOnline = useOnlineStatus();
 
   const [documents, setDocuments] = useState([]);
   const [listLoading, setListLoading] = useState(true);
@@ -267,7 +250,7 @@ export default function DocumentTracking() {
     if (!silent) setListLoading(true);
     setListError(null);
     try {
-      const rows = await apiFetch("/api/documents");
+      const rows = await trackingRead("/api/documents");
       if (listRequestIdRef.current !== requestId) return []; // superseded
       const mapped = (rows || []).map(mapDocumentSummary);
       setDocuments(mapped);
@@ -304,7 +287,7 @@ export default function DocumentTracking() {
       setDetailError(null);
     }
     try {
-      const doc = await apiFetch(`/api/documents/${id}`);
+      const doc = await trackingRead(`/api/documents/${id}`);
       if (detailRequestIdRef.current !== requestId) return; // a newer call took over
       setDetail(mapDocumentDetail(doc));
     } catch (e) {
@@ -332,8 +315,12 @@ export default function DocumentTracking() {
     loadDetail(selectedId);
   }, [selectedId, loadDetail]);
 
-  // Realtime: refresh list/detail in the background when related tables change.
+  // Realtime: only open the channel while the database is reachable.
+  // Closed while offline so the browser stops retrying the WebSocket.
   useEffect(() => {
+    let alive = true;
+    let channel = null;
+
     const scheduleList = () => {
       clearTimeout(listRefreshTimerRef.current);
       listRefreshTimerRef.current = setTimeout(() => loadList({ silent: true }), REALTIME_DEBOUNCE_MS);
@@ -347,36 +334,77 @@ export default function DocumentTracking() {
     const idOf = (payload, key) => payload.new?.[key] ?? payload.old?.[key] ?? null;
     const isSelected = (id) => id == null || String(id) === String(selectedIdRef.current);
 
-    const channel = supabase
-      .channel("document-tracking-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, (payload) => {
-        scheduleList();
-        if (isSelected(idOf(payload, "id"))) scheduleDetail();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "document_stages" }, (payload) => {
-        scheduleList();
-        if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "document_comments" }, (payload) => {
-        if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "document_assignments" }, (payload) => {
-        scheduleList();
-        if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
-      })
-      .subscribe((status, err) => {
-        if (status === "SUBSCRIBED") {
-          console.info("[DocumentTracking] Realtime connected.");
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
-          console.error("[DocumentTracking] Realtime subscription failed:", status, err);
-        }
-      });
+    const connect = () => {
+      if (!alive || channel || !isDbAvailable()) return;
+
+      const ch = supabase
+        .channel("document-tracking-realtime")
+        .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, (payload) => {
+          scheduleList();
+          if (isSelected(idOf(payload, "id"))) scheduleDetail();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "document_stages" }, (payload) => {
+          scheduleList();
+          if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "document_comments" }, (payload) => {
+          if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "document_assignments" }, (payload) => {
+          scheduleList();
+          if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
+        })
+        .subscribe((status, err) => {
+          if (channel !== ch) return; // ignore events from a channel already closed
+          if (status === "SUBSCRIBED") {
+            console.info("[DocumentTracking] Realtime connected.");
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
+            console.error("[DocumentTracking] Realtime subscription failed:", status, err);
+          }
+        });
+
+      channel = ch;
+    };
+
+    const disconnect = () => {
+      if (!channel) return;
+      const ch = channel;
+      channel = null;
+      supabase.removeChannel(ch);
+    };
+
+    // Reconnect and refresh once the database is back.
+    const unsubDb = subscribeDb((ok) => {
+      if (ok) {
+        connect();
+        loadList({ silent: true });
+        if (selectedIdRef.current != null) loadDetail(selectedIdRef.current, { silent: true });
+      } else {
+        disconnect();
+      }
+    });
+
+    connect();
 
     return () => {
+      alive = false;
+      unsubDb();
       clearTimeout(listRefreshTimerRef.current);
       clearTimeout(detailRefreshTimerRef.current);
-      supabase.removeChannel(channel);
+      disconnect();
     };
+  }, [loadList, loadDetail]);
+
+  // When the sync queue finishes, reload so queued changes show their real state.
+  useEffect(() => {
+    let wasSyncing = false;
+    return subscribeSyncState((s) => {
+      if (wasSyncing && !s.syncing) {
+        loadList({ silent: true });
+        if (selectedIdRef.current != null) loadDetail(selectedIdRef.current, { silent: true });
+      }
+      wasSyncing = s.syncing;
+    });
   }, [loadList, loadDetail]);
 
   const flashSaved = useCallback(() => {
@@ -423,7 +451,7 @@ export default function DocumentTracking() {
     setBusy(true);
     setActionError(null);
     try {
-      await fn();
+      const result = await fn();
       clearTimeout(listRefreshTimerRef.current);
       clearTimeout(detailRefreshTimerRef.current);
       await Promise.all([
@@ -431,7 +459,12 @@ export default function DocumentTracking() {
         loadList({ silent: true }),
       ]);
       flashSaved();
-      if (successMsg) notify(successMsg, "success");
+      if (successMsg) {
+        notify(
+          result?.queued ? `${successMsg} Saved on this device, will sync when online.` : successMsg,
+          "success"
+        );
+      }
     } catch (e) {
       console.error("[DocumentTracking] Action failed:", e);
       setActionError(e.message || "Something went wrong.");
@@ -443,7 +476,10 @@ export default function DocumentTracking() {
 
   const advanceStage = (stageOrder) =>
     runAction(
-      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/complete`, { method: "POST" }),
+      () => trackingWrite({
+        path: `/api/documents/${selectedId}/stages/${stageOrder}/complete`,
+        label: `Mark step complete (doc ${selectedId})`,
+      }),
       "Step marked complete."
     );
 
@@ -459,9 +495,10 @@ export default function DocumentTracking() {
     setBusy(true);
     setActionError(null);
     try {
-      await apiFetch(`/api/documents/${selectedId}/stages/${flagStageOrder}/flag`, {
-        method: "POST",
-        body: JSON.stringify({ note }),
+      await trackingWrite({
+        path: `/api/documents/${selectedId}/stages/${flagStageOrder}/flag`,
+        json: { note },
+        label: `Request changes (doc ${selectedId})`,
       });
       await Promise.all([loadDetail(selectedId, { silent: true }), loadList({ silent: true })]);
       flashSaved();
@@ -480,16 +517,20 @@ export default function DocumentTracking() {
 
   const rejectDoc = () =>
     runAction(
-      () => apiFetch(`/api/documents/${selectedId}/reject`, { method: "POST" }),
+      () => trackingWrite({
+        path: `/api/documents/${selectedId}/reject`,
+        label: `Reject document (doc ${selectedId})`,
+      }),
       "Document rejected."
     );
 
   const addComment = useCallback((stageOrder, text) => {
     if (!text.trim()) return;
     return runAction(
-      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/comments`, {
-        method: "POST",
-        body: JSON.stringify({ body: text.trim() }),
+      () => trackingWrite({
+        path: `/api/documents/${selectedId}/stages/${stageOrder}/comments`,
+        json: { body: text.trim() },
+        label: `Add comment (doc ${selectedId})`,
       }),
       "Comment added."
     );
@@ -497,31 +538,34 @@ export default function DocumentTracking() {
 
   const saveRegistryNumber = (stageOrder, value) =>
     runAction(
-      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/registry-number`, {
-        method: "POST",
-        body: JSON.stringify({ registry_number: value }),
+      () => trackingWrite({
+        path: `/api/documents/${selectedId}/stages/${stageOrder}/registry-number`,
+        json: { registry_number: value },
+        label: `Save registry number (doc ${selectedId})`,
       }),
       "Registry number saved."
     );
 
   const saveReleaseDestination = (stageOrder, value) =>
     runAction(
-      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/release-destination`, {
-        method: "POST",
-        body: JSON.stringify({ destination: value }),
+      () => trackingWrite({
+        path: `/api/documents/${selectedId}/stages/${stageOrder}/release-destination`,
+        json: { destination: value },
+        label: `Save release destination (doc ${selectedId})`,
       }),
       "Release destination saved."
     );
 
   const startPostingPeriod = (stageOrder) =>
     runAction(
-      () => apiFetch(`/api/documents/${selectedId}/stages/${stageOrder}/posting-period`, {
-        method: "POST",
+      () => trackingWrite({
+        path: `/api/documents/${selectedId}/stages/${stageOrder}/posting-period`,
+        label: `Start posting period (doc ${selectedId})`,
       }),
       "Posting period started."
     );
 
-  const submitNewDocument = () => {
+  const submitNewDocument = async () => {
     const docNumber = newDocNumber.trim();
     const title = newDocTitle.trim();
     if (!docNumber) {
@@ -543,32 +587,41 @@ export default function DocumentTracking() {
     }
     setNewDocError(null);
     setNewDocBusy(true);
-    apiFetch("/api/documents", {
-      method: "POST",
-      body: JSON.stringify({ doc_number: docNumber, title, doc_type: resolvedType }),
-    })
-      .then(async (created) => {
-        setNewDocNumber("");
-        setNewDocTitle("");
-        setNewDocType(DOC_TYPES[0]);
-        setNewDocTypeOther("");
-        setNewDocOpen(false);
-        await loadList();
-        if (created?.id != null) setSelectedId(created.id);
-        flashSaved();
-        notify("Document created.", "success");
-      })
-      .catch((e) => {
-        console.error("[DocumentTracking] Failed to create document:", e);
-        setNewDocError(e.message || "Could not create this document.");
-        notify(e.message || "Could not create this document.", "error");
-      })
-      .finally(() => setNewDocBusy(false));
+    try {
+      const created = await trackingWrite({
+        path: "/api/documents",
+        json: { doc_number: docNumber, title, doc_type: resolvedType },
+        label: `New document ${docNumber}`,
+      });
+      setNewDocNumber("");
+      setNewDocTitle("");
+      setNewDocType(DOC_TYPES[0]);
+      setNewDocTypeOther("");
+      setNewDocOpen(false);
+      await loadList({ silent: true });
+      if (created?.id != null) setSelectedId(created.id);
+      flashSaved();
+      notify(
+        created?.queued
+          ? "Saved on this device. It will sync when the connection returns."
+          : "Document created.",
+        "success"
+      );
+    } catch (e) {
+      console.error("[DocumentTracking] Failed to create document:", e);
+      setNewDocError(e.message || "Could not create this document.");
+      notify(e.message || "Could not create this document.", "error");
+    } finally {
+      setNewDocBusy(false);
+    }
   };
 
-  // Admin-only. Not routed through runAction() because there is no document
-  // left to reload afterwards.
+  // Admin-only. Online only: deleting a document cannot be queued safely.
   const deleteDocument = async () => {
+    if (!isDbAvailable()) {
+      notify("Deleting needs the connection. Try again when it returns.", "error");
+      return;
+    }
     if (selectedId == null) return;
     setBusy(true);
     setActionError(null);
@@ -600,6 +653,12 @@ export default function DocumentTracking() {
   return (
     <div className="dt-root">
       <div className="dt-page">
+        {!dbOnline && (
+          <div className="dt-empty" style={{ marginBottom: 12, background: "var(--amber-soft)", color: "var(--amber-ink)" }}>
+            Offline. Changes are saved on this device and will sync when the connection returns.
+          </div>
+        )}
+
         <div className="dt-tabs" role="tablist" aria-label="Filter documents by status">
           {FILTERS.map((f) => (
             <button
@@ -798,8 +857,7 @@ export default function DocumentTracking() {
                   const isPostingStage = isPostingPeriodStageLabel(stage.label);
 
                   // The 10-day window is optional: it only applies once the
-                  // "10 Days Registration" button has been clicked. Until then
-                  // the Posting Period stage is a plain pass-through step.
+                  // "10 Days Registration" button has been clicked.
                   const postingEndTime = stage.postingEndAt ? new Date(stage.postingEndAt).getTime() : null;
                   const stagePostingStarted = isPostingStage && Boolean(stage.postingStartAt);
                   const stagePostingNotElapsed =
@@ -1252,7 +1310,8 @@ export default function DocumentTracking() {
             <div style={{ display: "flex", gap: 8, padding: "4px 18px 18px" }}>
               {(() => {
                 const missingCustomType = newDocType === "Other" && !newDocTypeOther.trim();
-                const createDisabled = newDocBusy || !newDocNumber.trim() || !newDocTitle.trim() || missingCustomType;
+                const createDisabled =
+                  newDocBusy || !newDocNumber.trim() || !newDocTitle.trim() || missingCustomType;
                 return (
                   <button
                     type="button"

@@ -1,0 +1,625 @@
+// Offline layer for Document Tracking.
+//
+//  - One device-level store (STORE_KEY) holds:
+//      lists   : { [username]: rows }  the server's answer for each user,
+//                replaced on every online refresh
+//      details : full documents, fetched online (shared, keyed by id)
+//      pending : documents created offline on this device, not yet confirmed
+//  - Each offline-created stage also records the holder username that Role
+//    Management assigned at creation time (holder_username). Visibility uses
+//    the live holder map when it is saved, and falls back to this snapshot,
+//    so an Admin-created document stays visible to its Personnel offline.
+//  - Visibility is recalculated on every read with the same rule as
+//    _doc_is_assigned_to() on the server: admins see everything; anyone else
+//    sees documents whose active step is held by them.
+//  - Writes: sent now when online; queued in the outbox when offline. Queued
+//    changes are applied to the saved copy, including every saved list row,
+//    so the same buttons keep working offline.
+//  - A pending document is removed only after (a) the user discarded its
+//    queued create, or (b) the create has synced AND no queued operation still
+//    refers to its offline ID, or (c) the server returns a document with the
+//    same doc_number. It never disappears early and never duplicates.
+import { getDB } from '../db';
+import { isDbAvailable } from '../connectivityService';
+import { enqueue, newOpId } from '../outboxQueue';
+
+const API = import.meta.env.VITE_API_BASE_URL || '';
+const ENTITY = 'tracking';
+const CREATE_PATH = '/api/documents';
+const PERSONNEL_PATH = '/api/documents/handlers';
+const HOLDERS_PATH = '/api/documents/stage-holders';
+
+// localStorage keys
+const PERSONNEL_LS_KEY = 'dt_personnel_cache_v1';
+const STORE_KEY = 'dt_store_v3';
+const SESSION_CACHE_KEY = 'cr_session_cache_v1'; // written by PermissionContext
+
+const OFFLINE_PREFIX = 'offline-';
+const OFFLINE_ID_RE = /^offline-/;
+const MAX_PREFETCH_DETAILS = 50;
+
+const STAGE_RE = /^\/api\/documents\/((?:\d+)|offline-[\w-]+)\/stages\/(\d+)\/(complete|flag|comments|registry-number|release-destination|posting-period)$/;
+const REJECT_RE = /^\/api\/documents\/((?:\d+)|offline-[\w-]+)\/reject$/;
+const DETAIL_PATH_RE = /^\/api\/documents\/(\d+|offline-[\w-]+)$/;
+
+// Same as STARTER_STAGES in routes/document.py.
+const STARTER_STAGES = [
+  { stage_order: 1, label: 'Registration', detail: 'Assigned personnel processes the submitted registration documents.' },
+  { stage_order: 2, label: 'Civil Registrar', detail: 'Document is forwarded to the Civil Registrar.' },
+  { stage_order: 3, label: 'Posting Period', detail: 'Document is posted for 10 days, as required for late registration, before proceeding.' },
+  { stage_order: 4, label: 'Records Division', detail: 'Document is registered into the Civil Registry Book.' },
+  { stage_order: 5, label: 'Assign Registry Number', detail: 'Authorized personnel enters and saves the Registry Number.' },
+  { stage_order: 6, label: 'Releasing', detail: 'Document is released to its destination.' },
+];
+
+// Same mapping as _stage_permission_for_label() in routes/document.py.
+function stagePermissionForLabel(label) {
+  const l = (label || '').trim().toLowerCase();
+  if (l.includes('registration')) return 'document_stage_registration';
+  if (l.includes('civil registrar')) return 'document_stage_civil_registrar';
+  if (l === 'posting period') return 'document_stage_posting_period';
+  if (l.includes('records division')) return 'document_stage_records_division';
+  if (l.includes('registry number')) return 'document_stage_registry_number';
+  if (l === 'releasing') return 'document_stage_releasing';
+  return null;
+}
+
+export class HttpError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export async function apiFetch(path, options = {}) {
+  const res = await fetch(`${API}${path}`, {
+    credentials: 'include',
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  });
+  let body = null;
+  try { body = await res.json(); } catch { /* no JSON body */ }
+  if (!res.ok) throw new HttpError(body?.error || `Request failed (${res.status})`, res.status);
+  return body;
+}
+
+/* ── localStorage helpers ── */
+
+function lsRead(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    const value = JSON.parse(raw);
+    return value ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function lsWrite(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    console.warn('[documentTrackingOffline] could not save to localStorage:', e);
+    return false;
+  }
+}
+
+function sessionCache() {
+  return lsRead(SESSION_CACHE_KEY, null) || {};
+}
+
+// The logged-in username. Falls back to the saved session when this tab's
+// sessionStorage has not been filled yet (for example after an offline reload).
+function currentUsername() {
+  let u = '';
+  try { u = (sessionStorage.getItem('username') || '').trim(); } catch { /* ignore */ }
+  return u || (sessionCache().username || '').trim();
+}
+
+function userKey() {
+  return (currentUsername() || 'anonymous').toLowerCase();
+}
+
+function isAdminOnDevice() {
+  const s = sessionCache();
+  const user = currentUsername().toLowerCase();
+  return Boolean(s.isAdmin) && (s.username || '').trim().toLowerCase() === user && user !== '';
+}
+
+/* ── personnel + stage holders (saved per device) ── */
+
+function readLocalPersonnel() {
+  const raw = lsRead(PERSONNEL_LS_KEY, null);
+  if (!raw || typeof raw !== 'object') return { savedAt: 0, personnel: [], holders: {} };
+  return {
+    savedAt: raw.savedAt || 0,
+    personnel: Array.isArray(raw.personnel) ? raw.personnel : [],
+    holders: raw.holders && typeof raw.holders === 'object' ? raw.holders : {},
+  };
+}
+
+function saveLocalPersonnel(personnel, holders) {
+  return lsWrite(PERSONNEL_LS_KEY, { savedAt: Date.now(), personnel, holders });
+}
+
+// Removes saved personnel and the saved document copies. Pending offline
+// documents and queued changes are kept, since they have not reached the server.
+export function clearTrackingPersonnel() {
+  try {
+    localStorage.removeItem(PERSONNEL_LS_KEY);
+    const store = readStore();
+    store.lists = {};
+    store.details = {};
+    store.savedAt = 0;
+    writeStore(store);
+  } catch { /* ignore */ }
+}
+
+// Fills each stage's handler name. Priority matches the server: the role
+// holder first (live map, then the snapshot taken at creation), then the
+// assigned person.
+function fillStageNames(doc) {
+  if (!doc || !Array.isArray(doc.stages)) return doc;
+  const saved = readLocalPersonnel();
+  const nameById = new Map(saved.personnel.map((p) => [Number(p.id), p.name]));
+
+  return {
+    ...doc,
+    stages: doc.stages.map((s) => {
+      const roleUser = holderFor(s.label, saved.holders, s.holder_username);
+      const personName =
+        s.assigned_handler_id != null ? nameById.get(Number(s.assigned_handler_id)) : null;
+      return { ...s, assigned_handler_name: roleUser || personName || s.assigned_handler_name || null };
+    }),
+  };
+}
+
+/* ── visibility (same rule as _doc_is_assigned_to() on the server) ── */
+
+// The username holding the role for this stage. Uses the live holder map when
+// it is saved; otherwise the holder recorded on the stage when it was created.
+function holderFor(stageLabel, holders, snapshotHolder = null) {
+  const perm = stagePermissionForLabel(stageLabel);
+  if (!perm) return null;
+  return (holders && holders[perm]) || snapshotHolder || null;
+}
+
+// True when `user` holds the role for the stage with this label.
+function isStageOwnedBy(stageLabel, holders, user, snapshotHolder = null) {
+  const holder = holderFor(stageLabel, holders, snapshotHolder);
+  return Boolean(holder) && Boolean(user) && holder.toLowerCase() === user.toLowerCase();
+}
+
+function activeStageOf(stages) {
+  return (stages || []).find((s) => !s.done || s.flag) || null;
+}
+
+// A saved list row is visible when the user is an admin, or holds its active step.
+function rowVisible(row, holders, user, admin) {
+  if (admin) return true;
+  return Boolean(row.active_stage) && isStageOwnedBy(row.active_stage, holders, user);
+}
+
+// Builds a list row the same way the server does: owner = active step's handler.
+function rowFromDetail(d) {
+  const active = activeStageOf(d.stages);
+  return {
+    id: d.id,
+    doc_number: d.doc_number,
+    title: d.title,
+    doc_type: d.doc_type,
+    type: d.doc_type,
+    status: d.status,
+    rejected: Boolean(d.rejected),
+    owner: active?.assigned_handler_name || 'Unassigned',
+    active_stage: active?.label ?? null,
+    assigned_handler_id: null,
+    deleted_handler_id: null,
+    updated_at: d.updated_at,
+  };
+}
+
+/* ── device store ── */
+
+function emptyStore() {
+  return { savedAt: 0, lists: {}, details: {}, pending: {} };
+}
+
+function readStore() {
+  const s = lsRead(STORE_KEY, null);
+  if (!s || typeof s !== 'object') return emptyStore();
+  return {
+    savedAt: s.savedAt || 0,
+    lists: s.lists && typeof s.lists === 'object' ? s.lists : {},
+    details: s.details && typeof s.details === 'object' ? s.details : {},
+    pending: s.pending && typeof s.pending === 'object' ? s.pending : {},
+  };
+}
+
+function writeStore(store) {
+  lsWrite(STORE_KEY, store);
+}
+
+// Drops pending copies that are no longer needed:
+//  - the user discarded the queued create, or
+//  - the create has synced and no queued step still refers to the offline ID.
+// Returns true when the store changed.
+async function pruneDiscardedPending(store) {
+  const ids = Object.keys(store.pending);
+  if (!ids.length) return false;
+  try {
+    const db = await getDB();
+    const ops = await db.getAll('outbox');
+    const byId = new Map(ops.map((o) => [o.opId, o]));
+    let changed = false;
+
+    for (const id of ids) {
+      const opId = id.slice(OFFLINE_PREFIX.length);
+      const op = byId.get(opId);
+
+      if (!op) {
+        delete store.pending[id];
+        changed = true;
+        continue;
+      }
+
+      if (op.status === 'synced') {
+        const stillQueued = ops.some(
+          (o) => o.status !== 'synced' && String(o.url || '').includes(`/${OFFLINE_PREFIX}${opId}`)
+        );
+        if (!stillQueued) {
+          delete store.pending[id];
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  } catch (e) {
+    console.warn('[documentTrackingOffline] could not check outbox:', e);
+    return false;
+  }
+}
+
+// Pending documents this user may see, excluding any already returned by the server.
+function pendingRowsFor(store, holders, user, admin, serverDocNumbers = new Set()) {
+  return Object.values(store.pending)
+    .map((d) => fillStageNames(d))
+    .filter((d) => !serverDocNumbers.has(String(d.doc_number)))
+    .filter((d) => {
+      if (admin) return true;
+      const active = activeStageOf(d.stages);
+      return Boolean(active) && isStageOwnedBy(active.label, holders, user, active.holder_username);
+    })
+    .map((d) => rowFromDetail(d));
+}
+
+/* ── refresh while online ── */
+
+// Entry point used by OfflineContext on start, on reconnect and every
+// warm-up cycle. Saves personnel + stage holders, then this user's visible
+// documents and their details. Runs only while the database is reachable.
+export async function refreshTrackingPersonnel() {
+  if (!isDbAvailable()) return false;
+  let ok = false;
+  try {
+    const [people, holders] = await Promise.all([
+      apiFetch(PERSONNEL_PATH),
+      apiFetch(HOLDERS_PATH),
+    ]);
+    ok = saveLocalPersonnel(
+      Array.isArray(people) ? people : [],
+      holders && typeof holders === 'object' ? holders : {},
+    );
+  } catch (e) {
+    console.warn('[documentTrackingOffline] personnel refresh failed:', e);
+  }
+  await refreshTrackingDocuments();
+  return ok;
+}
+
+async function refreshTrackingDocuments() {
+  if (!currentUsername()) return false;
+  let rows;
+  try {
+    rows = await apiFetch(CREATE_PATH);
+  } catch (e) {
+    console.warn('[documentTrackingOffline] document refresh failed:', e);
+    return false;
+  }
+  await storeOnlineList(rows);
+  return true;
+}
+
+// Saves the server's answer for this user. The server already applied the
+// visibility rule, so it replaces this user's list. Other users' lists are untouched.
+async function storeOnlineList(rows) {
+  const incoming = Array.isArray(rows) ? rows : [];
+  const store = readStore();
+  store.lists[userKey()] = incoming;
+
+  for (const row of incoming.slice(0, MAX_PREFETCH_DETAILS)) {
+    if (!isDbAvailable()) break;
+    try {
+      store.details[String(row.id)] = await apiFetch(`${CREATE_PATH}/${row.id}`);
+    } catch (e) {
+      console.warn('[documentTrackingOffline] could not save document', row.id, e);
+    }
+  }
+
+  // The server now has these documents, so the matching pending copies can go.
+  const serverDocNumbers = new Set(incoming.map((r) => String(r.doc_number)));
+  for (const id of Object.keys(store.pending)) {
+    if (serverDocNumbers.has(String(store.pending[id].doc_number))) {
+      delete store.pending[id];
+    }
+  }
+
+  store.savedAt = Date.now();
+  writeStore(store);
+}
+
+/* ── READS ── */
+
+const offlineError = () =>
+  new Error("You're offline and this isn't saved on this device yet. It will load when the connection returns.");
+
+// Visible list for this device's user, built only from the saved store.
+async function listOffline(store, fallbackErr) {
+  const changed = await pruneDiscardedPending(store);
+  if (changed) writeStore(store);
+
+  const myList = store.lists[userKey()];
+  const hasAnything = Array.isArray(myList) || Object.keys(store.pending).length > 0;
+  if (!hasAnything) {
+    throw fallbackErr || new Error(
+      'Nothing is saved on this device yet. Open Document Tracking once while online on this device, then the documents will be available offline.'
+    );
+  }
+
+  const { holders } = readLocalPersonnel();
+  const user = currentUsername();
+  const admin = isAdminOnDevice();
+  const saved = Array.isArray(myList) ? myList : [];
+  const serverDocNumbers = new Set(saved.map((r) => String(r.doc_number)));
+
+  const pendingRows = pendingRowsFor(store, holders, user, admin, serverDocNumbers);
+  // Safety net: the saved list is filtered again with the current holder map.
+  const savedRows = saved.filter((r) => rowVisible(r, holders, user, admin));
+
+  return [...pendingRows, ...savedRows];
+}
+
+// Online: fetch from the server and save the result. Offline, or when the server
+// cannot answer: the saved store.
+export async function trackingRead(path) {
+  const detailMatch = path.match(DETAIL_PATH_RE);
+  const isList = path === CREATE_PATH;
+
+  // A document created on this device that has not synced yet.
+  if (detailMatch && OFFLINE_ID_RE.test(detailMatch[1])) {
+    const store = readStore();
+    const d = store.pending[detailMatch[1]];
+    if (!d) throw new Error('This document is not saved on this device.');
+    return fillStageNames(d);
+  }
+
+  let netErr = null;
+  if (isDbAvailable()) {
+    try {
+      const body = await apiFetch(path);
+      if (isList) {
+        await storeOnlineList(body);
+        const store = readStore();
+        await pruneDiscardedPending(store);
+        writeStore(store);
+        const { holders } = readLocalPersonnel();
+        const serverDocNumbers = new Set((body || []).map((r) => String(r.doc_number)));
+        const pendingRows = pendingRowsFor(
+          store, holders, currentUsername(), isAdminOnDevice(), serverDocNumbers,
+        );
+        return [...pendingRows, ...(body || [])];
+      }
+      if (detailMatch) {
+        const store = readStore();
+        store.details[detailMatch[1]] = body;
+        writeStore(store);
+      }
+      return body;
+    } catch (err) {
+      if (err.status && err.status < 500) throw err; // real answer (403, 404, ...)
+      netErr = err;                                  // network or server down
+    }
+  }
+
+  const store = readStore();
+  if (isList) return listOffline(store, netErr);
+
+  if (detailMatch) {
+    const d = store.details[detailMatch[1]];
+    if (d) return fillStageNames(d);
+    throw netErr || offlineError();
+  }
+
+  throw new Error('Unsupported Document Tracking request.');
+}
+
+/* ── WRITES ── */
+
+// Sent now when the database is reachable. Queued when it is not, when the
+// target is a not-yet-synced document, or when the request fails before the
+// server answers. The same opId is used for the direct try and the queued
+// retry, so the server never applies a change twice.
+export async function trackingWrite({ path, method = 'POST', json = null, label }) {
+  const opId = newOpId();
+  const mustQueue = !isDbAvailable() || path.includes('/offline-');
+
+  if (!mustQueue) {
+    let res;
+    try {
+      res = await fetch(`${API}${path}`, {
+        method,
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-Offline-Op-Id': opId },
+        body: json ? JSON.stringify(json) : undefined,
+      });
+    } catch {
+      return queueWrite({ opId, path, method, json, label });
+    }
+    if (res.status >= 500) {
+      return queueWrite({ opId, path, method, json, label });
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new HttpError(data?.error || `Request failed (${res.status})`, res.status);
+    return data;
+  }
+
+  return queueWrite({ opId, path, method, json, label });
+}
+
+async function queueWrite({ opId, path, method, json, label }) {
+  await enqueue({ opId, entity: ENTITY, label, method, url: `${API}${path}`, json });
+  const optimistic = await applyOptimistic({ opId, path, method, json });
+  return { queued: true, ...optimistic };
+}
+
+/* ── local copy updates ── */
+
+// Applies `fn` to a saved document (pending or detail) and refreshes its row in
+// every saved user list, so each user's visibility is recalculated from the
+// new step. `listPatch` updates the rows when no full detail is saved.
+function patchDoc(docId, fn, listPatch = null) {
+  const store = readStore();
+  const id = String(docId);
+  const isPending = OFFLINE_ID_RE.test(id);
+  const bucket = isPending ? store.pending : store.details;
+
+  if (bucket[id]) {
+    const updated = fn(bucket[id]);
+    bucket[id] = updated;
+    if (!isPending) {
+      const row = rowFromDetail(fillStageNames(updated));
+      for (const key of Object.keys(store.lists)) {
+        store.lists[key] = store.lists[key].map((r) =>
+          String(r.id) === id ? { ...r, ...row } : r
+        );
+      }
+    }
+  } else if (listPatch && !isPending) {
+    for (const key of Object.keys(store.lists)) {
+      store.lists[key] = store.lists[key].map((r) =>
+        String(r.id) === id ? { ...r, ...listPatch } : r
+      );
+    }
+  }
+
+  // Pending copies are also reflected in list rows of the same offline id, so
+  // a pending document keeps its visibility after a stage moves forward.
+  if (isPending && bucket[id]) {
+    const row = rowFromDetail(fillStageNames(bucket[id]));
+    for (const key of Object.keys(store.lists)) {
+      store.lists[key] = store.lists[key].map((r) =>
+        String(r.id) === id ? { ...r, ...row } : r
+      );
+    }
+  }
+
+  writeStore(store);
+}
+
+async function applyOptimistic({ opId, path, method, json }) {
+  const now = new Date().toISOString();
+  const user = currentUsername() || 'You';
+
+  // Create document (offline): stored as a pending document on this device.
+  if (method === 'POST' && path === CREATE_PATH) {
+    const id = `${OFFLINE_PREFIX}${opId}`;
+    const holders = readLocalPersonnel().holders;
+
+    const stages = STARTER_STAGES.map((s) => {
+      const holder = holderFor(s.label, holders) ?? null;
+      return {
+        ...s,
+        done: false,
+        flag: false,
+        completed_at: null,
+        assigned_handler_id: null,
+        // Snapshot of the Role Management holder at creation time. Keeps the
+        // step visible to its Personnel while offline, even if the live map
+        // is not saved yet.
+        holder_username: holder,
+        assigned_handler_name: holder,
+        registry_number: null,
+        release_destination: null,
+        posting_start_at: null,
+        posting_end_at: null,
+        comments: [],
+      };
+    });
+
+    const doc = {
+      id,
+      doc_number: json?.doc_number,
+      title: json?.title,
+      doc_type: json?.doc_type,
+      status: 'In review',
+      rejected: false,
+      updated_at: now,
+      registry_number: null,
+      release_destination: null,
+      stages,
+    };
+
+    const store = readStore();
+    store.pending[id] = doc;
+    writeStore(store);
+    return { id, doc: rowFromDetail(fillStageNames(doc)) };
+  }
+
+  const rej = path.match(REJECT_RE);
+  if (rej) {
+    patchDoc(
+      rej[1],
+      (d) => ({ ...d, rejected: true, status: 'Rejected', updated_at: now }),
+      { rejected: true, status: 'Rejected' },
+    );
+    return { ok: true };
+  }
+
+  const m = path.match(STAGE_RE);
+  if (m) {
+    const [, docId, order, action] = m;
+    const comment = (body) => ({ author: user, body, created_at: now });
+
+    patchDoc(
+      docId,
+      (doc) => {
+        if (!Array.isArray(doc.stages)) return doc;
+        const stages = doc.stages.map((s) => {
+          if (Number(s.stage_order) !== Number(order)) return s;
+          const n = { ...s, comments: [...(s.comments || [])] };
+          if (action === 'complete') { n.done = true; n.flag = false; n.completed_at = now; }
+          else if (action === 'flag') { n.flag = true; n.done = false; n.completed_at = now; n.comments.push(comment(json?.note || '')); }
+          else if (action === 'comments') n.comments.push(comment(json?.body || ''));
+          else if (action === 'registry-number') n.registry_number = json?.registry_number;
+          else if (action === 'release-destination') n.release_destination = json?.destination;
+          else if (action === 'posting-period') {
+            n.posting_start_at = now;
+            n.posting_end_at = new Date(Date.now() + 10 * 86400000).toISOString();
+          }
+          return n;
+        });
+        const next = { ...doc, stages, updated_at: now };
+        if (action === 'flag') next.status = 'Changes requested';
+        if (action === 'registry-number') next.registry_number = json?.registry_number;
+        if (action === 'release-destination') next.release_destination = json?.destination;
+        return next;
+      },
+      action === 'flag' ? { status: 'Changes requested' } : null,
+    );
+    return { ok: true };
+  }
+
+  return { ok: true };
+}

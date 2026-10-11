@@ -5,12 +5,11 @@ import LoadingScreen from "./LoadingScreen";
 export default function ProtectedRoute({ module, adminOnly = false, children }) {
   const { hasAccess, is_admin, loading, waking } = usePermissions();
 
-  // 1. Show loading screen while context is fetching /api/session
+  // 1. Show loading screen while PermissionContext is fetching /api/session
   if (loading) return <LoadingScreen waking={waking} />;
 
-  // hasAccess("dashboard") comes entirely from PermissionContext, which is
-  // only ever set from a successful /api/session response. It is true if
-  // and only if the server currently considers this session authenticated.
+  // 2. hasAccess("dashboard") is true only when the server confirmed this
+  //    session is logged in (set from a successful /api/session response).
   if (!hasAccess("dashboard")) {
     return <Navigate to="/" replace />;
   }
