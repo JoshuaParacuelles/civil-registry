@@ -14,8 +14,73 @@ import {
 import useOnlineStatus from "../../hooks/useOnlineStatus";
 import "./DocumentTracking.css";
 
+// ─────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────
+
 // The server must answer within this time, or the list shows a retry message.
 const LIST_TIMEOUT_MS = 20000;
+
+// Debounce for realtime-triggered refetches so a burst of related writes
+// collapses into a single refetch.
+const REALTIME_DEBOUNCE_MS = 300;
+
+// Delay before the list row (status / active step) is refreshed after a write.
+const LIST_REFRESH_DELAY_MS = 800;
+
+// How often the posting-period countdown re-evaluates.
+const CLOCK_TICK_MS = 30000;
+
+const DOCUMENT_PAGE_SIZE = 50;
+
+// Matches POSTING_PERIOD_DAYS in routes/document.py.
+const POSTING_PERIOD_DAYS = 10;
+const POSTING_PERIOD_MS = POSTING_PERIOD_DAYS * 24 * 60 * 60 * 1000;
+
+// Matches RELEASE_DESTINATIONS in routes/document.py.
+const RELEASE_DESTINATIONS = ["Owner's Copy", "Hospital", "PSA", "Archive Office"];
+
+// Only Late Registration documents require the posting period.
+const REQUIRES_POSTING_PATTERN = /late registration/i;
+
+const DOC_TYPES = ["Birth Certificate", "Marriage Certificate", "Death Certificate", "Other"];
+
+const FILTERS = ["All", "In review", "Approved", "Changes requested", "Rejected"];
+
+const VIEW_MODES = [
+  { key: "active", label: "Active documents" },
+  { key: "archived", label: "Archive" },
+];
+
+const STATUS_STYLES = {
+  "In review": { fg: "var(--blue-ink)", bg: "var(--blue-soft)" },
+  "Approved": { fg: "var(--green-ink)", bg: "var(--green-soft)" },
+  "Changes requested": { fg: "var(--amber-ink)", bg: "var(--amber-soft)" },
+  "Rejected": { fg: "var(--red-ink)", bg: "var(--red-soft)" },
+};
+
+// Text shown for a stage with nobody assigned.
+const UNSIGNED_LABEL = "Unsigned";
+
+const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
+  month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+});
+
+// Shared toast helper (same toastService used by Login / Vital Records).
+function notify(message, type = "success") {
+  const ok = type === "success";
+  pushToast({
+    title: ok ? "Success" : "Error",
+    message,
+    success: ok,
+    duration: 4000,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Network helpers
+// ─────────────────────────────────────────────────────────────────────────
+
 const withTimeout = (promise, ms = LIST_TIMEOUT_MS) =>
   Promise.race([
     promise,
@@ -27,52 +92,10 @@ const withTimeout = (promise, ms = LIST_TIMEOUT_MS) =>
     ),
   ]);
 
-// Debounce for realtime-triggered refetches so a burst of related writes
-// collapses into a single refetch.
-const REALTIME_DEBOUNCE_MS = 300;
-const DOCUMENT_PAGE_SIZE = 50;
-const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
-  month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-});
+// ─────────────────────────────────────────────────────────────────────────
+// Stage identification (mirrors routes/document.py)
+// ─────────────────────────────────────────────────────────────────────────
 
-// Text shown for a stage with nobody assigned.
-const UNSIGNED_LABEL = "Unsigned";
-
-// Active list vs. archive list.
-const VIEW_MODES = [
-  { key: "active", label: "Active documents" },
-  { key: "archived", label: "Archive" },
-];
-
-// Shared toast helper (same shared toastService used by Login / Vital Records).
-function notify(message, type = "success") {
-  const ok = type === "success";
-  pushToast({
-    title: ok ? "Success" : "Error",
-    message,
-    success: ok,
-    duration: 4000,
-  });
-}
-
-const STATUS_STYLES = {
-  "In review": { fg: "var(--blue-ink)", bg: "var(--blue-soft)" },
-  "Approved": { fg: "var(--green-ink)", bg: "var(--green-soft)" },
-  "Changes requested": { fg: "var(--amber-ink)", bg: "var(--amber-soft)" },
-  "Rejected": { fg: "var(--red-ink)", bg: "var(--red-soft)" },
-};
-
-const FILTERS = ["All", "In review", "Approved", "Changes requested", "Rejected"];
-
-const DOC_TYPES = ["Birth Certificate", "Marriage Certificate", "Death Certificate", "Other"];
-
-// Matches RELEASE_DESTINATIONS in routes/document.py.
-const RELEASE_DESTINATIONS = ["Owner's Copy", "Hospital", "PSA", "Archive Office"];
-
-// Matches POSTING_PERIOD_DAYS in routes/document.py (display only).
-const POSTING_PERIOD_DAYS = 10;
-
-// Stage identification by label text — mirrors routes/document.py.
 function isRegistryNumberStageLabel(label) {
   return (label || "").toLowerCase().includes("registry number");
 }
@@ -83,8 +106,8 @@ function isPostingPeriodStageLabel(label) {
   return (label || "").trim().toLowerCase() === "posting period";
 }
 
-// Maps a stage label to its document_stage_* permission — mirrors
-// _stage_permission_for_label() in routes/document.py.
+// Maps a stage label to its document_stage_* permission (mirrors
+// _stage_permission_for_label in routes/document.py).
 function stagePermissionForLabel(label) {
   const l = (label || "").trim().toLowerCase();
   if (l.includes("registration")) return "document_stage_registration";
@@ -95,6 +118,10 @@ function stagePermissionForLabel(label) {
   if (l === "releasing") return "document_stage_releasing";
   return null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Formatting and mapping
+// ─────────────────────────────────────────────────────────────────────────
 
 function formatDate(value) {
   if (!value) return "Pending";
@@ -136,8 +163,18 @@ function mapDocumentSummary(row) {
   };
 }
 
-// Each stage carries its own handler (assigned_handler_name). There is no
-// fallback to the document's handler; an empty stage renders "Unsigned".
+function mapComment(c) {
+  return {
+    id: c.id,
+    author: c.author ?? "Unknown",
+    initials: initialsFor(c.author),
+    date: formatDate(c.created_at ?? c.date),
+    text: c.body ?? c.text ?? "",
+  };
+}
+
+// Each stage carries its own handler (assigned_handler_name). An empty stage
+// renders "Unsigned"; there is no fallback to the document's handler.
 function mapStage(stage) {
   return {
     order: stage.stage_order ?? stage.order,
@@ -151,12 +188,7 @@ function mapStage(stage) {
     releaseDestination: stage.release_destination ?? null,
     postingStartAt: stage.posting_start_at ?? null,
     postingEndAt: stage.posting_end_at ?? null,
-    comments: (stage.comments || []).map((c) => ({
-      author: c.author ?? "Unknown",
-      initials: initialsFor(c.author),
-      date: formatDate(c.created_at ?? c.date),
-      text: c.body ?? c.text ?? "",
-    })),
+    comments: (stage.comments || []).map(mapComment),
   };
 }
 
@@ -169,10 +201,38 @@ function mapDocumentDetail(doc) {
   };
 }
 
+// Recomputes the document-level registry number and release destination from
+// the stages, so an optimistic change to a stage is reflected in the header.
+function withDerivedFields(detail) {
+  const registryStage = detail.stages.find(
+    (s) => isRegistryNumberStageLabel(s.label) && s.registryNumber
+  );
+  const releaseStage = detail.stages.find(
+    (s) => isReleasingStageLabel(s.label) && s.releaseDestination
+  );
+  return {
+    ...detail,
+    registryNumber: registryStage ? registryStage.registryNumber : null,
+    releaseDestination: releaseStage ? releaseStage.releaseDestination : null,
+  };
+}
+
+// Returns a new detail with one stage replaced by updater(stage).
+function updateStage(detail, stageOrder, updater) {
+  return withDerivedFields({
+    ...detail,
+    stages: detail.stages.map((s) => (s.order === stageOrder ? updater(s) : s)),
+  });
+}
+
 // Active stage = first stage that is not done, or is flagged.
 function getActiveIndex(stages) {
   return stages.findIndex((s) => !s.done || s.flag);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// List row
+// ─────────────────────────────────────────────────────────────────────────
 
 const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect }) {
   const style = STATUS_STYLES[doc.status] || STATUS_STYLES["In review"];
@@ -205,6 +265,10 @@ const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect }) {
   );
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────────────
+
 export default function DocumentTracking() {
   // ROLE POLICY:
   //  - Administrator: view-only on stages; can create, archive, restore,
@@ -216,7 +280,8 @@ export default function DocumentTracking() {
   const { is_admin, hasAccess } = usePermissions();
   const dbOnline = useOnlineStatus();
 
-  const [viewMode, setViewMode] = useState("active"); // "active" | "archived"
+  // ── View and list state ──────────────────────────────────────────────
+  const [viewMode, setViewMode] = useState("active");
   const viewModeRef = useRef("active");
   viewModeRef.current = viewMode;
 
@@ -227,25 +292,27 @@ export default function DocumentTracking() {
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState(null);
 
-  const [selectedId, setSelectedId] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState(null);
-
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [visibleCount, setVisibleCount] = useState(DOCUMENT_PAGE_SIZE);
   const [filter, setFilter] = useState("All");
-  const [openStage, setOpenStage] = useState(null);
 
-  // Input state for the stage forms. Cleared when the selected document changes.
+  // ── Selected document state ──────────────────────────────────────────
+  const [selectedId, setSelectedId] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(null);
+  const [openStage, setOpenStage] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  // ── Form and feedback state ──────────────────────────────────────────
   const [draftComment, setDraftComment] = useState("");
   const [registryNumberInput, setRegistryNumberInput] = useState("");
   const [releaseDestinationInput, setReleaseDestinationInput] = useState("");
   const [actionError, setActionError] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false); // archive / restore / delete only
   const [justSaved, setJustSaved] = useState(false);
-  const saveTimer = useRef(null);
+  const saveTimerRef = useRef(null);
 
   // "New Document" modal
   const [newDocOpen, setNewDocOpen] = useState(false);
@@ -253,7 +320,6 @@ export default function DocumentTracking() {
   const [newDocTitle, setNewDocTitle] = useState("");
   const [newDocType, setNewDocType] = useState(DOC_TYPES[0]);
   const [newDocTypeOther, setNewDocTypeOther] = useState("");
-  const [newDocBusy, setNewDocBusy] = useState(false);
   const [newDocError, setNewDocError] = useState(null);
   const newDocNumberRef = useRef(null);
   const newDocTypeOtherRef = useRef(null);
@@ -261,7 +327,6 @@ export default function DocumentTracking() {
   // "Request changes" modal
   const [flagStageOrder, setFlagStageOrder] = useState(null);
   const [flagNote, setFlagNote] = useState("");
-  const [flagBusy, setFlagBusy] = useState(false);
   const [flagError, setFlagError] = useState(null);
   const flagNoteRef = useRef(null);
 
@@ -269,16 +334,36 @@ export default function DocumentTracking() {
   const [confirmModal, setConfirmModal] = useState(null);
   const confirmModalConfirmRef = useRef(null);
 
+  // ── Refs ─────────────────────────────────────────────────────────────
   // Request-id tickets so an older response can never overwrite a newer one.
   const listRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
   const listRefreshTimerRef = useRef(null);
   const detailRefreshTimerRef = useRef(null);
 
-  // Mirrors of state, read by stable callbacks / realtime handlers.
   const detailRef = useRef(null);
+  detailRef.current = detail;
+
   const selectedIdRef = useRef(selectedId);
-  selectedIdRef.current = selectedId; // assigned during render so it is never stale
+  selectedIdRef.current = selectedId;
+
+  // Action keys currently being sent. Stops the same action from being sent twice.
+  const inFlightRef = useRef(new Set());
+  // documentId -> number of writes not yet settled.
+  const pendingWritesRef = useRef(new Map());
+
+  // ── Small helpers ────────────────────────────────────────────────────
+  const flashSaved = useCallback(() => {
+    setJustSaved(true);
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => setJustSaved(false), 1200);
+  }, []);
+  useEffect(() => () => clearTimeout(saveTimerRef.current), []);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
 
   // Puts rows on screen for the current view. Keeps the selection when it
   // still exists, otherwise selects the first row.
@@ -318,7 +403,7 @@ export default function DocumentTracking() {
       const rows = await withTimeout(trackingRead(
         archivedView ? "/api/documents?archived=true" : "/api/documents"
       ));
-      if (listRequestIdRef.current !== requestId) return []; // a newer request owns the list
+      if (listRequestIdRef.current !== requestId) return [];
       return applyRows(rows, archivedView);
     } catch (e) {
       if (listRequestIdRef.current !== requestId) return [];
@@ -327,30 +412,40 @@ export default function DocumentTracking() {
       if (!cached) setListError(e.message || "Could not reach the server.");
       return [];
     } finally {
-      if (listRequestIdRef.current === requestId) {
-        setListLoading(false);
-      }
+      if (listRequestIdRef.current === requestId) setListLoading(false);
     }
   }, [applyRows]);
 
-  // The request-id ticket prevents stale overwrites, and the render below
-  // additionally refuses to show a detail whose id doesn't match the
-  // current selection.
+  const scheduleListRefresh = useCallback(() => {
+    clearTimeout(listRefreshTimerRef.current);
+    listRefreshTimerRef.current = setTimeout(
+      () => loadList({ silent: true }),
+      LIST_REFRESH_DELAY_MS
+    );
+  }, [loadList]);
+
+  // Loads the selected document. Silent refreshes are skipped while that
+  // document still has unsettled writes; the last write to settle triggers one.
   const loadDetail = useCallback(async (id, opts) => {
-    const requestId = ++detailRequestIdRef.current;
     if (id == null) {
+      detailRequestIdRef.current += 1;
       setDetail(null);
       setDetailLoading(false);
       return;
     }
-    const silent = opts?.silent === true && String(detailRef.current?.id) === String(id);
+    const key = String(id);
+    if (opts?.silent && (pendingWritesRef.current.get(key) || 0) > 0) return;
+
+    const requestId = ++detailRequestIdRef.current;
+    const silent = opts?.silent === true && String(detailRef.current?.id) === key;
     if (!silent) {
       setDetailLoading(true);
       setDetailError(null);
     }
     try {
       const doc = await withTimeout(trackingRead(`/api/documents/${id}`));
-      if (detailRequestIdRef.current !== requestId) return; // a newer call took over
+      if (detailRequestIdRef.current !== requestId) return;
+      if (String(selectedIdRef.current) !== key) return; // selection moved on
       setDetail(mapDocumentDetail(doc));
     } catch (e) {
       if (detailRequestIdRef.current !== requestId) return;
@@ -358,14 +453,77 @@ export default function DocumentTracking() {
       setDetailError(e.message || "Could not reach the server.");
       setDetail(null);
     } finally {
-      if (detailRequestIdRef.current === requestId) {
-        setDetailLoading(false);
-      }
+      if (detailRequestIdRef.current === requestId) setDetailLoading(false);
     }
   }, []);
 
-  useEffect(() => { detailRef.current = detail; }, [detail]);
+  // ── Write tracking ───────────────────────────────────────────────────
+  const beginWrite = (docId) => {
+    const key = String(docId);
+    pendingWritesRef.current.set(key, (pendingWritesRef.current.get(key) || 0) + 1);
+  };
 
+  const endWrite = useCallback((docId) => {
+    const key = String(docId);
+    const remaining = (pendingWritesRef.current.get(key) || 1) - 1;
+    if (remaining > 0) {
+      pendingWritesRef.current.set(key, remaining);
+      return;
+    }
+    pendingWritesRef.current.delete(key);
+    // Last write for this document has settled: pull the server copy once.
+    loadDetail(docId, { silent: true });
+  }, [loadDetail]);
+
+  // Applies a change to the selected document only if it is still the one shown.
+  const patchDetail = useCallback((docId, fn) => {
+    setDetail((d) => (d && String(d.id) === String(docId) ? fn(d) : d));
+  }, []);
+
+  // The one path every stage action uses:
+  //  1. Update the screen now (apply).
+  //  2. Send the request in the background.
+  //  3. On success, run onSuccess and confirm.
+  //  4. On failure, show the error and run onError. The write is settled
+  //     afterwards, which re-syncs the document from the server.
+  const performWrite = useCallback(({
+    docId, key, apply, request, successMsg, errorFallback, onSuccess, onError,
+  }) => {
+    if (key) {
+      if (inFlightRef.current.has(key)) return;
+      inFlightRef.current.add(key);
+    }
+    setActionError(null);
+    if (apply) patchDetail(docId, apply);
+    beginWrite(docId);
+
+    Promise.resolve()
+      .then(() => request())
+      .then((result) => {
+        if (onSuccess) onSuccess(result);
+        if (successMsg) {
+          notify(
+            result?.queued ? `${successMsg} Saved on this device, will sync when online.` : successMsg,
+            "success"
+          );
+        }
+        flashSaved();
+        scheduleListRefresh();
+      })
+      .catch((e) => {
+        console.error("[DocumentTracking] Action failed:", e);
+        const message = e?.message || errorFallback || "Something went wrong.";
+        setActionError(message);
+        notify(message, "error");
+        if (onError) onError();
+      })
+      .finally(() => {
+        if (key) inFlightRef.current.delete(key);
+        endWrite(docId);
+      });
+  }, [patchDetail, flashSaved, scheduleListRefresh, endWrite]);
+
+  // ── Effects: load, selection, realtime, sync ─────────────────────────
   useEffect(() => { loadList(); }, [loadList]);
 
   useEffect(() => {
@@ -378,14 +536,16 @@ export default function DocumentTracking() {
   }, [selectedId, loadDetail]);
 
   // Realtime: only open the channel while the database is reachable.
-  // Closed while offline so the browser stops retrying the WebSocket.
   useEffect(() => {
     let alive = true;
     let channel = null;
 
     const scheduleList = () => {
       clearTimeout(listRefreshTimerRef.current);
-      listRefreshTimerRef.current = setTimeout(() => loadList({ silent: true }), REALTIME_DEBOUNCE_MS);
+      listRefreshTimerRef.current = setTimeout(
+        () => loadList({ silent: true }),
+        REALTIME_DEBOUNCE_MS
+      );
     };
     const scheduleDetail = () => {
       clearTimeout(detailRefreshTimerRef.current);
@@ -417,7 +577,7 @@ export default function DocumentTracking() {
           if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
         })
         .subscribe((status, err) => {
-          if (channel !== ch) return; // ignore events from a channel already closed
+          if (channel !== ch) return; // ignore events from a closed channel
           if (status === "SUBSCRIBED") {
             console.info("[DocumentTracking] Realtime connected.");
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
@@ -469,13 +629,6 @@ export default function DocumentTracking() {
     });
   }, [loadList, loadDetail]);
 
-  const flashSaved = useCallback(() => {
-    setJustSaved(true);
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => setJustSaved(false), 1200);
-  }, []);
-  useEffect(() => () => clearTimeout(saveTimer.current), []);
-
   useEffect(() => {
     if (newDocOpen && newDocNumberRef.current) newDocNumberRef.current.focus();
   }, [newDocOpen]);
@@ -492,6 +645,7 @@ export default function DocumentTracking() {
     if (confirmModal && confirmModalConfirmRef.current) confirmModalConfirmRef.current.focus();
   }, [confirmModal]);
 
+  // ── Derived data ─────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
     return documents.filter((doc) => {
@@ -508,6 +662,14 @@ export default function DocumentTracking() {
 
   const visibleDocuments = filtered.slice(0, visibleCount);
 
+  // Never show a detail that belongs to a different document than the one selected.
+  const selected = detail && String(detail.id) === String(selectedId) ? detail : null;
+  // Archived documents are paused: no active stage, so no action panels.
+  const activeIndex = selected && !selected.archived ? getActiveIndex(selected.stages) : -1;
+  const inArchive = viewMode === "archived";
+  const requiresPosting = selected ? REQUIRES_POSTING_PATTERN.test(selected.type || "") : false;
+
+  // ── Navigation ───────────────────────────────────────────────────────
   // Switches between the active list and the archive. The new view's saved
   // copy is shown straight away, and the server refresh runs behind it.
   const switchView = (mode) => {
@@ -522,34 +684,12 @@ export default function DocumentTracking() {
     loadList();
   };
 
-  // Wraps the mutating call: run it, refresh the list in place, surface errors.
-  const runAction = useCallback(async (fn, successMsg) => {
-    setBusy(true);
-    setActionError(null);
-    try {
-      const result = await fn();
-      clearTimeout(listRefreshTimerRef.current);
-      clearTimeout(detailRefreshTimerRef.current);
-      await Promise.all([
-        loadDetail(selectedIdRef.current, { silent: true }),
-        loadList({ silent: true }),
-      ]);
-      flashSaved();
-      if (successMsg) {
-        notify(
-          result?.queued ? `${successMsg} Saved on this device, will sync when online.` : successMsg,
-          "success"
-        );
-      }
-    } catch (e) {
-      console.error("[DocumentTracking] Action failed:", e);
-      setActionError(e.message || "Something went wrong.");
-      notify(e.message || "Something went wrong.", "error");
-    } finally {
-      setBusy(false);
-    }
-  }, [loadDetail, loadList, flashSaved]);
+  const toggleStage = (index, hasComments) => {
+    if (!hasComments) return;
+    setOpenStage((prev) => (prev === index ? null : index));
+  };
 
+  // ── Archive / restore / permanent delete ─────────────────────────────
   // Removes a document from the visible list right away and moves the
   // selection to the next one. Only changes the screen, not the server.
   const removeFromListLocally = (id) => {
@@ -567,7 +707,7 @@ export default function DocumentTracking() {
   //  2. Send the request.
   //  3. On success, update the local copy and refresh in the background.
   //  4. On failure, put the row back exactly as it was and show the error.
-  const runOptimistic = async ({ id, call, onSuccessLocal, successMsg, offlineMsg }) => {
+  const runDocumentOperation = async ({ id, call, onSuccessLocal, successMsg, offlineMsg }) => {
     if (!isDbAvailable()) {
       notify(offlineMsg, "error");
       return;
@@ -585,8 +725,7 @@ export default function DocumentTracking() {
       onSuccessLocal?.();
       flashSaved();
       notify(successMsg, "success");
-      // Background refresh. Not awaited, so the buttons are usable right away.
-      loadList({ silent: true });
+      scheduleListRefresh();
     } catch (e) {
       console.error("[DocumentTracking] Server action failed:", e);
       documentsRef.current = snapshot;
@@ -612,7 +751,7 @@ export default function DocumentTracking() {
       notify("Could not find the document to archive. Please refresh the page.", "error");
       return;
     }
-    runOptimistic({
+    runDocumentOperation({
       id,
       call: () => apiFetch(`/api/documents/${id}/archive`, { method: "POST" }),
       onSuccessLocal: () => markArchivedLocally(id, true),
@@ -627,7 +766,7 @@ export default function DocumentTracking() {
       notify("Could not find the document to restore. Please refresh the page.", "error");
       return;
     }
-    runOptimistic({
+    runDocumentOperation({
       id,
       call: () => apiFetch(`/api/documents/${id}/restore`, { method: "POST" }),
       onSuccessLocal: () => markArchivedLocally(id, false),
@@ -642,7 +781,7 @@ export default function DocumentTracking() {
       notify("Could not find the document to delete. Please refresh the page.", "error");
       return;
     }
-    runOptimistic({
+    runDocumentOperation({
       id,
       call: () => apiFetch(`/api/documents/${id}`, { method: "DELETE" }),
       successMsg: "Document permanently deleted.",
@@ -650,100 +789,189 @@ export default function DocumentTracking() {
     });
   };
 
-  const advanceStage = (stageOrder) =>
-    runAction(
-      () => trackingWrite({
-        path: `/api/documents/${selectedId}/stages/${stageOrder}/complete`,
-        label: `Mark step complete (doc ${selectedId})`,
+  // ── Stage actions (optimistic) ───────────────────────────────────────
+  const advanceStage = (docId, stage) =>
+    performWrite({
+      docId,
+      key: `complete:${docId}:${stage.order}`,
+      apply: (d) => updateStage(d, stage.order, (s) => ({
+        ...s,
+        done: true,
+        flag: false,
+        date: formatDate(new Date().toISOString()),
+      })),
+      request: () => trackingWrite({
+        path: `/api/documents/${docId}/stages/${stage.order}/complete`,
+        label: `Mark step complete (doc ${docId})`,
       }),
-      "Step marked complete."
-    );
+      successMsg: "Step marked complete.",
+      errorFallback: "Could not complete this step.",
+    });
 
-  // Called directly (not via runAction) so a failure keeps the modal open.
-  const submitFlagStage = async () => {
+  const submitComment = (docId, stage, stageIndex) => {
+    const body = draftComment.trim();
+    if (!body) return;
+
+    const tempComment = {
+      id: `tmp-${Date.now()}`,
+      author: "You",
+      initials: "YO",
+      date: formatDate(new Date().toISOString()),
+      text: body,
+    };
+
+    setDraftComment("");
+    setOpenStage(stageIndex);
+
+    performWrite({
+      docId,
+      apply: (d) => updateStage(d, stage.order, (s) => ({
+        ...s,
+        comments: [...s.comments, tempComment],
+      })),
+      request: () => trackingWrite({
+        path: `/api/documents/${docId}/stages/${stage.order}/comments`,
+        json: { body },
+        label: `Add comment (doc ${docId})`,
+      }),
+      successMsg: "Comment added.",
+      errorFallback: "Could not add this comment.",
+      onError: () => {
+        // Give the text back so the user does not have to retype it.
+        if (String(selectedIdRef.current) === String(docId)) {
+          setDraftComment((current) => current || body);
+        }
+      },
+    });
+  };
+
+  const submitFlagStage = () => {
     const note = flagNote.trim();
     if (!note) {
       setFlagError("Please describe what needs to change.");
       return;
     }
+    const docId = selectedIdRef.current;
+    const order = flagStageOrder;
+
+    const tempComment = {
+      id: `tmp-${Date.now()}`,
+      author: "You",
+      initials: "YO",
+      date: formatDate(new Date().toISOString()),
+      text: note,
+    };
+
+    // Close the modal at once. If the request fails it reopens with the note.
+    setFlagStageOrder(null);
+    setFlagNote("");
     setFlagError(null);
-    setFlagBusy(true);
-    setBusy(true);
-    setActionError(null);
-    try {
-      await trackingWrite({
-        path: `/api/documents/${selectedId}/stages/${flagStageOrder}/flag`,
+
+    performWrite({
+      docId,
+      key: `flag:${docId}:${order}`,
+      apply: (d) => updateStage(d, order, (s) => ({
+        ...s,
+        flag: true,
+        done: false,
+        comments: [...s.comments, tempComment],
+      })),
+      request: () => trackingWrite({
+        path: `/api/documents/${docId}/stages/${order}/flag`,
         json: { note },
-        label: `Request changes (doc ${selectedId})`,
-      });
-      await Promise.all([loadDetail(selectedId, { silent: true }), loadList({ silent: true })]);
-      flashSaved();
-      notify("Changes requested.", "success");
-      setFlagStageOrder(null);
-      setFlagNote("");
-    } catch (e) {
-      console.error("[DocumentTracking] Request changes failed:", e);
-      setFlagError(e.message || "Could not submit this request.");
-      notify(e.message || "Could not submit this request.", "error");
-    } finally {
-      setFlagBusy(false);
-      setBusy(false);
-    }
+        label: `Request changes (doc ${docId})`,
+      }),
+      successMsg: "Changes requested.",
+      errorFallback: "Could not submit this request.",
+      onError: () => {
+        if (String(selectedIdRef.current) === String(docId)) {
+          setFlagStageOrder(order);
+          setFlagNote(note);
+        }
+      },
+    });
   };
 
-  const rejectDoc = () =>
-    runAction(
-      () => trackingWrite({
-        path: `/api/documents/${selectedId}/reject`,
-        label: `Reject document (doc ${selectedId})`,
+  const rejectDocument = (docId) =>
+    performWrite({
+      docId,
+      key: `reject:${docId}`,
+      apply: (d) => ({ ...d, rejected: true, status: "Rejected" }),
+      request: () => trackingWrite({
+        path: `/api/documents/${docId}/reject`,
+        label: `Reject document (doc ${docId})`,
       }),
-      "Document rejected."
-    );
+      successMsg: "Document rejected.",
+      errorFallback: "Could not reject this document.",
+    });
 
-  const addComment = useCallback((stageOrder, text) => {
-    if (!text.trim()) return;
-    return runAction(
-      () => trackingWrite({
-        path: `/api/documents/${selectedId}/stages/${stageOrder}/comments`,
-        json: { body: text.trim() },
-        label: `Add comment (doc ${selectedId})`,
-      }),
-      "Comment added."
-    );
-  }, [selectedId, runAction]);
-
-  const saveRegistryNumber = (stageOrder, value) =>
-    runAction(
-      () => trackingWrite({
-        path: `/api/documents/${selectedId}/stages/${stageOrder}/registry-number`,
+  const saveRegistryNumber = (docId, stage, value) =>
+    performWrite({
+      docId,
+      key: `registry:${docId}:${stage.order}`,
+      apply: (d) => updateStage(d, stage.order, (s) => ({ ...s, registryNumber: value })),
+      request: () => trackingWrite({
+        path: `/api/documents/${docId}/stages/${stage.order}/registry-number`,
         json: { registry_number: value },
-        label: `Save registry number (doc ${selectedId})`,
+        label: `Save registry number (doc ${docId})`,
       }),
-      "Registry number saved."
-    );
+      successMsg: "Registry number saved.",
+      errorFallback: "Could not save the registry number.",
+    });
 
-  const saveReleaseDestination = (stageOrder, value) =>
-    runAction(
-      () => trackingWrite({
-        path: `/api/documents/${selectedId}/stages/${stageOrder}/release-destination`,
+  const saveReleaseDestination = (docId, stage, value) =>
+    performWrite({
+      docId,
+      key: `release:${docId}:${stage.order}`,
+      apply: (d) => updateStage(d, stage.order, (s) => ({ ...s, releaseDestination: value })),
+      request: () => trackingWrite({
+        path: `/api/documents/${docId}/stages/${stage.order}/release-destination`,
         json: { destination: value },
-        label: `Save release destination (doc ${selectedId})`,
+        label: `Save release destination (doc ${docId})`,
       }),
-      "Release destination saved."
-    );
+      successMsg: "Release destination saved.",
+      errorFallback: "Could not save the release destination.",
+    });
 
-  const startPostingPeriod = (stageOrder) =>
-    runAction(
-      () => trackingWrite({
-        path: `/api/documents/${selectedId}/stages/${stageOrder}/posting-period`,
-        label: `Start posting period (doc ${selectedId})`,
+  const startPostingPeriod = (docId, stage) => {
+    const startIso = new Date().toISOString();
+    const endIso = new Date(Date.now() + POSTING_PERIOD_MS).toISOString();
+
+    performWrite({
+      docId,
+      key: `posting:${docId}:${stage.order}`,
+      apply: (d) => updateStage(d, stage.order, (s) => ({
+        ...s,
+        postingStartAt: startIso,
+        postingEndAt: endIso,
+      })),
+      request: () => trackingWrite({
+        path: `/api/documents/${docId}/stages/${stage.order}/posting-period`,
+        label: `Start posting period (doc ${docId})`,
       }),
-      "Posting period started."
-    );
+      onSuccess: (res) => patchDetail(docId, (d) => updateStage(d, stage.order, (s) => ({
+        ...s,
+        postingStartAt: res?.posting_start_at ?? startIso,
+        postingEndAt: res?.posting_end_at ?? endIso,
+      }))),
+      successMsg: "Posting period started.",
+      errorFallback: "Could not start the posting period.",
+    });
+  };
 
-  const submitNewDocument = async () => {
+  // ── New document (optimistic) ────────────────────────────────────────
+  const resetNewDocForm = () => {
+    setNewDocNumber("");
+    setNewDocTitle("");
+    setNewDocType(DOC_TYPES[0]);
+    setNewDocTypeOther("");
+  };
+
+  const submitNewDocument = () => {
     const docNumber = newDocNumber.trim();
     const title = newDocTitle.trim();
+    const resolvedType = newDocType === "Other" ? newDocTypeOther.trim() : newDocType;
+
     if (!docNumber) {
       setNewDocError("Document number is required.");
       return;
@@ -752,57 +980,62 @@ export default function DocumentTracking() {
       setNewDocError("Title is required.");
       return;
     }
-    if (!newDocType) {
-      setNewDocError("Document type is required.");
-      return;
-    }
-    const resolvedType = newDocType === "Other" ? newDocTypeOther.trim() : newDocType;
-    if (newDocType === "Other" && !resolvedType) {
-      setNewDocError("Please type the document type.");
-      return;
-    }
-    setNewDocError(null);
-    setNewDocBusy(true);
-    try {
-      const created = await trackingWrite({
-        path: "/api/documents",
-        json: { doc_number: docNumber, title, doc_type: resolvedType },
-        label: `New document ${docNumber}`,
-      });
-      setNewDocNumber("");
-      setNewDocTitle("");
-      setNewDocType(DOC_TYPES[0]);
-      setNewDocTypeOther("");
-      setNewDocOpen(false);
-      await loadList({ silent: true });
-      if (created?.id != null) setSelectedId(created.id);
-      flashSaved();
-      notify(
-        created?.queued
-          ? "Saved on this device. It will sync when the connection returns."
-          : "Document created.",
-        "success"
+    if (!resolvedType) {
+      setNewDocError(
+        newDocType === "Other" ? "Please type the document type." : "Document type is required."
       );
-    } catch (e) {
-      console.error("[DocumentTracking] Failed to create document:", e);
-      setNewDocError(e.message || "Could not create this document.");
-      notify(e.message || "Could not create this document.", "error");
-    } finally {
-      setNewDocBusy(false);
+      return;
     }
+
+    const snapshot = {
+      docNumber: newDocNumber,
+      title: newDocTitle,
+      type: newDocType,
+      typeOther: newDocTypeOther,
+    };
+
+    setNewDocError(null);
+    setNewDocOpen(false);
+    resetNewDocForm();
+
+    trackingWrite({
+      path: "/api/documents",
+      json: { doc_number: docNumber, title, doc_type: resolvedType },
+      label: `New document ${docNumber}`,
+    })
+      .then((created) => {
+        // Show the new document in the list at once, then select it.
+        if (created?.id != null && viewModeRef.current === "active") {
+          const summary = mapDocumentSummary(created);
+          const next = [summary, ...documentsRef.current.filter((d) => String(d.id) !== String(summary.id))];
+          documentsRef.current = next;
+          setDocuments(next);
+          setSelectedId(summary.id);
+        }
+        flashSaved();
+        notify(
+          created?.queued
+            ? "Saved on this device. It will sync when the connection returns."
+            : "Document created.",
+          "success"
+        );
+        scheduleListRefresh();
+      })
+      .catch((e) => {
+        console.error("[DocumentTracking] Failed to create document:", e);
+        const message = e.message || "Could not create this document.";
+        notify(message, "error");
+        // Reopen the form with the entered values so nothing is lost.
+        setNewDocNumber(snapshot.docNumber);
+        setNewDocTitle(snapshot.title);
+        setNewDocType(snapshot.type);
+        setNewDocTypeOther(snapshot.typeOther);
+        setNewDocError(message);
+        setNewDocOpen(true);
+      });
   };
 
-  const toggleStage = (i, hasComments) => {
-    if (!hasComments) return;
-    setOpenStage((prev) => (prev === i ? null : i));
-  };
-
-  // Never show a detail that belongs to a different document than the one selected.
-  const selected = detail && String(detail.id) === String(selectedId) ? detail : null;
-  // Archived documents are paused: no active stage, so no action panels.
-  const activeIndex = selected && !selected.archived ? getActiveIndex(selected.stages) : -1;
-  const inArchive = viewMode === "archived";
-
+  // ── Confirm dialogs ──────────────────────────────────────────────────
   const askArchive = () =>
     setConfirmModal({
       title: "Move to archive",
@@ -827,6 +1060,19 @@ export default function DocumentTracking() {
       },
     });
 
+  const askReject = () =>
+    setConfirmModal({
+      title: "Reject document",
+      message: `Reject ${selected.docNumber}? This stops the pipeline.`,
+      confirmLabel: "Reject",
+      danger: true,
+      onConfirm: () => {
+        setConfirmModal(null);
+        rejectDocument(selected.id);
+      },
+    });
+
+  // ── Render ───────────────────────────────────────────────────────────
   return (
     <div className="dt-root">
       <div className="dt-page">
@@ -880,6 +1126,7 @@ export default function DocumentTracking() {
         )}
 
         <div className="dt-grid" style={{ alignItems: "stretch" }}>
+          {/* ── Document list ── */}
           <div className="dt-card dt-list-card">
             <div className="dt-card-head">
               <div>
@@ -897,7 +1144,10 @@ export default function DocumentTracking() {
                   <button
                     type="button"
                     className="dt-btn dt-btn-primary dt-btn-lg"
-                    onClick={() => { setNewDocError(null); setNewDocOpen(true); }}
+                    onClick={() => {
+                      setNewDocError(null);
+                      setNewDocOpen(true);
+                    }}
                   >
                     + New Document
                   </button>
@@ -919,7 +1169,7 @@ export default function DocumentTracking() {
             </div>
 
             <div className="dt-list">
-              {listLoading && documents.length === 0 && (
+              {listLoading && documents.length === 0 &&
                 Array.from({ length: 5 }).map((_, i) => (
                   <div className="dt-skeleton-row" key={`dt-skeleton-${i}`} aria-hidden="true">
                     <div className="dt-skeleton-main">
@@ -929,8 +1179,8 @@ export default function DocumentTracking() {
                     </div>
                     <div className="dt-skeleton-line dt-skeleton-badge" />
                   </div>
-                ))
-              )}
+                ))}
+
               {!listLoading && filtered.length === 0 && (
                 <div className="dt-empty">
                   {listError
@@ -940,6 +1190,7 @@ export default function DocumentTracking() {
                     : "No documents match this search or filter."}
                 </div>
               )}
+
               {visibleDocuments.map((doc) => (
                 <DocumentRow
                   key={doc.id}
@@ -949,6 +1200,7 @@ export default function DocumentTracking() {
                 />
               ))}
             </div>
+
             {filtered.length > visibleDocuments.length && (
               <button
                 type="button"
@@ -960,6 +1212,7 @@ export default function DocumentTracking() {
             )}
           </div>
 
+          {/* ── Detail states ── */}
           {detailLoading && (
             <div className="dt-card dt-detail-card">
               <div className="dt-empty">Loading document…</div>
@@ -975,8 +1228,6 @@ export default function DocumentTracking() {
             </div>
           )}
 
-          {/* Empty state. While the list is still loading, or a selected
-              document's detail is not here yet, show a loading message. */}
           {!detailLoading && !detailError && !selected && (
             <div className="dt-card dt-detail-card">
               <div
@@ -1013,6 +1264,7 @@ export default function DocumentTracking() {
             </div>
           )}
 
+          {/* ── Selected document ── */}
           {!detailLoading && !detailError && selected && (
             <div className="dt-card dt-detail-card">
               <div className="dt-card-head">
@@ -1028,35 +1280,18 @@ export default function DocumentTracking() {
                   )}
                 </div>
                 <div className="dt-head-actions">
-                  <span className="dt-save-note">
-                    {justSaved ? "Saved" : "\u00A0"}
-                  </span>
+                  <span className="dt-save-note">{justSaved ? "Saved" : "\u00A0"}</span>
                   {is_admin && !selected.archived && (
-                    <button
-                      type="button"
-                      className="dt-btn dt-btn-ghost"
-                      disabled={busy}
-                      onClick={askArchive}
-                    >
+                    <button type="button" className="dt-btn dt-btn-ghost" disabled={busy} onClick={askArchive}>
                       Archive
                     </button>
                   )}
                   {is_admin && selected.archived && (
                     <>
-                      <button
-                        type="button"
-                        className="dt-btn dt-btn-primary"
-                        disabled={busy}
-                        onClick={restoreDocument}
-                      >
+                      <button type="button" className="dt-btn dt-btn-primary" disabled={busy} onClick={restoreDocument}>
                         Restore
                       </button>
-                      <button
-                        type="button"
-                        className="dt-btn dt-btn-danger"
-                        disabled={busy}
-                        onClick={askPermanentDelete}
-                      >
+                      <button type="button" className="dt-btn dt-btn-danger" disabled={busy} onClick={askPermanentDelete}>
                         Delete permanently
                       </button>
                     </>
@@ -1079,53 +1314,54 @@ export default function DocumentTracking() {
 
               <ul className="dt-timeline">
                 {selected.stages.map((stage, i) => {
-                  const hasComments = Boolean(stage.comments?.length);
+                  const hasComments = stage.comments.length > 0;
                   const isOpen = openStage === i;
                   const isActive = i === activeIndex && !selected.rejected;
 
-                  // Per-stage gating — mirrors complete_stage() in routes/document.py.
-                  const stageRegistryMissing = isRegistryNumberStageLabel(stage.label) && !stage.registryNumber;
-                  const stageReleaseMissing = isReleasingStageLabel(stage.label) && !stage.releaseDestination;
+                  const isRegistryStage = isRegistryNumberStageLabel(stage.label);
+                  const isReleaseStage = isReleasingStageLabel(stage.label);
                   const isPostingStage = isPostingPeriodStageLabel(stage.label);
 
-                  // The 10-day window is optional: it only applies once the
-                  // "10 Days Registration" button has been clicked.
-                  const postingEndTime = stage.postingEndAt ? new Date(stage.postingEndAt).getTime() : null;
-                  const stagePostingStarted = isPostingStage && Boolean(stage.postingStartAt);
-                  const stagePostingNotElapsed =
-                    stagePostingStarted &&
-                    (postingEndTime == null || Date.now() < postingEndTime);
-                  const stagePostingCommentMissing =
-                    stagePostingStarted && !stagePostingNotElapsed && !hasComments;
-                  const markCompleteDisabled =
-                    busy || stageRegistryMissing || stageReleaseMissing ||
-                    stagePostingNotElapsed || stagePostingCommentMissing;
+                  // Posting period gating (Late Registration only).
+                  const postingEndMs = stage.postingEndAt ? new Date(stage.postingEndAt).getTime() : null;
+                  const postingStarted = isPostingStage && Boolean(stage.postingStartAt);
+                  const postingRunning =
+                    postingStarted && (postingEndMs == null || now < postingEndMs);
+                  const postingNotStarted = isPostingStage && requiresPosting && !stage.postingStartAt;
+                  const postingNeedsComment = postingStarted && !postingRunning && !hasComments;
 
-                  const markCompleteDisabledReason = stagePostingNotElapsed
-                    ? `Mark complete unlocks once the ${POSTING_PERIOD_DAYS}-day posting period ends${
-                        stage.postingEndAt ? ` (${formatDate(stage.postingEndAt)})` : ""
-                      }.`
-                    : stagePostingCommentMissing
-                    ? "Add a comment on this step before it can be completed."
-                    : stageRegistryMissing
-                    ? "Enter and save the Registry Number before this step can be completed."
-                    : stageReleaseMissing
-                    ? "Select the release destination before this step can be completed."
-                    : null;
+                  const registryMissing = isRegistryStage && !stage.registryNumber;
+                  const releaseMissing = isReleaseStage && !stage.releaseDestination;
+
+                  let disabledReason = null;
+                  if (postingNotStarted) {
+                    disabledReason = `Start the ${POSTING_PERIOD_DAYS}-day posting period before this step can be completed.`;
+                  } else if (postingRunning) {
+                    disabledReason = `Mark complete unlocks once the ${POSTING_PERIOD_DAYS}-day posting period ends${
+                      stage.postingEndAt ? ` (${formatDate(stage.postingEndAt)})` : ""
+                    }.`;
+                  } else if (postingNeedsComment) {
+                    disabledReason = "Add a comment on this step before it can be completed.";
+                  } else if (registryMissing) {
+                    disabledReason = "Enter and save the Registry Number before this step can be completed.";
+                  } else if (releaseMissing) {
+                    disabledReason = "Select the release destination before this step can be completed.";
+                  }
+                  const markCompleteDisabled = disabledReason !== null;
 
                   // Does the user's role carry this stage's permission?
                   const stagePermission = stagePermissionForLabel(stage.label);
                   const userHasStageAccess = !stagePermission || hasAccess(stagePermission);
 
-                  const stageHandlerName = stage.assignedHandlerName || UNSIGNED_LABEL;
-                  const stageIsUnassigned = stageHandlerName === UNSIGNED_LABEL;
+                  const handlerName = stage.assignedHandlerName || UNSIGNED_LABEL;
+                  const isUnassigned = handlerName === UNSIGNED_LABEL;
 
                   return (
                     <li
                       key={stage.order ?? i}
                       className="dt-step"
                       data-done={stage.done}
-                      data-flag={Boolean(stage.flag)}
+                      data-flag={stage.flag}
                       data-active={isActive}
                     >
                       <span className="dt-step-dot" />
@@ -1138,25 +1374,24 @@ export default function DocumentTracking() {
                           disabled={!hasComments}
                         >
                           <div className="dt-step-heading-text">
-                            <p className="dt-step-docno">
-                              Document No: {selected.docNumber}
-                            </p>
+                            <p className="dt-step-docno">Document No: {selected.docNumber}</p>
                             <p className="dt-step-label">{stage.label}</p>
                             <p className="dt-step-detail">{stage.detail}</p>
                             <p className="dt-step-date">{stage.date}</p>
-                            {isRegistryNumberStageLabel(stage.label) && stage.registryNumber && (
+                            {isRegistryStage && stage.registryNumber && (
                               <p className="dt-step-detail" style={{ marginTop: 2 }}>
                                 Registry Number: <strong>{stage.registryNumber}</strong>
                               </p>
                             )}
-                            {isReleasingStageLabel(stage.label) && stage.releaseDestination && (
+                            {isReleaseStage && stage.releaseDestination && (
                               <p className="dt-step-detail" style={{ marginTop: 2 }}>
                                 Released to: <strong>{stage.releaseDestination}</strong>
                               </p>
                             )}
                             {isPostingStage && stage.postingStartAt && (
                               <p className="dt-step-detail" style={{ marginTop: 2 }}>
-                                Posted {formatDate(stage.postingStartAt)} — {stagePostingNotElapsed
+                                Posted {formatDate(stage.postingStartAt)} —{" "}
+                                {postingRunning
                                   ? <>required until <strong>{formatDate(stage.postingEndAt)}</strong></>
                                   : <>posting period complete</>}
                               </p>
@@ -1175,16 +1410,15 @@ export default function DocumentTracking() {
                           )}
                         </button>
 
-                        {/* Read-only "Currently handling" for this stage. */}
                         <div className="dt-handler-row" style={{ marginTop: 6 }}>
                           <span className="dt-handler-label">Currently handling:</span>
-                          <span className="dt-handler-name" data-unsigned={stageIsUnassigned}>{stageHandlerName}</span>
+                          <span className="dt-handler-name" data-unsigned={isUnassigned}>{handlerName}</span>
                         </div>
 
                         {hasComments && isOpen && (
                           <ul className="dt-comment-list">
-                            {stage.comments.map((c, ci) => (
-                              <li key={ci} className="dt-comment">
+                            {stage.comments.map((c) => (
+                              <li key={c.id} className="dt-comment">
                                 <span className="dt-comment-avatar">{c.initials}</span>
                                 <div className="dt-comment-body">
                                   <div className="dt-comment-meta">
@@ -1199,7 +1433,7 @@ export default function DocumentTracking() {
                         )}
 
                         {/* Blocked: active stage with nobody assigned. */}
-                        {isActive && stageIsUnassigned && (
+                        {isActive && isUnassigned && (
                           <div className="dt-active-panel dt-active-panel-blocked">
                             <span className="dt-active-panel-label">
                               Unassigned — assign a handler before this step can be worked
@@ -1208,11 +1442,9 @@ export default function DocumentTracking() {
                         )}
 
                         {/* Action panel: active stage, non-admin, has a handler, role covers this stage. */}
-                        {isActive && !is_admin && !stageIsUnassigned && userHasStageAccess && (
+                        {isActive && !is_admin && !isUnassigned && userHasStageAccess && (
                           <div className="dt-active-panel">
-                            <span className="dt-active-panel-label">
-                              Current step — action needed
-                            </span>
+                            <span className="dt-active-panel-label">Current step — action needed</span>
 
                             {isPostingStage && (
                               <div style={{ marginBottom: 10 }}>
@@ -1223,14 +1455,13 @@ export default function DocumentTracking() {
                                   <button
                                     type="button"
                                     className="dt-btn dt-btn-primary"
-                                    disabled={busy}
-                                    onClick={() => startPostingPeriod(stage.order)}
+                                    onClick={() => startPostingPeriod(selected.id, stage)}
                                   >
                                     10 Days Registration
                                   </button>
                                 ) : (
                                   <p style={{ fontSize: 13, color: "var(--ink-mid)", margin: 0 }}>
-                                    {stagePostingNotElapsed
+                                    {postingRunning
                                       ? <>Posted since {formatDate(stage.postingStartAt)} — required until <strong>{formatDate(stage.postingEndAt)}</strong>.</>
                                       : <>Posting period complete (ended {formatDate(stage.postingEndAt)}).</>}
                                   </p>
@@ -1238,7 +1469,7 @@ export default function DocumentTracking() {
                               </div>
                             )}
 
-                            {isRegistryNumberStageLabel(stage.label) && (
+                            {isRegistryStage && (
                               <div style={{ marginBottom: 10 }}>
                                 <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>
                                   Registry Number
@@ -1250,7 +1481,7 @@ export default function DocumentTracking() {
                                     type="text"
                                     placeholder="e.g. 2026-00458"
                                     value={stage.registryNumber || registryNumberInput}
-                                    disabled={busy || Boolean(stage.registryNumber)}
+                                    disabled={Boolean(stage.registryNumber)}
                                     onChange={(e) => setRegistryNumberInput(e.target.value)}
                                     style={{
                                       flex: 1, fontSize: 14, padding: "8px 10px",
@@ -1260,8 +1491,8 @@ export default function DocumentTracking() {
                                   <button
                                     type="button"
                                     className="dt-btn dt-btn-primary"
-                                    disabled={busy || Boolean(stage.registryNumber) || !registryNumberInput.trim()}
-                                    onClick={() => saveRegistryNumber(stage.order, registryNumberInput.trim())}
+                                    disabled={Boolean(stage.registryNumber) || !registryNumberInput.trim()}
+                                    onClick={() => saveRegistryNumber(selected.id, stage, registryNumberInput.trim())}
                                   >
                                     {stage.registryNumber ? "Saved" : "Save"}
                                   </button>
@@ -1269,7 +1500,7 @@ export default function DocumentTracking() {
                               </div>
                             )}
 
-                            {isReleasingStageLabel(stage.label) && (
+                            {isReleaseStage && (
                               <div style={{ marginBottom: 10 }}>
                                 <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>
                                   Release destination
@@ -1279,7 +1510,7 @@ export default function DocumentTracking() {
                                     id={`dt-release-destination-${stage.order ?? i}`}
                                     name="release-destination"
                                     value={stage.releaseDestination || releaseDestinationInput}
-                                    disabled={busy || Boolean(stage.releaseDestination)}
+                                    disabled={Boolean(stage.releaseDestination)}
                                     onChange={(e) => setReleaseDestinationInput(e.target.value)}
                                     style={{
                                       flex: 1, fontSize: 14, padding: "8px 10px",
@@ -1294,8 +1525,8 @@ export default function DocumentTracking() {
                                   <button
                                     type="button"
                                     className="dt-btn dt-btn-primary"
-                                    disabled={busy || Boolean(stage.releaseDestination) || !releaseDestinationInput}
-                                    onClick={() => saveReleaseDestination(stage.order, releaseDestinationInput)}
+                                    disabled={Boolean(stage.releaseDestination) || !releaseDestinationInput}
+                                    onClick={() => saveReleaseDestination(selected.id, stage, releaseDestinationInput)}
                                   >
                                     {stage.releaseDestination ? "Saved" : "Save"}
                                   </button>
@@ -1305,21 +1536,18 @@ export default function DocumentTracking() {
 
                             <div className="dt-action-row">
                               <button
+                                type="button"
                                 className="dt-btn dt-btn-primary"
                                 disabled={markCompleteDisabled}
-                                onClick={() => advanceStage(stage.order)}
-                                style={
-                                  markCompleteDisabled
-                                    ? { opacity: 0.5, cursor: "not-allowed" }
-                                    : undefined
-                                }
-                                title={markCompleteDisabledReason || undefined}
+                                onClick={() => advanceStage(selected.id, stage)}
+                                style={markCompleteDisabled ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+                                title={disabledReason || undefined}
                               >
                                 Mark complete → next step
                               </button>
                               <button
+                                type="button"
                                 className="dt-btn dt-btn-ghost"
-                                disabled={busy}
                                 onClick={() => {
                                   setFlagError(null);
                                   setFlagNote("");
@@ -1329,28 +1557,17 @@ export default function DocumentTracking() {
                                 Request changes
                               </button>
                               <button
+                                type="button"
                                 className="dt-btn dt-btn-danger"
-                                disabled={busy}
-                                onClick={() => {
-                                  setConfirmModal({
-                                    title: "Reject document",
-                                    message: `Reject ${selected.docNumber}? This stops the pipeline.`,
-                                    confirmLabel: "Reject",
-                                    danger: true,
-                                    onConfirm: () => {
-                                      setConfirmModal(null);
-                                      rejectDoc();
-                                    },
-                                  });
-                                }}
+                                onClick={askReject}
                               >
                                 Reject
                               </button>
                             </div>
 
-                            {markCompleteDisabledReason && (
+                            {disabledReason && (
                               <p style={{ fontSize: 12, color: "var(--ink-mid)", margin: "8px 0 0" }}>
-                                {markCompleteDisabledReason}
+                                {disabledReason}
                               </p>
                             )}
 
@@ -1358,10 +1575,7 @@ export default function DocumentTracking() {
                               className="dt-comment-form"
                               onSubmit={(e) => {
                                 e.preventDefault();
-                                if (!draftComment.trim()) return;
-                                addComment(stage.order, draftComment);
-                                setDraftComment("");
-                                setOpenStage(i);
+                                submitComment(selected.id, stage, i);
                               }}
                             >
                               <textarea
@@ -1373,7 +1587,11 @@ export default function DocumentTracking() {
                                 onChange={(e) => setDraftComment(e.target.value)}
                               />
                               <div className="dt-action-row">
-                                <button type="submit" className="dt-btn dt-btn-ghost" disabled={busy}>
+                                <button
+                                  type="submit"
+                                  className="dt-btn dt-btn-ghost"
+                                  disabled={!draftComment.trim()}
+                                >
                                   Add comment
                                 </button>
                               </div>
@@ -1382,7 +1600,7 @@ export default function DocumentTracking() {
                         )}
 
                         {/* Non-admin, stage has a handler, but the role doesn't cover this stage. */}
-                        {isActive && !is_admin && !stageIsUnassigned && !userHasStageAccess && (
+                        {isActive && !is_admin && !isUnassigned && !userHasStageAccess && (
                           <div className="dt-active-panel dt-active-panel-blocked">
                             <span className="dt-active-panel-label">
                               This step belongs to a different role — you don't have access to work on it
@@ -1391,12 +1609,12 @@ export default function DocumentTracking() {
                         )}
 
                         {/* Admin: strictly view-only. */}
-                        {isActive && is_admin && !stageIsUnassigned && (
+                        {isActive && is_admin && !isUnassigned && (
                           <div className="dt-active-panel dt-active-panel-admin">
                             <span className="dt-active-panel-label">
                               {stage.flag
-                                ? `Blocked — awaiting ${stageHandlerName} to address requested changes`
-                                : `In progress — being handled by ${stageHandlerName}`}
+                                ? `Blocked — awaiting ${handlerName} to address requested changes`
+                                : `In progress — being handled by ${handlerName}`}
                             </span>
                           </div>
                         )}
@@ -1457,7 +1675,6 @@ export default function DocumentTracking() {
                 type="text"
                 placeholder="e.g. DOC-2026-00001"
                 value={newDocNumber}
-                disabled={newDocBusy}
                 onChange={(e) => { setNewDocNumber(e.target.value); setNewDocError(null); }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") { e.preventDefault(); submitNewDocument(); }
@@ -1478,7 +1695,6 @@ export default function DocumentTracking() {
                 type="text"
                 placeholder="e.g. Birth Certificate — Juan Dela Cruz"
                 value={newDocTitle}
-                disabled={newDocBusy}
                 onChange={(e) => { setNewDocTitle(e.target.value); setNewDocError(null); }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") { e.preventDefault(); submitNewDocument(); }
@@ -1497,7 +1713,6 @@ export default function DocumentTracking() {
                 id="dt-new-doc-type"
                 name="new-document-type"
                 value={newDocType}
-                disabled={newDocBusy}
                 onChange={(e) => {
                   setNewDocType(e.target.value);
                   setNewDocError(null);
@@ -1521,7 +1736,6 @@ export default function DocumentTracking() {
                   type="text"
                   placeholder="Type the document type…"
                   value={newDocTypeOther}
-                  disabled={newDocBusy}
                   onChange={(e) => { setNewDocTypeOther(e.target.value); setNewDocError(null); }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") { e.preventDefault(); submitNewDocument(); }
@@ -1543,7 +1757,7 @@ export default function DocumentTracking() {
               {(() => {
                 const missingCustomType = newDocType === "Other" && !newDocTypeOther.trim();
                 const createDisabled =
-                  newDocBusy || !newDocNumber.trim() || !newDocTitle.trim() || missingCustomType;
+                  !newDocNumber.trim() || !newDocTitle.trim() || missingCustomType;
                 return (
                   <button
                     type="button"
@@ -1557,18 +1771,17 @@ export default function DocumentTracking() {
                       cursor: createDisabled ? "not-allowed" : "pointer",
                     }}
                   >
-                    {newDocBusy ? "Creating…" : "Create Document"}
+                    Create Document
                   </button>
                 );
               })()}
               <button
                 type="button"
                 onClick={() => setNewDocOpen(false)}
-                disabled={newDocBusy}
                 style={{
                   padding: "9px 12px", fontSize: 13, fontWeight: 700,
                   borderRadius: 6, border: "1px solid var(--line-strong)", background: "#fff",
-                  color: "var(--ink)", cursor: newDocBusy ? "default" : "pointer",
+                  color: "var(--ink)", cursor: "pointer",
                 }}
               >
                 Cancel
@@ -1582,7 +1795,7 @@ export default function DocumentTracking() {
       {flagStageOrder != null && (
         <div
           className="dt-modal-overlay"
-          onMouseDown={(e) => { if (e.target === e.currentTarget && !flagBusy) setFlagStageOrder(null); }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setFlagStageOrder(null); }}
           style={{
             position: "fixed", inset: 0, zIndex: 3000,
             background: "var(--backdrop)",
@@ -1613,11 +1826,8 @@ export default function DocumentTracking() {
                 name="flag-note"
                 placeholder="e.g. Birth certificate copy is missing a signature"
                 value={flagNote}
-                disabled={flagBusy}
                 onChange={(e) => { setFlagNote(e.target.value); setFlagError(null); }}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setFlagStageOrder(null);
-                }}
+                onKeyDown={(e) => { if (e.key === "Escape") setFlagStageOrder(null); }}
                 rows={4}
                 style={{
                   width: "100%", boxSizing: "border-box", fontSize: 14, padding: "8px 10px",
@@ -1635,25 +1845,24 @@ export default function DocumentTracking() {
               <button
                 type="button"
                 onClick={submitFlagStage}
-                disabled={flagBusy || !flagNote.trim()}
+                disabled={!flagNote.trim()}
                 style={{
                   flex: 1, padding: "9px 12px", fontSize: 13, fontWeight: 700,
                   borderRadius: 6, border: "none",
-                  background: (!flagNote.trim() || flagBusy) ? "var(--raised)" : "var(--amber)",
-                  color: (!flagNote.trim() || flagBusy) ? "var(--ink-soft)" : "#fff",
-                  cursor: (!flagNote.trim() || flagBusy) ? "not-allowed" : "pointer",
+                  background: !flagNote.trim() ? "var(--raised)" : "var(--amber)",
+                  color: !flagNote.trim() ? "var(--ink-soft)" : "#fff",
+                  cursor: !flagNote.trim() ? "not-allowed" : "pointer",
                 }}
               >
-                {flagBusy ? "Submitting…" : "Request changes"}
+                Request changes
               </button>
               <button
                 type="button"
                 onClick={() => setFlagStageOrder(null)}
-                disabled={flagBusy}
                 style={{
                   padding: "9px 12px", fontSize: 13, fontWeight: 700,
                   borderRadius: 6, border: "1px solid var(--line-strong)", background: "#fff",
-                  color: "var(--ink)", cursor: flagBusy ? "default" : "pointer",
+                  color: "var(--ink)", cursor: "pointer",
                 }}
               >
                 Cancel
@@ -1684,7 +1893,9 @@ export default function DocumentTracking() {
             }}
           >
             <div style={{ padding: "16px 18px 4px" }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, fontFamily: "var(--font-display)" }}>{confirmModal.title}</h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, fontFamily: "var(--font-display)" }}>
+                {confirmModal.title}
+              </h3>
               <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--ink-mid)", lineHeight: 1.5 }}>
                 {confirmModal.message}
               </p>
