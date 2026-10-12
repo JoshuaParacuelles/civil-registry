@@ -1282,10 +1282,10 @@ export default function DocumentTracking() {
                 <div className="dt-head-actions">
                   <span className="dt-save-note">{justSaved ? "Saved" : "\u00A0"}</span>
                   {is_admin && !selected.archived && (
-                    <button type="button" className="dt-btn dt-btn-ghost" disabled={busy} onClick={askArchive}>
-                      Archive
-                    </button>
-                  )}
+  <button type="button" className="dt-btn dt-btn-primary" disabled={busy} onClick={askArchive}>
+    Archive
+  </button>
+)}
                   {is_admin && selected.archived && (
                     <>
                       <button type="button" className="dt-btn dt-btn-primary" disabled={busy} onClick={restoreDocument}>
