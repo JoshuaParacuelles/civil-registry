@@ -10,12 +10,17 @@ import "./DocumentTracking.css";
 
 // Rejects when the server does not answer within `ms`, so the list can never
 // stay on "Loading…" forever.
-const LIST_TIMEOUT_MS = 15000;
+// Rejects when the server does not answer in time. 45 seconds covers a
+// cold-started backend; the list can never stay on "Loading…" forever.
+const LIST_TIMEOUT_MS = 45000;
 const withTimeout = (promise, ms = LIST_TIMEOUT_MS) =>
   Promise.race([
     promise,
     new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Hindi sumasagot ang server. Subukan ulit.")), ms)
+      setTimeout(
+        () => reject(new Error("The server did not respond in time. Please try again.")),
+        ms
+      )
     ),
   ]);
 
