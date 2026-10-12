@@ -5,17 +5,12 @@
 //      archived : { [username]: rows }  the server's ARCHIVE answer (admins only)
 //      details  : full documents, fetched online (shared, keyed by id)
 //      pending  : documents created offline on this device, not yet confirmed
-//  - Each offline-created stage also records the holder username that Role
-//    Management assigned at creation time (holder_username). Visibility uses
-//    the live holder map when it is saved, and falls back to this snapshot.
 //  - Visibility follows the same rule as _doc_is_assigned_to() on the server:
 //    admins see everything; anyone else sees documents whose active step is
 //    held by them. Archived documents are never in the active list.
 //  - Writes: sent now when online; queued in the outbox when offline.
-//  - A pending document is removed only after (a) the user discarded its
-//    queued create, or (b) the create has synced AND no queued operation still
-//    refers to its offline ID, or (c) the server returns a document with the
-//    same doc_number. It never disappears early and never duplicates.
+//  - Archive / restore update the local copy immediately (markArchivedLocally)
+//    so the UI never shows a document in the wrong view while waiting.
 import { getDB } from '../db';
 import { isDbAvailable } from '../connectivityService';
 import { enqueue, newOpId } from '../outboxQueue';
@@ -34,6 +29,7 @@ const SESSION_CACHE_KEY = 'cr_session_cache_v1'; // written by PermissionContext
 const OFFLINE_PREFIX = 'offline-';
 const OFFLINE_ID_RE = /^offline-/;
 const MAX_PREFETCH_DETAILS = 50;
+const PREFETCH_CONCURRENCY = 4;
 
 const STAGE_RE = /^\/api\/documents\/((?:\d+)|offline-[\w-]+)\/stages\/(\d+)\/(complete|flag|comments|registry-number|release-destination|posting-period)$/;
 const REJECT_RE = /^\/api\/documents\/((?:\d+)|offline-[\w-]+)\/reject$/;
@@ -68,8 +64,7 @@ export class HttpError extends Error {
   }
 }
 
-// Splits a request path into its pathname and query params. Used so that the
-// active and archive lists are told apart by the query, not by string match.
+// Splits a request path into its pathname and query params.
 function parsePath(path) {
   const [pathname, query = ''] = String(path).split('?');
   return { pathname, params: new URLSearchParams(query) };
@@ -78,7 +73,7 @@ function parsePath(path) {
 export async function apiFetch(path, options = {}) {
   const res = await fetch(`${API}${path}`, {
     credentials: 'include',
-    cache: 'no-store', // never reuse a browser-cached copy of a list
+    cache: 'no-store',
     ...options,
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
   });
@@ -116,7 +111,7 @@ function sessionCache() {
 }
 
 // The logged-in username. Falls back to the saved session when this tab's
-// sessionStorage has not been filled yet (for example after an offline reload).
+// sessionStorage has not been filled yet.
 function currentUsername() {
   let u = '';
   try { u = (sessionStorage.getItem('username') || '').trim(); } catch { /* ignore */ }
@@ -163,9 +158,7 @@ export function clearTrackingPersonnel() {
   } catch { /* ignore */ }
 }
 
-// Fills each stage's handler name. Priority matches the server: the role
-// holder first (live map, then the snapshot taken at creation), then the
-// assigned person.
+// Fills each stage's handler name. Role holder first, then the assigned person.
 function fillStageNames(doc) {
   if (!doc || !Array.isArray(doc.stages)) return doc;
   const saved = readLocalPersonnel();
@@ -184,15 +177,12 @@ function fillStageNames(doc) {
 
 /* ── visibility (same rule as _doc_is_assigned_to() on the server) ── */
 
-// The username holding the role for this stage. Uses the live holder map when
-// it is saved; otherwise the holder recorded on the stage when it was created.
 function holderFor(stageLabel, holders, snapshotHolder = null) {
   const perm = stagePermissionForLabel(stageLabel);
   if (!perm) return null;
   return (holders && holders[perm]) || snapshotHolder || null;
 }
 
-// True when `user` holds the role for the stage with this label.
 function isStageOwnedBy(stageLabel, holders, user, snapshotHolder = null) {
   const holder = holderFor(stageLabel, holders, snapshotHolder);
   return Boolean(holder) && Boolean(user) && holder.toLowerCase() === user.toLowerCase();
@@ -210,7 +200,7 @@ function rowVisible(row, holders, user, admin) {
   return Boolean(row.active_stage) && isStageOwnedBy(row.active_stage, holders, user);
 }
 
-// Builds a list row the same way the server does: owner = active step's handler.
+// Builds a list row the same way the server does.
 function rowFromDetail(d) {
   const active = activeStageOf(d.stages);
   return {
@@ -253,10 +243,45 @@ function writeStore(store) {
   lsWrite(STORE_KEY, store);
 }
 
-// Drops pending copies that are no longer needed:
-//  - the user discarded the queued create, or
-//  - the create has synced and no queued step still refers to the offline ID.
-// Returns true when the store changed.
+// Removes a document id from every saved list (active and archive, all users).
+// Returns the first row found, so it can be placed in the right list again.
+function removeRowEverywhere(store, id) {
+  let found = null;
+  for (const bucket of [store.lists, store.archived]) {
+    for (const k of Object.keys(bucket)) {
+      const hit = bucket[k].find((r) => String(r.id) === id);
+      if (hit && !found) found = hit;
+      bucket[k] = bucket[k].filter((r) => String(r.id) !== id);
+    }
+  }
+  return found;
+}
+
+// Called right after a successful archive or restore, so the saved lists match
+// the server without waiting for a full refresh.
+export function markArchivedLocally(docId, archived) {
+  const store = readStore();
+  const id = String(docId);
+  const now = archived ? new Date().toISOString() : null;
+
+  const detail = store.details[id];
+  if (detail) {
+    detail.archived_at = now;
+    detail.archived = archived;
+  }
+
+  const existing = removeRowEverywhere(store, id);
+  const base = existing || (detail ? rowFromDetail(fillStageNames(detail)) : null);
+  if (base) {
+    const row = { ...base, archived: archived, archived_at: now };
+    const bucket = archived ? store.archived : store.lists;
+    const key = userKey();
+    bucket[key] = [row, ...(bucket[key] || [])];
+  }
+  writeStore(store);
+}
+
+// Drops pending copies that are no longer needed.
 async function pruneDiscardedPending(store) {
   const ids = Object.keys(store.pending);
   if (!ids.length) return false;
@@ -293,7 +318,6 @@ async function pruneDiscardedPending(store) {
   }
 }
 
-// Pending documents this user may see, excluding any already returned by the server.
 function pendingRowsFor(store, holders, user, admin, serverDocNumbers = new Set()) {
   return Object.values(store.pending)
     .map((d) => fillStageNames(d))
@@ -308,9 +332,6 @@ function pendingRowsFor(store, holders, user, admin, serverDocNumbers = new Set(
 
 /* ── refresh while online ── */
 
-// Entry point used by OfflineContext on start, on reconnect and every
-// warm-up cycle. Saves personnel + stage holders, then this user's visible
-// documents and their details. Runs only while the database is reachable.
 export async function refreshTrackingPersonnel() {
   if (!isDbAvailable()) return false;
   let ok = false;
@@ -343,21 +364,32 @@ async function refreshTrackingDocuments() {
   return true;
 }
 
-// Saves the server's ACTIVE answer for this user. Archived rows are dropped
-// here so they can never leak into the active list.
+// Downloads full details in the background, a few at a time. Never awaited by
+// the list, so the list appears as soon as the row data arrives.
+async function prefetchDetails(rows) {
+  const queue = rows.slice(0, MAX_PREFETCH_DETAILS);
+  const worker = async () => {
+    while (queue.length && isDbAvailable()) {
+      const row = queue.shift();
+      try {
+        const doc = await apiFetch(`${CREATE_PATH}/${row.id}`);
+        const store = readStore();
+        store.details[String(row.id)] = doc;
+        writeStore(store);
+      } catch (e) {
+        console.warn('[documentTrackingOffline] could not save document', row.id, e);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: PREFETCH_CONCURRENCY }, worker));
+}
+
+// Saves the server's ACTIVE answer for this user, then starts the detail
+// prefetch in the background.
 async function storeOnlineList(rows) {
   const incoming = (Array.isArray(rows) ? rows : []).filter((r) => !r.archived && !r.archived_at);
   const store = readStore();
   store.lists[userKey()] = incoming;
-
-  for (const row of incoming.slice(0, MAX_PREFETCH_DETAILS)) {
-    if (!isDbAvailable()) break;
-    try {
-      store.details[String(row.id)] = await apiFetch(`${CREATE_PATH}/${row.id}`);
-    } catch (e) {
-      console.warn('[documentTrackingOffline] could not save document', row.id, e);
-    }
-  }
 
   // The server now has these documents, so the matching pending copies can go.
   const serverDocNumbers = new Set(incoming.map((r) => String(r.doc_number)));
@@ -369,6 +401,9 @@ async function storeOnlineList(rows) {
 
   store.savedAt = Date.now();
   writeStore(store);
+
+  // Not awaited: the caller gets the list immediately.
+  prefetchDetails(incoming);
 }
 
 /* ── READS ── */
@@ -376,7 +411,6 @@ async function storeOnlineList(rows) {
 const offlineError = () =>
   new Error("You're offline and this isn't saved on this device yet. It will load when the connection returns.");
 
-// Active list for this device's user, built only from the saved store.
 async function listOffline(store, fallbackErr) {
   const changed = await pruneDiscardedPending(store);
   if (changed) writeStore(store);
@@ -396,13 +430,11 @@ async function listOffline(store, fallbackErr) {
   const serverDocNumbers = new Set(saved.map((r) => String(r.doc_number)));
 
   const pendingRows = pendingRowsFor(store, holders, user, admin, serverDocNumbers);
-  // Safety net: the saved list is filtered again with the current holder map.
   const savedRows = saved.filter((r) => rowVisible(r, holders, user, admin));
 
   return [...pendingRows, ...savedRows];
 }
 
-// Archive list, offline: only what was saved while online.
 function archiveOffline(store, fallbackErr) {
   const saved = store.archived[userKey()];
   if (Array.isArray(saved)) return saved;
@@ -411,8 +443,6 @@ function archiveOffline(store, fallbackErr) {
   );
 }
 
-// Online: fetch from the server and save the result. Offline, or when the server
-// cannot answer: the saved store.
 export async function trackingRead(path) {
   const { pathname, params } = parsePath(path);
   const isListPath = pathname === CREATE_PATH;
@@ -421,7 +451,6 @@ export async function trackingRead(path) {
   const isArchiveList = isListPath && archivedView;
   const detailMatch = pathname.match(DETAIL_PATH_RE);
 
-  // A document created on this device that has not synced yet.
   if (detailMatch && OFFLINE_ID_RE.test(detailMatch[1])) {
     const store = readStore();
     const d = store.pending[detailMatch[1]];
@@ -463,8 +492,8 @@ export async function trackingRead(path) {
       }
       return body;
     } catch (err) {
-      if (err.status && err.status < 500) throw err; // real answer (403, 404, ...)
-      netErr = err;                                  // network or server down
+      if (err.status && err.status < 500) throw err;
+      netErr = err;
     }
   }
 
@@ -483,10 +512,6 @@ export async function trackingRead(path) {
 
 /* ── WRITES ── */
 
-// Sent now when the database is reachable. Queued when it is not, when the
-// target is a not-yet-synced document, or when the request fails before the
-// server answers. The same opId is used for the direct try and the queued
-// retry, so the server never applies a change twice.
 export async function trackingWrite({ path, method = 'POST', json = null, label }) {
   const opId = newOpId();
   const mustQueue = !isDbAvailable() || path.includes('/offline-');
@@ -523,9 +548,6 @@ async function queueWrite({ opId, path, method, json, label }) {
 
 /* ── local copy updates ── */
 
-// Applies `fn` to a saved document (pending or detail) and refreshes its row in
-// every saved active list, so each user's visibility is recalculated from the
-// new step. `listPatch` updates the rows when no full detail is saved.
 function patchDoc(docId, fn, listPatch = null) {
   const store = readStore();
   const id = String(docId);
@@ -556,7 +578,6 @@ async function applyOptimistic({ opId, path, method, json }) {
   const now = new Date().toISOString();
   const user = currentUsername() || 'You';
 
-  // Create document (offline): stored as a pending document on this device.
   if (method === 'POST' && path === CREATE_PATH) {
     const id = `${OFFLINE_PREFIX}${opId}`;
     const holders = readLocalPersonnel().holders;
@@ -569,9 +590,6 @@ async function applyOptimistic({ opId, path, method, json }) {
         flag: false,
         completed_at: null,
         assigned_handler_id: null,
-        // Snapshot of the Role Management holder at creation time. Keeps the
-        // step visible to its Personnel while offline, even if the live map
-        // is not saved yet.
         holder_username: holder,
         assigned_handler_name: holder,
         registry_number: null,
