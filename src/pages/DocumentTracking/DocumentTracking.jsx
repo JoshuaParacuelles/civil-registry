@@ -9,13 +9,13 @@ import {
   trackingWrite,
   apiFetch,
   markArchivedLocally,
+  peekTrackingList,
 } from "../../offline/adapters/documentTrackingOffline";
 import useOnlineStatus from "../../hooks/useOnlineStatus";
 import "./DocumentTracking.css";
 
-// Rejects when the server does not answer in time. 45 seconds covers a
-// cold-started backend; the list can never stay on "Loading…" forever.
-const LIST_TIMEOUT_MS = 45000;
+// The server must answer within this time, or the list shows a retry message.
+const LIST_TIMEOUT_MS = 20000;
 const withTimeout = (promise, ms = LIST_TIMEOUT_MS) =>
   Promise.race([
     promise,
@@ -280,45 +280,58 @@ export default function DocumentTracking() {
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId; // assigned during render so it is never stale
 
-  // `opts.silent === true` refreshes in place without a loading state.
-  // Reads the active or archive list depending on viewModeRef.
+  // Puts rows on screen for the current view. Keeps the selection when it
+  // still exists, otherwise selects the first row.
+  const applyRows = useCallback((rows, archivedView) => {
+    const mapped = (rows || [])
+      .map(mapDocumentSummary)
+      // Strict split on the client: Active shows only non-archived,
+      // Archive shows only archived.
+      .filter((d) => (archivedView ? d.archived : !d.archived));
+
+    documentsRef.current = mapped;
+    setDocuments(mapped);
+    setSelectedId((prev) =>
+      prev != null && mapped.some((d) => d.id === prev) ? prev : (mapped[0]?.id ?? null)
+    );
+    return mapped;
+  }, []);
+
+  // Shows the saved copy at once, then refreshes from the server. The loading
+  // state only shows when there is nothing saved to display for this view.
   const loadList = useCallback(async (opts) => {
     const requestId = ++listRequestIdRef.current;
     const silent = opts?.silent === true;
     const archivedView = viewModeRef.current === "archived";
-    if (!silent) setListLoading(true);
+
+    const cached = peekTrackingList(archivedView);
+    if (cached) {
+      applyRows(cached, archivedView);
+    } else if (!silent) {
+      documentsRef.current = [];
+      setDocuments([]);
+    }
+    if (!silent) setListLoading(!cached);
     setListError(null);
+
     try {
-      const rows = await withTimeout(
-        trackingRead(archivedView ? "/api/documents?archived=true" : "/api/documents")
-      );
-      if (listRequestIdRef.current !== requestId) return []; // superseded
-      if ((viewModeRef.current === "archived") !== archivedView) return []; // view changed
-
-      const mapped = (rows || [])
-        .map(mapDocumentSummary)
-        // Strict split on the client: Active shows only non-archived,
-        // Archive shows only archived.
-        .filter((d) => (archivedView ? d.archived : !d.archived));
-
-      documentsRef.current = mapped;
-      setDocuments(mapped);
-      // Keep the current selection if it still exists, else pick the first.
-      setSelectedId((prev) =>
-        prev != null && mapped.some((d) => d.id === prev) ? prev : (mapped[0]?.id ?? null)
-      );
-      return mapped;
+      const rows = await withTimeout(trackingRead(
+        archivedView ? "/api/documents?archived=true" : "/api/documents"
+      ));
+      if (listRequestIdRef.current !== requestId) return []; // a newer request owns the list
+      return applyRows(rows, archivedView);
     } catch (e) {
       if (listRequestIdRef.current !== requestId) return [];
       console.error("[DocumentTracking] Failed to load documents:", e);
-      setListError(e.message || "Could not reach the server.");
+      // Keep showing the saved copy if there is one; only report an error when empty.
+      if (!cached) setListError(e.message || "Could not reach the server.");
       return [];
     } finally {
       if (listRequestIdRef.current === requestId) {
         setListLoading(false);
       }
     }
-  }, []);
+  }, [applyRows]);
 
   // The request-id ticket prevents stale overwrites, and the render below
   // additionally refuses to show a detail whose id doesn't match the
@@ -495,18 +508,16 @@ export default function DocumentTracking() {
 
   const visibleDocuments = filtered.slice(0, visibleCount);
 
-  // Switches between the active list and the archive. Clears the selection
-  // so the detail pane never shows a document from the other view.
+  // Switches between the active list and the archive. The new view's saved
+  // copy is shown straight away, and the server refresh runs behind it.
   const switchView = (mode) => {
     if (mode === viewModeRef.current) return;
     viewModeRef.current = mode;
     setViewMode(mode);
-    documentsRef.current = [];
-    setDocuments([]);
-    setListError(null);
     setVisibleCount(DOCUMENT_PAGE_SIZE);
     setSelectedId(null);
     setDetail(null);
+    setDetailError(null);
     setConfirmModal(null);
     loadList();
   };

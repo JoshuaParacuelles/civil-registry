@@ -1,16 +1,3 @@
-// Offline layer for Document Tracking.
-//
-//  - One device-level store (STORE_KEY) holds:
-//      lists    : { [username]: rows }  the server's ACTIVE answer for each user
-//      archived : { [username]: rows }  the server's ARCHIVE answer (admins only)
-//      details  : full documents, fetched online (shared, keyed by id)
-//      pending  : documents created offline on this device, not yet confirmed
-//  - Visibility follows the same rule as _doc_is_assigned_to() on the server:
-//    admins see everything; anyone else sees documents whose active step is
-//    held by them. Archived documents are never in the active list.
-//  - Writes: sent now when online; queued in the outbox when offline.
-//  - Archive / restore update the local copy immediately (markArchivedLocally)
-//    so the UI never shows a document in the wrong view while waiting.
 import { getDB } from '../db';
 import { isDbAvailable } from '../connectivityService';
 import { enqueue, newOpId } from '../outboxQueue';
@@ -667,4 +654,31 @@ async function applyOptimistic({ opId, path, method, json }) {
   }
 
   return { ok: true };
+}
+
+/* ── instant paint ── */
+
+// Synchronous read of the saved copy for one view. Lets the page show the
+// list immediately while the server request runs in the background.
+// Returns null when nothing is saved for that view yet.
+export function peekTrackingList(archived) {
+  const store = readStore();
+  const key = userKey();
+
+  if (archived) {
+    return Array.isArray(store.archived[key]) ? store.archived[key] : null;
+  }
+
+  const saved = Array.isArray(store.lists[key]) ? store.lists[key] : null;
+  if (!saved && Object.keys(store.pending).length === 0) return null;
+
+  const { holders } = readLocalPersonnel();
+  const user = currentUsername();
+  const admin = isAdminOnDevice();
+  const savedList = saved || [];
+  const serverDocNumbers = new Set(savedList.map((r) => String(r.doc_number)));
+
+  const pendingRows = pendingRowsFor(store, holders, user, admin, serverDocNumbers);
+  const savedRows = savedList.filter((r) => rowVisible(r, holders, user, admin));
+  return [...pendingRows, ...savedRows];
 }
