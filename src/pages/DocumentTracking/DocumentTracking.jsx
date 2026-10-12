@@ -4,12 +4,15 @@ import { supabase } from "../../services/supabaseClient";
 import { pushToast } from "../../services/toastService";
 import { isDbAvailable, subscribeDb } from "../../offline/connectivityService";
 import { subscribeSyncState } from "../../offline/syncEngine";
-import { trackingRead, trackingWrite, apiFetch } from "../../offline/adapters/documentTrackingOffline";
+import {
+  trackingRead,
+  trackingWrite,
+  apiFetch,
+  markArchivedLocally,
+} from "../../offline/adapters/documentTrackingOffline";
 import useOnlineStatus from "../../hooks/useOnlineStatus";
 import "./DocumentTracking.css";
 
-// Rejects when the server does not answer within `ms`, so the list can never
-// stay on "Loading…" forever.
 // Rejects when the server does not answer in time. 45 seconds covers a
 // cold-started backend; the list can never stay on "Loading…" forever.
 const LIST_TIMEOUT_MS = 45000;
@@ -218,6 +221,9 @@ export default function DocumentTracking() {
   viewModeRef.current = viewMode;
 
   const [documents, setDocuments] = useState([]);
+  const documentsRef = useRef([]);
+  documentsRef.current = documents;
+
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState(null);
 
@@ -287,11 +293,15 @@ export default function DocumentTracking() {
         trackingRead(archivedView ? "/api/documents?archived=true" : "/api/documents")
       );
       if (listRequestIdRef.current !== requestId) return []; // superseded
+      if ((viewModeRef.current === "archived") !== archivedView) return []; // view changed
+
       const mapped = (rows || [])
         .map(mapDocumentSummary)
         // Strict split on the client: Active shows only non-archived,
-        // Archive shows only archived. Never trust the query param alone.
+        // Archive shows only archived.
         .filter((d) => (archivedView ? d.archived : !d.archived));
+
+      documentsRef.current = mapped;
       setDocuments(mapped);
       // Keep the current selection if it still exists, else pick the first.
       setSelectedId((prev) =>
@@ -491,9 +501,12 @@ export default function DocumentTracking() {
     if (mode === viewModeRef.current) return;
     viewModeRef.current = mode;
     setViewMode(mode);
+    documentsRef.current = [];
     setDocuments([]);
+    setListError(null);
     setVisibleCount(DOCUMENT_PAGE_SIZE);
     setSelectedId(null);
+    setDetail(null);
     setConfirmModal(null);
     loadList();
   };
@@ -526,32 +539,57 @@ export default function DocumentTracking() {
     }
   }, [loadDetail, loadList, flashSaved]);
 
-  // Online-only server actions (archive, restore, permanent delete). These
-  // cannot be queued safely, so they refuse to run while offline. Removing the
-  // selected document from the current list makes loadList pick the next one.
-  const runServerAction = async (fn, successMsg, offlineMsg) => {
+  // Removes a document from the visible list right away and moves the
+  // selection to the next one. Only changes the screen, not the server.
+  const removeFromListLocally = (id) => {
+    const remaining = documentsRef.current.filter((d) => String(d.id) !== String(id));
+    documentsRef.current = remaining;
+    setDocuments(remaining);
+    if (String(selectedIdRef.current) === String(id)) {
+      setSelectedId(remaining[0]?.id ?? null);
+      setDetail(null);
+    }
+  };
+
+  // Shared path for archive, restore and permanent delete.
+  //  1. Remove the row from the screen immediately.
+  //  2. Send the request.
+  //  3. On success, update the local copy and refresh in the background.
+  //  4. On failure, put the row back exactly as it was and show the error.
+  const runOptimistic = async ({ id, call, onSuccessLocal, successMsg, offlineMsg }) => {
     if (!isDbAvailable()) {
       notify(offlineMsg, "error");
       return;
     }
+
+    const snapshot = documentsRef.current;
+    const previousSelected = selectedIdRef.current;
+
     setBusy(true);
     setActionError(null);
+    removeFromListLocally(id);
+
     try {
-      await fn();
-      await loadList({ silent: true });
+      await call();
+      onSuccessLocal?.();
       flashSaved();
       notify(successMsg, "success");
+      // Background refresh. Not awaited, so the buttons are usable right away.
+      loadList({ silent: true });
     } catch (e) {
       console.error("[DocumentTracking] Server action failed:", e);
-      setActionError(e.message || "Something went wrong.");
-      notify(e.message || "Something went wrong.", "error");
+      documentsRef.current = snapshot;
+      setDocuments(snapshot);
+      setSelectedId(previousSelected);
+      const message = e.message || "Something went wrong.";
+      setActionError(message);
+      notify(message, "error");
     } finally {
       setBusy(false);
     }
   };
 
-  // Returns the selected document id as a positive integer, or null when the
-  // selection is missing or malformed. Prevents calling /undefined/archive.
+  // Returns the selected document id as a positive integer, or null.
   const validSelectedId = () => {
     const id = Number(selectedIdRef.current);
     return Number.isInteger(id) && id > 0 ? id : null;
@@ -560,40 +598,45 @@ export default function DocumentTracking() {
   const archiveDocument = () => {
     const id = validSelectedId();
     if (id == null) {
-      notify("Hindi mahanap ang document na i-aarchive. I-refresh ang page.", "error");
+      notify("Could not find the document to archive. Please refresh the page.", "error");
       return;
     }
-    runServerAction(
-      () => apiFetch(`/api/documents/${id}/archive`, { method: "POST" }),
-      "Document moved to archive.",
-      "Archiving needs the connection. Try again when it returns."
-    );
+    runOptimistic({
+      id,
+      call: () => apiFetch(`/api/documents/${id}/archive`, { method: "POST" }),
+      onSuccessLocal: () => markArchivedLocally(id, true),
+      successMsg: "Document moved to archive.",
+      offlineMsg: "Archiving needs the connection. Try again when it returns.",
+    });
   };
 
   const restoreDocument = () => {
     const id = validSelectedId();
     if (id == null) {
-      notify("Hindi mahanap ang document na i-restore. I-refresh ang page.", "error");
+      notify("Could not find the document to restore. Please refresh the page.", "error");
       return;
     }
-    runServerAction(
-      () => apiFetch(`/api/documents/${id}/restore`, { method: "POST" }),
-      "Document restored to the active list.",
-      "Restoring needs the connection. Try again when it returns."
-    );
+    runOptimistic({
+      id,
+      call: () => apiFetch(`/api/documents/${id}/restore`, { method: "POST" }),
+      onSuccessLocal: () => markArchivedLocally(id, false),
+      successMsg: "Document restored to the active list.",
+      offlineMsg: "Restoring needs the connection. Try again when it returns.",
+    });
   };
 
   const deleteDocumentPermanently = () => {
     const id = validSelectedId();
     if (id == null) {
-      notify("Hindi mahanap ang document na i-delete. I-refresh ang page.", "error");
+      notify("Could not find the document to delete. Please refresh the page.", "error");
       return;
     }
-    runServerAction(
-      () => apiFetch(`/api/documents/${id}`, { method: "DELETE" }),
-      "Document permanently deleted.",
-      "Deleting needs the connection. Try again when it returns."
-    );
+    runOptimistic({
+      id,
+      call: () => apiFetch(`/api/documents/${id}`, { method: "DELETE" }),
+      successMsg: "Document permanently deleted.",
+      offlineMsg: "Deleting needs the connection. Try again when it returns.",
+    });
   };
 
   const advanceStage = (stageOrder) =>
@@ -820,7 +863,7 @@ export default function DocumentTracking() {
 
         {listError && (
           <div className="dt-empty" style={{ marginBottom: 12 }}>
-            Couldn't load documents: {listError}{" "}
+            Could not load documents: {listError}{" "}
             <button className="dt-btn dt-btn-ghost" onClick={() => loadList()}>Retry</button>
           </div>
         )}
@@ -915,15 +958,14 @@ export default function DocumentTracking() {
           {!detailLoading && detailError && (
             <div className="dt-card dt-detail-card">
               <div className="dt-empty">
-                Couldn't load this document: {detailError}{" "}
+                Could not load this document: {detailError}{" "}
                 <button className="dt-btn dt-btn-ghost" onClick={() => loadDetail(selectedId)}>Retry</button>
               </div>
             </div>
           )}
 
           {/* Empty state. While the list is still loading, or a selected
-              document's detail is not here yet, show a loading message
-              instead of the misleading "No documents yet" text. */}
+              document's detail is not here yet, show a loading message. */}
           {!detailLoading && !detailError && !selected && (
             <div className="dt-card dt-detail-card">
               <div
@@ -941,7 +983,7 @@ export default function DocumentTracking() {
                   "Loading documents…"
                 ) : listError ? (
                   <>
-                    Couldn't load documents.{" "}
+                    Could not load documents.{" "}
                     <button className="dt-btn dt-btn-ghost" onClick={() => loadList()}>Retry</button>
                   </>
                 ) : selectedId != null ? (

@@ -28,7 +28,9 @@ const SESSION_CACHE_KEY = 'cr_session_cache_v1'; // written by PermissionContext
 
 const OFFLINE_PREFIX = 'offline-';
 const OFFLINE_ID_RE = /^offline-/;
-const MAX_PREFETCH_DETAILS = 50;
+// Only the first few details are saved in the background. The rest are
+// fetched when a document is opened.
+const MAX_PREFETCH_DETAILS = 10;
 const PREFETCH_CONCURRENCY = 4;
 
 const STAGE_RE = /^\/api\/documents\/((?:\d+)|offline-[\w-]+)\/stages\/(\d+)\/(complete|flag|comments|registry-number|release-destination|posting-period)$/;
