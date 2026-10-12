@@ -1,3 +1,19 @@
+// Offline layer for Document Tracking.
+//
+//  - One device-level store (STORE_KEY) holds:
+//      lists    : { [username]: rows }  the server's ACTIVE answer for each user
+//      archived : { [username]: rows }  the server's ARCHIVE answer (admins only)
+//      details  : full documents, fetched online (shared, keyed by id)
+//      pending  : documents created offline on this device, not yet confirmed
+//  - Visibility follows the same rule as the server's list_documents():
+//    admins see everything; anyone else sees documents whose active step is
+//    held by them, plus documents they have completed a step on.
+//    Archived documents are never in the active list.
+//  - Writes: sent now when online; queued in the outbox when offline.
+//  - Archive / restore update the local copy immediately (markArchivedLocally)
+//    so the UI never shows a document in the wrong view while waiting.
+//  - peekTrackingList() gives a synchronous read of the saved copy so the page
+//    can paint instantly while the server refresh runs in the background.
 import { getDB } from '../db';
 import { isDbAvailable } from '../connectivityService';
 import { enqueue, newOpId } from '../outboxQueue';
@@ -164,7 +180,7 @@ function fillStageNames(doc) {
   };
 }
 
-/* ── visibility (same rule as _doc_is_assigned_to() on the server) ── */
+/* ── visibility (same rule as list_documents() on the server) ── */
 
 function holderFor(stageLabel, holders, snapshotHolder = null) {
   const perm = stagePermissionForLabel(stageLabel);
@@ -181,11 +197,22 @@ function activeStageOf(stages) {
   return (stages || []).find((s) => !s.done || s.flag) || null;
 }
 
+// True when this user completed at least one stage of the document.
+function handledByUser(stages, user) {
+  if (!user) return false;
+  const target = user.toLowerCase();
+  return (stages || []).some(
+    (s) => (s.completed_by || '').toLowerCase() === target
+  );
+}
+
 // A saved ACTIVE list row is visible when the user is an admin, or holds its
-// active step. Archived rows are never shown in the active list.
+// active step, or has completed a step on it. Archived rows are never shown
+// in the active list.
 function rowVisible(row, holders, user, admin) {
   if (row.archived || row.archived_at) return false;
   if (admin) return true;
+  if (row.handled_by_me) return true;
   return Boolean(row.active_stage) && isStageOwnedBy(row.active_stage, holders, user);
 }
 
@@ -206,6 +233,7 @@ function rowFromDetail(d) {
     deleted_handler_id: null,
     archived: Boolean(d.archived_at),
     archived_at: d.archived_at ?? null,
+    handled_by_me: handledByUser(d.stages, currentUsername()),
     updated_at: d.updated_at,
   };
 }
@@ -314,7 +342,8 @@ function pendingRowsFor(store, holders, user, admin, serverDocNumbers = new Set(
     .filter((d) => {
       if (admin) return true;
       const active = activeStageOf(d.stages);
-      return Boolean(active) && isStageOwnedBy(active.label, holders, user, active.holder_username);
+      if (active && isStageOwnedBy(active.label, holders, user, active.holder_username)) return true;
+      return handledByUser(d.stages, user);
     })
     .map((d) => rowFromDetail(d));
 }
@@ -565,7 +594,8 @@ function patchDoc(docId, fn, listPatch = null) {
 
 async function applyOptimistic({ opId, path, method, json }) {
   const now = new Date().toISOString();
-  const user = currentUsername() || 'You';
+  const actor = currentUsername();
+  const author = actor || 'You';
 
   if (method === 'POST' && path === CREATE_PATH) {
     const id = `${OFFLINE_PREFIX}${opId}`;
@@ -578,6 +608,7 @@ async function applyOptimistic({ opId, path, method, json }) {
         done: false,
         flag: false,
         completed_at: null,
+        completed_by: null,
         assigned_handler_id: null,
         holder_username: holder,
         assigned_handler_name: holder,
@@ -622,7 +653,7 @@ async function applyOptimistic({ opId, path, method, json }) {
   const m = path.match(STAGE_RE);
   if (m) {
     const [, docId, order, action] = m;
-    const comment = (body) => ({ author: user, body, created_at: now });
+    const comment = (body) => ({ author, body, created_at: now });
 
     patchDoc(
       docId,
@@ -631,7 +662,12 @@ async function applyOptimistic({ opId, path, method, json }) {
         const stages = doc.stages.map((s) => {
           if (Number(s.stage_order) !== Number(order)) return s;
           const n = { ...s, comments: [...(s.comments || [])] };
-          if (action === 'complete') { n.done = true; n.flag = false; n.completed_at = now; }
+          if (action === 'complete') {
+            n.done = true;
+            n.flag = false;
+            n.completed_at = now;
+            n.completed_by = actor || null;
+          }
           else if (action === 'flag') { n.flag = true; n.done = false; n.completed_at = now; n.comments.push(comment(json?.note || '')); }
           else if (action === 'comments') n.comments.push(comment(json?.body || ''));
           else if (action === 'registry-number') n.registry_number = json?.registry_number;
