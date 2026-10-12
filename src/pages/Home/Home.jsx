@@ -36,7 +36,6 @@ import accountIcon from "../../assets/icons/sidebar/account.png";
 import logoutIcon from "../../assets/icons/sidebar/logout.png";
 import syncIcon from "../../assets/icons/sidebar/sync.png";
 
-import "./Home.css";
 
 const MENU_KEYS = {
   DASHBOARD:         "Dashboard",
