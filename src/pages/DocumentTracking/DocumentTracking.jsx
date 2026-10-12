@@ -8,6 +8,17 @@ import { trackingRead, trackingWrite, apiFetch } from "../../offline/adapters/do
 import useOnlineStatus from "../../hooks/useOnlineStatus";
 import "./DocumentTracking.css";
 
+// Rejects when the server does not answer within `ms`, so the list can never
+// stay on "Loading…" forever.
+const LIST_TIMEOUT_MS = 15000;
+const withTimeout = (promise, ms = LIST_TIMEOUT_MS) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Hindi sumasagot ang server. Subukan ulit.")), ms)
+    ),
+  ]);
+
 // Debounce for realtime-triggered refetches so a burst of related writes
 // collapses into a single refetch.
 const REALTIME_DEBOUNCE_MS = 300;
@@ -267,8 +278,8 @@ export default function DocumentTracking() {
     if (!silent) setListLoading(true);
     setListError(null);
     try {
-      const rows = await trackingRead(
-        archivedView ? "/api/documents?archived=true" : "/api/documents"
+      const rows = await withTimeout(
+        trackingRead(archivedView ? "/api/documents?archived=true" : "/api/documents")
       );
       if (listRequestIdRef.current !== requestId) return []; // superseded
       const mapped = (rows || [])
@@ -310,7 +321,7 @@ export default function DocumentTracking() {
       setDetailError(null);
     }
     try {
-      const doc = await trackingRead(`/api/documents/${id}`);
+      const doc = await withTimeout(trackingRead(`/api/documents/${id}`));
       if (detailRequestIdRef.current !== requestId) return; // a newer call took over
       setDetail(mapDocumentDetail(doc));
     } catch (e) {
@@ -534,9 +545,19 @@ export default function DocumentTracking() {
     }
   };
 
+  // Returns the selected document id as a positive integer, or null when the
+  // selection is missing or malformed. Prevents calling /undefined/archive.
+  const validSelectedId = () => {
+    const id = Number(selectedIdRef.current);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  };
+
   const archiveDocument = () => {
-    const id = selectedId;
-    if (id == null) return;
+    const id = validSelectedId();
+    if (id == null) {
+      notify("Hindi mahanap ang document na i-aarchive. I-refresh ang page.", "error");
+      return;
+    }
     runServerAction(
       () => apiFetch(`/api/documents/${id}/archive`, { method: "POST" }),
       "Document moved to archive.",
@@ -545,8 +566,11 @@ export default function DocumentTracking() {
   };
 
   const restoreDocument = () => {
-    const id = selectedId;
-    if (id == null) return;
+    const id = validSelectedId();
+    if (id == null) {
+      notify("Hindi mahanap ang document na i-restore. I-refresh ang page.", "error");
+      return;
+    }
     runServerAction(
       () => apiFetch(`/api/documents/${id}/restore`, { method: "POST" }),
       "Document restored to the active list.",
@@ -555,8 +579,11 @@ export default function DocumentTracking() {
   };
 
   const deleteDocumentPermanently = () => {
-    const id = selectedId;
-    if (id == null) return;
+    const id = validSelectedId();
+    if (id == null) {
+      notify("Hindi mahanap ang document na i-delete. I-refresh ang page.", "error");
+      return;
+    }
     runServerAction(
       () => apiFetch(`/api/documents/${id}`, { method: "DELETE" }),
       "Document permanently deleted.",
@@ -798,7 +825,13 @@ export default function DocumentTracking() {
             <div className="dt-card-head">
               <div>
                 <h2>{inArchive ? "Archive" : "Documents"}</h2>
-                <p>{listLoading ? "Loading…" : `${visibleDocuments.length} of ${filtered.length} shown`}</p>
+                <p>
+                  {listLoading
+                    ? "Loading…"
+                    : listError
+                    ? "Could not load"
+                    : `${visibleDocuments.length} of ${filtered.length} shown`}
+                </p>
               </div>
               <div className="dt-toolbar">
                 {is_admin && !inArchive && (
@@ -841,7 +874,9 @@ export default function DocumentTracking() {
               )}
               {!listLoading && filtered.length === 0 && (
                 <div className="dt-empty">
-                  {inArchive && documents.length === 0
+                  {listError
+                    ? "The list could not be loaded. Use Retry above."
+                    : inArchive && documents.length === 0
                     ? "The archive is empty."
                     : "No documents match this search or filter."}
                 </div>
@@ -881,9 +916,9 @@ export default function DocumentTracking() {
             </div>
           )}
 
-          {/* Empty state. If a document IS selected but its detail isn't here
-              yet, say "Loading…" (with a Retry) instead of the misleading
-              "Select a document" message. */}
+          {/* Empty state. While the list is still loading, or a selected
+              document's detail is not here yet, show a loading message
+              instead of the misleading "No documents yet" text. */}
           {!detailLoading && !detailError && !selected && (
             <div className="dt-card dt-detail-card">
               <div
@@ -897,7 +932,14 @@ export default function DocumentTracking() {
                   gap: 8,
                 }}
               >
-                {selectedId != null ? (
+                {listLoading ? (
+                  "Loading documents…"
+                ) : listError ? (
+                  <>
+                    Couldn't load documents.{" "}
+                    <button className="dt-btn dt-btn-ghost" onClick={() => loadList()}>Retry</button>
+                  </>
+                ) : selectedId != null ? (
                   <>
                     Loading document…{" "}
                     <button className="dt-btn dt-btn-ghost" onClick={() => loadDetail(selectedId)}>Retry</button>
