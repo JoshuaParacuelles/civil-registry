@@ -1,6 +1,13 @@
 import React, { useLayoutEffect, useRef } from "react";
 import "./StatusToast.css";
 
+const TONE_COLORS = {
+  success: "#059669",
+  warning: "#d97706",
+  error: "#dc2626",
+  neutral: "#94a3b8",
+};
+
 const CloseIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -29,14 +36,24 @@ const ToastErrorIcon = () => (
   </svg>
 );
 
+const ToastNeutralIcon = () => (
+  <svg className="notif-toast__type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 16v-4m0-4h.01" />
+  </svg>
+);
+
 const StatusToastIcon = ({ type }) => {
   if (type === "warning") return <ToastWarningIcon />;
   if (type === "error") return <ToastErrorIcon />;
+  if (type === "neutral") return <ToastNeutralIcon />;
   return <ToastSuccessIcon />;
 };
 
 const StatusToast = ({ id, title, message, type = "success", duration = 5000, createdAt, hiding, onDismiss }) => {
   const progressRef = useRef(null);
+  const barColor = TONE_COLORS[type] || TONE_COLORS.success;
+
   useLayoutEffect(() => {
     const elapsed = Math.min(Date.now() - createdAt, duration);
     progressRef.current?.style.setProperty("animation-delay", `-${elapsed}ms`);
@@ -55,7 +72,11 @@ const StatusToast = ({ id, title, message, type = "success", duration = 5000, cr
         <CloseIcon />
       </button>
       <div className="notif-toast__progress">
-        <div ref={progressRef} className="notif-toast__progress-bar" style={{ animationDuration: `${duration}ms` }} />
+        <div
+          ref={progressRef}
+          className="notif-toast__progress-bar"
+          style={{ animationDuration: `${duration}ms`, backgroundColor: barColor }}
+        />
       </div>
     </div>
   );

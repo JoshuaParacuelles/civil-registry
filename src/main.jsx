@@ -12,6 +12,7 @@ import AccessDenied from "./pages/AccountSettings/AccessDenied";
 import HomePreloader from "./routes/HomePreloader";
 import LoadingScreen from "./routes/LoadingScreen";
 import ToastContainer from "./components/ToastContainer";
+import GlobalRealtime from "./components/GlobalRealtime";
 
 // Home is the shell for every dashboard page (charts, maps, tables). Loading it
 // lazily keeps all of that out of the initial bundle the login page downloads.
@@ -24,6 +25,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       {/* Router wraps PermissionProvider so Navigate works inside ProtectedRoute */}
       <Router>
         <ToastContainer />
+        {/* One realtime listener for the whole app. Pages subscribe via useDataChanged. */}
+        <GlobalRealtime />
         <PermissionProvider>
           <OfflineProvider>
             <Routes>

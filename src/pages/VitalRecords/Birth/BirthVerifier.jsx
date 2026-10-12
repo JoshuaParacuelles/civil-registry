@@ -7,6 +7,7 @@ import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
 import useOnlineStatus from "../../../hooks/useOnlineStatus";
+import { useDataChanged } from "../../../hooks/useDataChanged";
 import { isOnline } from "../../../offline/connectivityService";
 import { subscribeSyncState } from "../../../offline/syncEngine";
 import { newOpId, removeOp } from "../../../offline/outboxQueue";
@@ -22,7 +23,6 @@ import {
   refreshOfflineCredential,
 } from "../../../offline/archivePassword";
 
-
 // Relative by default — resolves against whatever origin loaded the page
 // (localhost, LAN IP, or an HTTPS devtunnel) and goes through Vite's
 // dev-server proxy to Flask on localhost:5000. Never hardcode an
@@ -30,6 +30,10 @@ import {
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/birth`;
 const FEE = 75;
 const MAX_UPLOAD = 5;
+
+// Realtime: tables nga mo-trigger og reload sa Birth Verifier.
+const BIRTH_LIVE_TABLES = ["birth_records", "birth_payments"];
+
 // Adapter: keeps showNotif("message", "success" | "error") working
 // on top of the shared toastService (which uses success: true/false).
 function useShowNotif() {
@@ -83,7 +87,7 @@ function useViewport() {
   };
 }
 
-// ── ADDED: resilient JSON fetch (from Marriage) ────────────────────────────
+// ── resilient JSON fetch ────────────────────────────────────────────────────
 // The list endpoints occasionally fail for a moment right after an upload
 // (server busy / DB hiccup). Retry a couple of times before giving up, and
 // surface the server's real error message instead of a blank Error().
@@ -245,7 +249,7 @@ function getRecordFirstName(record) {
   return "";
 }
 
-// ADDED: first + middle name, used only for the accuracy score so a search
+// First + middle name, used only for the accuracy score so a search
 // like "anna marie santos" can match "Anna" + middle "Marie Santos".
 function getRecordGivenNames(record) {
   const first  = cleanNamePart(record?.child_first_name);
@@ -784,8 +788,6 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
   const [dobError,    setDobError]    = useState("");
   const [fatherError, setFatherError] = useState("");
   const [motherError, setMotherError] = useState("");
-  const [noLocalCopy, setNoLocalCopy] = useState(false);
-  const [cacheSavedAt, setCacheSavedAt] = useState(null);
 
   const handleSubmit = () => {
     let valid = true;
@@ -980,7 +982,7 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
       showNotif("No password is set for this module yet.", "error");
     } else {
       showNotif("This device hasn't saved the password data yet. Open the app once while online and logged in, then try again.", "error");
-}
+    }
   };
 
   const handleSubmit = async () => {
@@ -1179,8 +1181,7 @@ const NegativeCertPreview = ({
   );
 };
 
-// ── ADDED (from Marriage): green progress bar for the upload dialog ────────
-// Self-styled, no CSS file needed.
+// ── Green progress bar for the upload dialog ──────────────────────────────
 const UploadProgressBar = ({ value = 0, width = "100%", height = 10, showLabel = true }) => {
   const pct = Math.max(0, Math.min(100, Math.round(value)));
   return (
@@ -1208,7 +1209,7 @@ const UploadProgressBar = ({ value = 0, width = "100%", height = 10, showLabel =
   );
 };
 
-// ADDED: upload with real progress (fetch can't report upload progress, XHR can).
+// Upload with real progress (fetch can't report upload progress, XHR can).
 function uploadWithProgress(url, formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -1227,7 +1228,7 @@ function uploadWithProgress(url, formData, onProgress) {
   });
 }
 
-// ADDED: inline layout for the "uploaded records" list. Keeps long names on
+// Inline layout for the "uploaded records" list. Keeps long names on
 // one line so the modal never grows past the screen (Done button stays visible).
 const MATCH_LIST_STYLE  = { maxHeight: 260, overflowY: "auto" };
 const MATCH_ROW_STYLE   = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "nowrap", gap: 12 };
@@ -1248,7 +1249,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
   const slotsLeft    = MAX_UPLOAD - queue.length;
   const limitReached = queue.length >= MAX_UPLOAD;
 
-  // ADDED: overall progress across the whole queue
+  // overall progress across the whole queue
   const overallProgress = queue.length
     ? queue.reduce((sum, q) => sum + (q.status === "done" || q.status === "queued" ? 100 : q.status === "uploading" ? (q.progress || 0) : 0), 0) / queue.length
     : 0;
@@ -1282,7 +1283,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
 
   const removeFromQueue = (id) => setQueue((q) => q.filter((item) => item.id !== id));
 
-  // UPDATED: XHR upload with real per-file progress; falls back to the
+  // XHR upload with real per-file progress; falls back to the
   // offline outbox when there is no connection.
   const handleUploadAll = async () => {
     if (queue.length === 0) { showNotif("Please add at least one file.", "error"); return; }
@@ -1576,7 +1577,7 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
   );
 };
 
-// UPDATED: now has a checkbox for bulk selection (selected / onToggle props).
+// Checkbox for bulk selection (selected / onToggle props).
 const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
   const father      = getFatherDisplayName(record);
@@ -1646,7 +1647,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   const [archiveSearch,      setArchiveSearch]      = useState("");
   const [archiveUnlocked,    setArchiveUnlocked]    = useState(false);
 
-  // ADDED: bulk selection (Archive tab)
+  // Bulk selection (Archive tab)
   const [selectedIds,  setSelectedIds]  = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -1718,11 +1719,11 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
 
   useEffect(() => { fetchRecords(); fetchArchived(); }, [fetchRecords, fetchArchived]);
 
-  useEffect(() => {
-    if (online) refreshOfflineCredential("archive_birth", API);
-  }, [online]);
+  // Realtime: i-reload ang lists kung naay bag-ong record o payment (gikan sa bisan asang device).
+  useDataChanged(() => {
+    if (isOnline()) { fetchRecords(); fetchArchived(); }
+  }, { tables: BIRTH_LIVE_TABLES, debounceMs: 750 });
 
-    // Keep the offline password hash current whenever we are online (no unlock needed).
   useEffect(() => {
     if (online) refreshOfflineCredential("archive_birth", API);
   }, [online]);
@@ -1787,7 +1788,6 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
     if (!aExact && bExact) return 1;
     return aFN.localeCompare(bFN);
   });
-
 
   const handleSelectFromSearch = (record) => {
     const displayName = getRecordDisplayName(record);
@@ -1969,7 +1969,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
     ? archivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
     : archivedRecords;
 
-  // ── ADDED: Bulk selection (Archive) ──────────────────────────────────────
+  // ── Bulk selection (Archive) ──────────────────────────────────────────────
   const filteredIds  = filteredArchived.map((r) => r.id);
   const allSelected  = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
   const someSelected = !allSelected && filteredIds.some((id) => selectedIds.has(id));
@@ -2167,7 +2167,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
                                     selectedRecord?.id === r.id &&
                                     !!selectedRecord?._isArchived === !!r._isArchived;
 
-                                  // UPDATED: accuracy % of this record vs. what was searched.
+                                  // Accuracy % of this record vs. what was searched.
                                   // Uses first + middle name so multi-word first names match.
                                   const accuracy = computeAccuracy(
                                     { lastName: srchLastName, firstName: srchFirstName },
@@ -2389,7 +2389,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
                 </div>
               </div>
               <div className="tab-card">
-                {/* ADDED: bulk action bar — only visible when something is selected */}
+                {/* Bulk action bar — only visible when something is selected */}
                 {selectedIds.size > 0 && (
                   <div className="bulk-bar">
                     <span className="bulk-bar__count">{selectedIds.size} selected</span>

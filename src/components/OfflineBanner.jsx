@@ -8,15 +8,17 @@ export default function OfflineBanner() {
 
   if (online && waiting === 0) return null
 
+  const count = `${waiting} ${waiting === 1 ? 'change' : 'changes'}`
+
   let type = 'offline'
-  let text = `Offline Mode · ${waiting} record${waiting === 1 ? '' : 's'} waiting to sync`
+  let text = `You are offline. Your ${count} ${waiting === 1 ? 'is' : 'are'} saved on this device and will be uploaded when you reconnect.`
 
   if (online && syncing > 0) {
     type = 'syncing'
-    text = `Syncing... ${waiting} record${waiting === 1 ? '' : 's'} left`
+    text = `Uploading your saved changes now. ${count} left to upload.`
   } else if (online) {
     type = 'pending'
-    text = `Back online · ${waiting} record${waiting === 1 ? '' : 's'} waiting to sync`
+    text = `You are back online. ${count} saved on this device ${waiting === 1 ? 'is' : 'are'} being uploaded.`
   }
 
   return (

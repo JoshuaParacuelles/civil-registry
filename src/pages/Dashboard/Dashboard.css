@@ -971,3 +971,4 @@
     transition-duration: 0.01ms !important;
   }
 }
+.an-live-row { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }

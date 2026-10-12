@@ -1,9 +1,23 @@
 import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import useAnalyticsData from "../../hooks/useAnalyticsData";
 import useOnlineStatus from "../../hooks/useOnlineStatus";
+import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
+import LiveIndicator from "../../components/LiveIndicator";
 import "./Dashboard.css";
 
 /* ══ CONSTANTS ═══════════════════════════════════════════════════════════════ */
+
+/* Records + payments: ang Today/revenue gikan sa payment tables, mao nga kinahanglan sila pareho.
+   Ilisi sa exact table names kung lahi sa imong Supabase. */
+const DASHBOARD_TABLES = [
+  "birth_records",
+  "marriage_records",
+  "death_records",
+  "birth_payments",
+  "marriage_transactions",
+  "death_transactions",
+];
+
 const COLORS = {
   birth:        "#378ADD",
   marriage:     "#1D9E75",
@@ -19,6 +33,19 @@ const TYPE_COLORS = {
 };
 
 const MONTH_SHORT = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/* Offline banner colors: neutral gray, not warning amber. */
+const OFFLINE_BANNER_STYLE = {
+  background: "#f1f5f9",
+  color: "#475569",
+  borderColor: "#cbd5e1",
+};
+
+const OFFLINE_RETRY_STYLE = {
+  marginLeft: 12,
+  color: "#334155",
+  borderColor: "#94a3b8",
+};
 
 /* ══ HELPERS ═════════════════════════════════════════════════════════════════ */
 const numFmt = new Intl.NumberFormat("en-PH");
@@ -84,9 +111,8 @@ const LineChartStaticLayer = memo(function LineChartStaticLayer({ chartLabels, c
     Math.round(minVal + (range / 4) * index)
   );
 
-  // Thin x-axis labels based on actual available pixel space, not a fixed
-  // "every Nth index" rule, so long labels like "Aug 2026"/"Sep 2026"
-  // never overlap.
+  // Thin x-axis labels based on actual available pixel space, so long labels
+  // like "Aug 2026"/"Sep 2026" never overlap.
   const charWidth = 5.6;
   const longestLabelLen = Math.max(1, ...chartLabels.map((label) => (label || "").length));
   const estimatedLabelWidth = longestLabelLen * charWidth + 10;
@@ -172,8 +198,7 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
 
-  // Normalize single-point data into a real 2-point ascending line
-  // (0 → value) so it always reads as a line graph, never a lone dot.
+  // Normalize single-point data into a real 2-point ascending line (0 → value).
   const isSinglePoint = labels.length === 1;
   const chartLabels = useMemo(
     () => isSinglePoint ? ["", labels[0]] : labels,
@@ -201,9 +226,6 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
 
   const handleMouseMove = useCallback((e) => {
     if (isSinglePoint) {
-      // Only one real value exists — always highlight it, regardless of
-      // where the cursor is, rather than letting hover land on the
-      // synthetic leading zero point.
       setHoverIdx(1);
       return;
     }
@@ -358,28 +380,27 @@ const DonutChart = ({ slices = [], size = 130 }) => {
   const r = 46, ir = 30, cx = size / 2, cy = size / 2;
   const visibleSlices = slices.filter((slice) => Number(slice.count || 0) > 0);
   const arcs = visibleSlices.map((sl, i) => {
-      const angle = -Math.PI / 2 + visibleSlices
-        .slice(0, i)
-        .reduce((sum, slice) => sum + (Number(slice.count || 0) / total) * Math.PI * 2, 0);
-      const val   = Number(sl.count || 0);
-      const sweep = (val / total) * Math.PI * 2;
-      const end   = angle + sweep;
-      const la    = sweep > Math.PI ? 1 : 0;
-      const x1  = cx + r  * Math.cos(angle), y1  = cy + r  * Math.sin(angle);
-      const x2  = cx + r  * Math.cos(end),   y2  = cy + r  * Math.sin(end);
-      const ix1 = cx + ir * Math.cos(end),   iy1 = cy + ir * Math.sin(end);
-      const ix2 = cx + ir * Math.cos(angle), iy2 = cy + ir * Math.sin(angle);
-      const path = `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${la} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix1.toFixed(2)} ${iy1.toFixed(2)} A ${ir} ${ir} 0 ${la} 0 ${ix2.toFixed(2)} ${iy2.toFixed(2)} Z`;
-      const arc  = {
-        key:   `${sl.label}-${i}`,
-        path,
-        color: sl.color,
-        label: sl.label,
-        count: val,
-        pct:   Math.round((val / total) * 100),
-      };
-      return arc;
-    });
+    const angle = -Math.PI / 2 + visibleSlices
+      .slice(0, i)
+      .reduce((sum, slice) => sum + (Number(slice.count || 0) / total) * Math.PI * 2, 0);
+    const val   = Number(sl.count || 0);
+    const sweep = (val / total) * Math.PI * 2;
+    const end   = angle + sweep;
+    const la    = sweep > Math.PI ? 1 : 0;
+    const x1  = cx + r  * Math.cos(angle), y1  = cy + r  * Math.sin(angle);
+    const x2  = cx + r  * Math.cos(end),   y2  = cy + r  * Math.sin(end);
+    const ix1 = cx + ir * Math.cos(end),   iy1 = cy + ir * Math.sin(end);
+    const ix2 = cx + ir * Math.cos(angle), iy2 = cy + ir * Math.sin(angle);
+    const path = `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${la} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix1.toFixed(2)} ${iy1.toFixed(2)} A ${ir} ${ir} 0 ${la} 0 ${ix2.toFixed(2)} ${iy2.toFixed(2)} Z`;
+    return {
+      key:   `${sl.label}-${i}`,
+      path,
+      color: sl.color,
+      label: sl.label,
+      count: val,
+      pct:   Math.round((val / total) * 100),
+    };
+  });
 
   const active = hovered != null ? arcs[hovered] : null;
 
@@ -437,10 +458,7 @@ const DonutChart = ({ slices = [], size = 130 }) => {
 };
 
 /* ══ SPARKLINE ═══════════════════════════════════════════════════════════════
-   Minimal single-color trend line — no axes, gridlines, or legend. Used in
-   place of a static badge wherever a real historical series backs the
-   metric, so the number is supported by its own recent shape rather than
-   a generic up/down chip. */
+   Minimal single-color trend line: no axes, gridlines, or legend. */
 const Sparkline = ({ data = [], color = COLORS.birth, height = 32 }) => {
   const values = safeArr(data).map((v) => Number(v) || 0);
   if (values.length < 2) return null;
@@ -540,7 +558,7 @@ const Panel = ({ title, sub, children, full = false }) => (
 
 /* ══ SKELETON ════════════════════════════════════════════════════════════════ */
 const Skeleton = ({ h = 200 }) => (
-  <div className="an-skeleton" style={{ height: h, background: '#e2e8f0', borderRadius: '8px' }} />
+  <div className="an-skeleton" style={{ height: h, background: "#e2e8f0", borderRadius: "8px" }} />
 );
 
 /* ══ EMPTY ═══════════════════════════════════════════════════════════════════ */
@@ -558,13 +576,13 @@ const MunicipalityTable = ({ rows = [] }) => {
     () => [...rows].sort((a, b) => Number(b[sortBy] || 0) - Number(a[sortBy] || 0)),
     [rows, sortBy]
   );
-  const max    = sorted[0]?.[sortBy] || 1;
+  const max = sorted[0]?.[sortBy] || 1;
 
   const cols = [
-    { key: "cnt",      label: "Total",    color: "#64748b"         },
-    { key: "Birth",    label: "Birth",    color: COLORS.birth      },
-    { key: "Marriage", label: "Marriage", color: COLORS.marriage   },
-    { key: "Death",    label: "Death",    color: COLORS.death      },
+    { key: "cnt",      label: "Total",    color: "#64748b"       },
+    { key: "Birth",    label: "Birth",    color: COLORS.birth    },
+    { key: "Marriage", label: "Marriage", color: COLORS.marriage },
+    { key: "Death",    label: "Death",    color: COLORS.death    },
   ];
 
   return (
@@ -785,9 +803,9 @@ const TodayPanel = ({ today = {} }) => {
 
 /* ══ GROWTH KPI HELPERS ══════════════════════════════════════════════════════ */
 function buildGrowthKpis(growth) {
-  const n          = growth.length;
-  const latestRow  = n >= 1 ? growth[n - 1] : null;
-  const prevRow    = n >= 2 ? growth[n - 2] : null;
+  const n         = growth.length;
+  const latestRow = n >= 1 ? growth[n - 1] : null;
+  const prevRow   = n >= 2 ? growth[n - 2] : null;
 
   let momValue  = null;
   let momLabel  = "Month-over-month request growth";
@@ -849,6 +867,35 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
   const lastLiveAtRef = useRef(null);
   const [tab, setTab] = useState("overview");
 
+  // Realtime: i-clear ang backend cache, dayon i-refetch ang dashboard.
+  const handleRealtimeRefresh = useCallback(async () => {
+    if (!navigator.onLine) return undefined;
+
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || "";
+      const res = await fetch(`${base}/api/analytics/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        console.warn("[Dashboard] cache refresh failed:", res.status);
+      }
+    } catch (err) {
+      // Dili hinungdan nga mo-stop ang refresh; mo-refetch gihapon.
+      console.warn("[Dashboard] cache refresh unreachable:", err);
+    }
+
+    return refetch();
+  }, [refetch]);
+
+  const { status: liveStatus, lastUpdated } = useRealtimeRefresh({
+    tables: DASHBOARD_TABLES,
+    onRefresh: handleRealtimeRefresh,
+    channelName: "dashboard-live",
+    debounceMs: 1500, // bulk import = usa ra ka refresh
+    pollMs: 120000,   // backstop kung dili mo-live ang socket
+  });
+
   // Remember when live (non-cached) data was last on screen, for the banner timestamp.
   useEffect(() => {
     if (online && !stale?.fromCache && data?.summary && !data.summary.__failed) {
@@ -882,7 +929,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     ];
   }, [growth]);
 
-  const yearLabels = useMemo(() => byYear.map((r) => String(r.year)), [byYear]);
+  const yearLabels   = useMemo(() => byYear.map((r) => String(r.year)), [byYear]);
   const growthLabels = useMemo(() => growth.map((r) => r.label), [growth]);
 
   const { momDisplay, momLabel, momAccent, prevMomDisplay, prevMomLabel } = useMemo(
@@ -890,8 +937,6 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     [growth]
   );
 
-  // Precise period text derived from the real data, in place of generic
-  // hardcoded ranges like "last 24 months".
   const heroPeriod = byYear.length
     ? byYear.length > 1
       ? `${byYear[0].year}–${byYear[byYear.length - 1].year}`
@@ -912,9 +957,9 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     : null;
 
   const donutSlices = useMemo(() => [
-    { label: "Birth", count: summary.total_birth_records || 0, color: COLORS.birth },
+    { label: "Birth",    count: summary.total_birth_records    || 0, color: COLORS.birth    },
     { label: "Marriage", count: summary.total_marriage_records || 0, color: COLORS.marriage },
-    { label: "Death", count: summary.total_death_records || 0, color: COLORS.death },
+    { label: "Death",    count: summary.total_death_records    || 0, color: COLORS.death    },
   ], [summary.total_birth_records, summary.total_marriage_records, summary.total_death_records]);
 
   const byYearRows = useMemo(
@@ -940,9 +985,9 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       .slice(0, 10)
       .map((row) => ({ label: row.name, count: row[key] || 0, color }));
     return {
-      Birth: top("Birth", COLORS.birth),
+      Birth:    top("Birth",    COLORS.birth),
       Marriage: top("Marriage", COLORS.marriage),
-      Death: top("Death", COLORS.death),
+      Death:    top("Death",    COLORS.death),
     };
   }, [munis]);
   const todayRequestRows = useMemo(() => (today.requests_breakdown || []).map((row) => ({
@@ -982,17 +1027,21 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
   return (
     <div className="an-wrapper">
+      <div className="an-live-row">
+        <LiveIndicator status={liveStatus} lastUpdated={lastUpdated} />
+      </div>
+
       {showOfflineBanner && (
-        <div className="an-error-banner" style={{ background: "#fffbeb", color: "#92400e", borderColor: "#fde68a" }}>
-          📴 Offline mode: showing data saved on this device
+        <div className="an-error-banner" style={OFFLINE_BANNER_STYLE}>
+          Offline mode: showing data saved on this device
           {savedAt ? ` (${new Date(savedAt).toLocaleString("en-PH")})` : ""}.
-          <button className="an-error-retry" onClick={refetch} style={{ marginLeft: 12 }}>Retry</button>
+          <button className="an-error-retry" onClick={refetch} style={OFFLINE_RETRY_STYLE}>Retry</button>
         </div>
       )}
 
       {error && (
         <div className="an-error-banner">
-          ⚠ {error}
+          {error}
           <button className="an-error-retry" onClick={refetch} style={{ marginLeft: 12 }}>
             Retry
           </button>
@@ -1100,37 +1149,25 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
           <div className="an-two-col">
             <Panel title="Records registered per year" sub="Total civil records entered into the system">
               {data.byYear === undefined ? <Skeleton h={180} /> : byYear.length ? (
-                <MemoBarChart
-                  rows={byYearRows}
-                  colorKey="color" valueKey="count" labelKey="label"
-                />
+                <MemoBarChart rows={byYearRows} colorKey="color" valueKey="count" labelKey="label" />
               ) : <Empty />}
             </Panel>
             <Panel title="Certificate requests per year" sub="Requests across all document types">
               {data.reqByYear === undefined ? <Skeleton h={180} /> : reqYear.length ? (
-                <MemoBarChart
-                  rows={requestYearRows}
-                  colorKey="color" valueKey="count" labelKey="label"
-                />
+                <MemoBarChart rows={requestYearRows} colorKey="color" valueKey="count" labelKey="label" />
               ) : <Empty />}
             </Panel>
           </div>
 
           <Panel full title="Monthly seasonality — records" sub="Which months see the highest registration activity">
             {data.byMonth === undefined ? <Skeleton h={180} /> : byMonth.length ? (
-              <MemoBarChart
-                rows={byMonthRows}
-                colorKey="color" valueKey="count" labelKey="label"
-              />
+              <MemoBarChart rows={byMonthRows} colorKey="color" valueKey="count" labelKey="label" />
             ) : <Empty />}
           </Panel>
 
           <Panel full title="Monthly seasonality — requests" sub="Certificate request demand by month">
             {data.reqByMonth === undefined ? <Skeleton h={180} /> : reqMonth.length ? (
-              <MemoBarChart
-                rows={requestMonthRows}
-                colorKey="color" valueKey="count" labelKey="label"
-              />
+              <MemoBarChart rows={requestMonthRows} colorKey="color" valueKey="count" labelKey="label" />
             ) : <Empty />}
           </Panel>
         </div>
@@ -1158,22 +1195,13 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
           {data.topMunicipalities !== undefined && munis.length > 0 && (
             <div className="an-three-col">
               <Panel title="Hotspot analysis — Birth records" sub="Municipalities with concentrated birth registrations">
-                <MemoBarChart
-                  rows={hotspots.Birth}
-                  colorKey="color" valueKey="count" labelKey="label"
-                />
+                <MemoBarChart rows={hotspots.Birth} colorKey="color" valueKey="count" labelKey="label" />
               </Panel>
               <Panel title="Hotspot analysis — Marriage records" sub="Municipalities with the most marriage registrations">
-                <MemoBarChart
-                  rows={hotspots.Marriage}
-                  colorKey="color" valueKey="count" labelKey="label"
-                />
+                <MemoBarChart rows={hotspots.Marriage} colorKey="color" valueKey="count" labelKey="label" />
               </Panel>
               <Panel title="Hotspot analysis — Death records" sub="Municipalities with the highest death registrations">
-                <MemoBarChart
-                  rows={hotspots.Death}
-                  colorKey="color" valueKey="count" labelKey="label"
-                />
+                <MemoBarChart rows={hotspots.Death} colorKey="color" valueKey="count" labelKey="label" />
               </Panel>
             </div>
           )}
@@ -1243,16 +1271,10 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
           {data.today === undefined ? <Skeleton h={220} /> : today.requests_breakdown?.length > 0 && (
             <div className="an-two-col">
               <Panel title="Requests breakdown" sub="Certificate types requested today">
-                <MemoBarChart
-                  rows={todayRequestRows}
-                  colorKey="color" valueKey="count" labelKey="label"
-                />
+                <MemoBarChart rows={todayRequestRows} colorKey="color" valueKey="count" labelKey="label" />
               </Panel>
               <Panel title="Revenue by type" sub="Payment amounts collected today per document type">
-                <MemoBarChart
-                  rows={todayPaymentRows}
-                  colorKey="color" valueKey="count" labelKey="label"
-                />
+                <MemoBarChart rows={todayPaymentRows} colorKey="color" valueKey="count" labelKey="label" />
               </Panel>
             </div>
           )}

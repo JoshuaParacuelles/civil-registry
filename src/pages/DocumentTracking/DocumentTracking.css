@@ -43,6 +43,44 @@
   padding: 0;
 }
 
+/* ── Active / Archive view switch ─────────────────────────────── */
+.dt-view-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  margin-bottom: 14px;
+}
+.dt-view-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-mid);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.dt-view-btn:hover { color: var(--ink); }
+.dt-view-btn[data-active="true"] {
+  background: var(--blue);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
+}
+.dt-view-btn[data-active="true"]:hover {
+  background: var(--blue-hover);
+  color: #ffffff;
+}
+.dt-view-btn:not([data-active="true"]):hover {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.dt-view-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
 /* ── Status filter tabs ──────────────────────────────────────────
    Flat underline tab bar: one hairline under the whole row, active tab
    marked by dark text + a 2px blue underline. The hairline is an inset
@@ -138,7 +176,7 @@
   letter-spacing: 0.01em;
 }
 
-/* Saved note + Delete, on one line at the right of the detail head */
+/* Saved note + action buttons, on one line at the right of the detail head */
 .dt-head-actions {
   display: flex;
   align-items: center;
@@ -190,10 +228,8 @@
 .dt-list { display: flex; flex-direction: column; gap: 8px; }
 
 /* ── Loading skeleton (Documents list) ───────────────────────────
-   Shown only on the genuinely empty initial load (listLoading with no
-   documents yet in state). A background refetch keeps the current rows
-   on screen instead of swapping back to this. Sized to match .dt-row so
-   there's no layout jump once real rows arrive. ── */
+   Shown only on the genuinely empty initial load. Sized to match .dt-row
+   so there's no layout jump once real rows arrive. ── */
 @keyframes dt-shimmer {
   0% { background-position: -320px 0; }
   100% { background-position: 320px 0; }
@@ -238,8 +274,7 @@
 .dt-skeleton-row:nth-child(4) .dt-skeleton-line { animation-delay: 0.24s; }
 .dt-skeleton-row:nth-child(5) .dt-skeleton-line { animation-delay: 0.32s; }
 
-/* Gentle fade/rise-in as rows mount so content settles in smoothly
-   instead of popping in once a fetch resolves. */
+/* Gentle fade/rise-in as rows mount so content settles in smoothly. */
 @keyframes dt-row-in {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
@@ -281,9 +316,7 @@
 
 .dt-row-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 160px; }
 
-/* Line 1: document number (the identifier people scan for) + type.
-   The type is separated from the number by a thin rule rather than a
-   typed-in "·", so the two read as distinct fields. */
+/* Line 1: document number + type. */
 .dt-row-id {
   display: flex;
   align-items: center;
@@ -319,8 +352,7 @@
   text-overflow: ellipsis;
 }
 
-/* Line 3: who's handling it / when it last changed — labels quiet,
-   the person's name a step heavier. */
+/* Line 3: handler / last updated */
 .dt-row-meta {
   display: flex;
   flex-wrap: wrap;
@@ -343,8 +375,7 @@
 
 /* ── Status chip ─────────────────────────────────────────────────
    Flat tint + darker text of the same hue, plus a small dot (drawn in
-   the text color) so status is legible by shape as well as color.
-   Colors come from STATUS_STYLES in the JSX. ── */
+   the text color). Colors come from STATUS_STYLES in the JSX. ── */
 .dt-badge {
   display: inline-flex;
   align-items: center;
@@ -383,8 +414,6 @@
   flex-wrap: wrap;
   margin-bottom: 16px;
 }
-/* Inside a timeline step the row is a one-line caption, and the step's own
-   padding already supplies the gap to the next step. */
 .dt-step-body .dt-handler-row { margin-bottom: 0; }
 .dt-handler-label {
   font-size: 12px;
@@ -392,15 +421,10 @@
   color: var(--ink-soft);
   white-space: nowrap;
 }
-/* The person's name is the value; "Unsigned" drops back to the muted
-   label weight so an empty stage reads as empty, not as a name. */
 .dt-handler-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
 .dt-handler-name[data-unsigned="true"] { font-weight: 500; color: var(--ink-soft); }
 
-/* ── Timeline ────────────────────────────────────────────────────
-   The connector under a completed step is tinted blue so the eye can
-   follow how far the document has progressed; connectors under pending
-   steps stay neutral. ── */
+/* ── Timeline ──────────────────────────────────────────────────── */
 .dt-timeline { list-style: none; margin: 0; padding: 0; }
 .dt-step {
   position: relative;
@@ -437,9 +461,6 @@
   background: var(--card);
   box-shadow: 0 0 0 3px var(--blue-soft);
 }
-/* A flagged ("Request changes") stage is also the active stage, so the
-   active-stage rule above would win and paint it blue. This keeps the
-   hollow "you are here" ring, but red. */
 .dt-step[data-active="true"][data-flag="true"] .dt-step-dot {
   border-color: var(--red);
   background: var(--card);
@@ -473,8 +494,6 @@
 
 .dt-step-heading-text { min-width: 0; flex: 1 1 140px; }
 
-/* Stage text hierarchy: document no. (quiet reference) → label (the
-   name of the step) → detail → date. */
 .dt-step-docno {
   margin: 0 0 2px;
   font-size: 11px;
@@ -490,7 +509,7 @@
 .dt-step-detail strong { font-weight: 600; color: var(--ink); }
 .dt-step-date { font-size: 11.5px; color: var(--ink-soft); margin: 0; font-variant-numeric: tabular-nums; }
 
-/* Comment count chip on a stage — click target that expands the thread */
+/* Comment count chip on a stage */
 .dt-step-comment-btn {
   flex-shrink: 0;
   display: inline-flex;
@@ -511,12 +530,12 @@
 .dt-step-chevron { transition: transform 0.15s ease; }
 .dt-step-comment-btn[data-open="true"] .dt-step-chevron { transform: rotate(180deg); }
 
-/* Inline comment thread, expanded under the stage that was clicked */
+/* Inline comment thread */
 .dt-comment-list {
   list-style: none;
   margin: 10px 0 4px;
   padding: 12px;
-  background: #f8fafc; /* == --bg-surface-soft */
+  background: #f8fafc;
   border: 1px solid var(--line);
   border-radius: 8px;
   display: flex;
@@ -557,11 +576,7 @@
   margin: 0;
 }
 
-/* ── Active-stage panels ─────────────────────────────────────────
-   The panel that holds real actions (advance / flag / comment) keeps the
-   blue tint, since it is the one place the person is being asked to do
-   something. Everything informational — blocked/unassigned, admin
-   view-only, "different role" — is the same neutral grey. ── */
+/* ── Active-stage panels ───────────────────────────────────────── */
 .dt-active-panel {
   margin-top: 12px;
   padding: 14px;
@@ -577,7 +592,6 @@
   font-weight: 600;
   color: var(--blue-ink);
 }
-/* Admin view-only panel — informational, so neutral. */
 .dt-active-panel-admin {
   background: var(--surface-soft);
   border-color: var(--line-strong);
@@ -585,8 +599,6 @@
 .dt-active-panel-admin .dt-active-panel-label {
   color: var(--ink-mid);
 }
-/* Unassigned / no-access block — neutral gray so it reads as "waiting on
-   setup", distinct from the blue action panel. */
 .dt-active-panel-blocked {
   background: var(--surface-soft);
   border-color: var(--line-strong);
@@ -602,12 +614,7 @@
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────
-   One clear three-tier hierarchy, all flat:
-     primary  (.dt-btn-primary) solid blue    — the one forward action
-     ghost    (.dt-btn-ghost)   white/outline — secondary
-     danger   (.dt-btn-danger)  white/red text — destructive
-   Fixed height so a row of buttons lines up; .dt-btn-lg is the toolbar
-   size, matching the search box. ── */
+   primary = solid blue, ghost = white/outline, danger = white/red text. */
 .dt-btn {
   display: inline-flex;
   align-items: center;
@@ -630,7 +637,7 @@
 .dt-btn-primary { background: var(--blue); color: #fff; }
 .dt-btn-primary:hover:not(:disabled) { background: var(--blue-hover); }
 .dt-btn-ghost { background: #fff; color: var(--ink); border-color: var(--line-strong); }
-.dt-btn-ghost:hover:not(:disabled) { background: #f1f5f9; } /* == --bg-raised */
+.dt-btn-ghost:hover:not(:disabled) { background: #f1f5f9; }
 .dt-btn-danger { background: #fff; color: var(--red-ink); border-color: rgba(220, 38, 38, 0.3); }
 .dt-btn-danger:hover:not(:disabled) { background: var(--red-soft); }
 
@@ -676,10 +683,32 @@
   gap: 5px;
 }
 
-/* ── Modal pop-in animation (New Document / Request changes / Confirm) ──
-   Purely additive: the modals' own width/background/border-radius/shadow
-   and positioning stay inline in DocumentTracking.jsx — these two classes
-   only add the fade-in / pop-in timing on top. */
+/* ── Archived document banner (detail pane) ───────────────────── */
+.dt-archived-banner {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-mid);
+  background: var(--surface-soft);
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+}
+
+/* Offline notice: neutral gray, so it reads as "waiting", not as an error */
+.dt-offline-banner {
+  margin-bottom: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--ink-mid);
+  background: var(--surface-soft);
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+}
+
+/* ── Modal pop-in animation ──────────────────────────────────── */
 @keyframes dt-modal-backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -709,6 +738,8 @@
   .dt-head-actions { justify-content: space-between; }
   .dt-search { width: 100%; min-width: 0; flex: 1 1 auto; }
   .dt-row { padding: 10px 11px 10px 14px; }
+  .dt-view-switch { display: flex; width: 100%; }
+  .dt-view-btn { flex: 1; }
 }
 
 @media (max-width: 380px) {

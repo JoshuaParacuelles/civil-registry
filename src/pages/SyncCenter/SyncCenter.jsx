@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOffline } from '../../context/OfflineContext';
 import { usePermissions } from '../../context/PermissionContext';
 import { listAll, subscribeOutbox, requeueOne, removeOp } from '../../offline/outboxQueue';
@@ -26,6 +26,93 @@ const currentUser = () => {
   try { return sessionStorage.getItem('username') || ''; } catch { return ''; }
 };
 
+/* ─── Reusable confirm modal ─────────────────────────────────────────── */
+function ConfirmModal({
+  open,
+  title,
+  message,
+  detail,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  danger = false,
+  busy = false,
+  onConfirm,
+  onCancel,
+}) {
+  const dialogRef = useRef(null);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+
+  // Focus the cancel button when opened and lock background scroll.
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.querySelector('[data-autofocus]')?.focus();
+    return () => { document.body.style.overflow = prevOverflow; };
+  }, [open]);
+
+  // Escape closes the modal (unless an action is in progress).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !busy) onCancelRef.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, busy]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="sc-modal-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !busy) onCancel();
+      }}
+    >
+      <div
+        className="sc-modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="sc-modal-title"
+        aria-describedby="sc-modal-message"
+        ref={dialogRef}
+      >
+        <div className={`sc-modal__icon${danger ? ' sc-modal__icon--danger' : ''}`} aria-hidden="true">
+          {danger ? '!' : '?'}
+        </div>
+
+        <h3 id="sc-modal-title" className="sc-modal__title">{title}</h3>
+
+        <p id="sc-modal-message" className="sc-modal__message">{message}</p>
+
+        {detail && <div className="sc-modal__detail">{detail}</div>}
+
+        <div className="sc-modal__footer">
+          <button
+            type="button"
+            className="sc-btn"
+            data-autofocus
+            onClick={onCancel}
+            disabled={busy}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            className={`sc-btn ${danger ? 'sc-btn--danger-solid' : 'sc-btn--primary'}`}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {busy ? 'Please wait…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SyncCenter() {
   const { online, sync, syncNow } = useOffline();
   const { permissions, is_admin } = usePermissions();
@@ -34,6 +121,11 @@ export default function SyncCenter() {
   const [tab, setTab] = useState('unsynced');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+
+  // Discard modal state
+  const [discardTarget, setDiscardTarget] = useState(null);
+  const [discarding, setDiscarding] = useState(false);
+
   const user = currentUser();
 
   // null = admin (sees everything); a Set = only those entities.
@@ -118,18 +210,31 @@ export default function SyncCenter() {
     if (online) handleSyncNow();
   };
 
-  // Discard is only offered for items the server did not accept.
-  const handleDiscard = async (row) => {
-    const ok = window.confirm(
-      `Discard "${row.label}"?\n\nThe local copy will be removed and it will NOT be sent to the server.`,
-    );
-    if (ok) await removeOp(row.opId);
+  // Opens the modal instead of window.confirm.
+  const requestDiscard = (row) => setDiscardTarget(row);
+
+  const closeDiscardModal = useCallback(() => {
+    if (!discarding) setDiscardTarget(null);
+  }, [discarding]);
+
+  const confirmDiscard = async () => {
+    if (!discardTarget) return;
+    setDiscarding(true);
+    try {
+      await removeOp(discardTarget.opId);
+      setNotice({ type: 'ok', text: `Discarded "${discardTarget.label}".` });
+    } catch (e) {
+      setNotice({ type: 'error', text: `Could not discard: ${e.message}` });
+    } finally {
+      setDiscarding(false);
+      setDiscardTarget(null);
+    }
   };
 
   const pct = sync.total ? Math.round((sync.done / sync.total) * 100) : 0;
 
   return (
-        <div className="sc-page">
+    <div className="sc-page">
       <div className="sc-sticky">
         <div className="sc-header">
           <div>
@@ -204,7 +309,6 @@ export default function SyncCenter() {
             </thead>
             <tbody>
               {visible.map((r) => {
-                const waitingForLogin = r.status === 'pending' && r.username && user && r.username !== user;
                 const canAct = r.status === 'failed' || r.status === 'conflict';
                 return (
                   <tr key={r.opId} className={`sc-row sc-row--${r.status}`}>
@@ -212,7 +316,7 @@ export default function SyncCenter() {
                     <td className="sc-label">{r.label}</td>
                     <td>{fmt(r.createdAt)}</td>
                     <td>
-                      {waitingForLogin
+                      {r.status === 'pending' && r.username && user && r.username !== user
                         ? `Waiting for login as ${r.username}`
                         : STATUS_LABEL[r.status] || r.status}
                     </td>
@@ -224,10 +328,18 @@ export default function SyncCenter() {
                     <td>
                       {canAct ? (
                         <div className="sc-actions">
-                          <button className="sc-btn" disabled={busy || sync.syncing} onClick={() => handleRetryOne(r)}>
+                          <button
+                            className="sc-btn"
+                            disabled={busy || sync.syncing}
+                            onClick={() => handleRetryOne(r)}
+                          >
                             Retry
                           </button>
-                          <button className="sc-btn sc-btn--danger" disabled={busy || sync.syncing} onClick={() => handleDiscard(r)}>
+                          <button
+                            className="sc-btn sc-btn--danger"
+                            disabled={busy || sync.syncing || discarding}
+                            onClick={() => requestDiscard(r)}
+                          >
                             Discard
                           </button>
                         </div>
@@ -242,6 +354,27 @@ export default function SyncCenter() {
           </table>
         </div>
       )}
+
+      <ConfirmModal
+        open={!!discardTarget}
+        title="Discard this item?"
+        message="The local copy will be removed and it will NOT be sent to the server. This action cannot be undone."
+        detail={discardTarget && (
+          <>
+            <div><strong>Module:</strong> {ENTITY_LABEL[discardTarget.entity] || discardTarget.entity}</div>
+            <div><strong>Item:</strong> {discardTarget.label}</div>
+            {discardTarget.lastError && (
+              <div className="sc-modal__error"><strong>Last error:</strong> {discardTarget.lastError}</div>
+            )}
+          </>
+        )}
+        confirmLabel="Discard"
+        cancelLabel="Keep it"
+        danger
+        busy={discarding}
+        onConfirm={confirmDiscard}
+        onCancel={closeDiscardModal}
+      />
     </div>
   );
 }

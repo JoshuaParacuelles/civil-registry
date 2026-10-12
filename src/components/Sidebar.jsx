@@ -67,8 +67,6 @@ const Sidebar = ({
         </div>
 
         <ul className="sidebar-menu" role="menu">
-          {showLabels && <p className="sidebar-group-label">MAIN</p>}
-
           <li role="menuitem" className={activeSubMenu === MENU_KEYS.DASHBOARD ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.DASHBOARD)}>
             <img src={dashboardIcon} alt="" className="menu-icon" width="18" height="18" />
             {showLabels && <span>Dashboard</span>}
@@ -78,8 +76,6 @@ const Sidebar = ({
 
           {visibleVitalChildren.length > 0 && (
             <>
-              {showLabels && <p className="sidebar-group-label">VERIFIERS</p>}
-
               <li role="menuitem" aria-expanded={vitalRecordsOpen} className={`parent-only${vitalIsActive ? " active" : ""}`} onClick={() => handleMenuClick(MENU_KEYS.VITAL)}>
                 <img src={vitalIcon} alt="" className="menu-icon" width="18" height="18" />
                 {showLabels && <span>Vital Records Management</span>}
@@ -117,7 +113,6 @@ const Sidebar = ({
 
           {canAccess("heatmaps") && (
             <>
-              {showLabels && <p className="sidebar-group-label">HEATMAPS</p>}
               <li role="menuitem" className={activeSubMenu === MENU_KEYS.HEATMAPS ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.HEATMAPS)}>
                 <img src={heatmapsIcon} alt="" className="menu-icon" width="18" height="18" />
                 {showLabels && <span>Heatmaps</span>}
@@ -128,7 +123,6 @@ const Sidebar = ({
 
           {canAccess("document_tracking") && (
             <>
-              {showLabels && <p className="sidebar-group-label">DOCUMENT TRACKING</p>}
               <li role="menuitem" className={activeSubMenu === MENU_KEYS.DOCUMENT_TRACKING ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.DOCUMENT_TRACKING)}>
                 <img src={trackingIcon} alt="" className="menu-icon" width="18" height="18" />
                 {showLabels && <span>Document Tracking</span>}
@@ -139,7 +133,6 @@ const Sidebar = ({
 
           {canAccess("offline_sync") && (
             <>
-              {showLabels && <p className="sidebar-group-label">OFFLINE DATA</p>}
               <li
                 role="menuitem"
                 className={activeSubMenu === MENU_KEYS.OFFLINE_SYNC ? "active" : ""}
@@ -154,11 +147,8 @@ const Sidebar = ({
                   </span>
                 )}
               </li>
-              <hr className="menu-separator" />
             </>
           )}
-
-          {showLabels && <p className="sidebar-group-label">ADMINISTRATION</p>}
 
           <li role="menuitem" aria-expanded={settingsOpen} className={`parent-only${settingsIsActive ? " active" : ""}`} onClick={() => handleMenuClick(MENU_KEYS.SETTINGS)}>
             <img src={accountIcon} alt="" className="menu-icon" width="18" height="18" />

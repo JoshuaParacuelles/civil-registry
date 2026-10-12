@@ -19,6 +19,12 @@ const dateTimeFmt = new Intl.DateTimeFormat(undefined, {
 // Text shown for a stage with nobody assigned.
 const UNSIGNED_LABEL = "Unsigned";
 
+// Active list vs. archive list.
+const VIEW_MODES = [
+  { key: "active", label: "Active documents" },
+  { key: "archived", label: "Archive" },
+];
+
 // Shared toast helper (same shared toastService used by Login / Vital Records).
 function notify(message, type = "success") {
   const ok = type === "success";
@@ -95,6 +101,7 @@ function initialsFor(name) {
 }
 
 function mapDocumentSummary(row) {
+  const archivedAt = row.archived_at ?? null;
   return {
     id: row.id,
     docNumber: row.doc_number || `DOC-${row.id}`,
@@ -105,6 +112,8 @@ function mapDocumentSummary(row) {
     status: row.status ?? "In review",
     updated: formatDate(row.updated_at ?? row.updated),
     rejected: row.status === "Rejected",
+    archived: Boolean(row.archived || row.is_archived || archivedAt),
+    archivedAt,
   };
 }
 
@@ -179,12 +188,18 @@ const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect }) {
 
 export default function DocumentTracking() {
   // ROLE POLICY:
-  //  - Administrator: view-only on stages; can create/delete documents.
+  //  - Administrator: view-only on stages; can create, archive, restore,
+  //    and permanently delete documents.
   //  - Non-admin: can work a stage (complete / request changes / reject /
   //    comment) only when the stage has a handler AND their role carries
-  //    that stage's document_stage_* permission.
+  //    that stage's document_stage_* permission. Archived documents are
+  //    read-only for everyone.
   const { is_admin, hasAccess } = usePermissions();
   const dbOnline = useOnlineStatus();
+
+  const [viewMode, setViewMode] = useState("active"); // "active" | "archived"
+  const viewModeRef = useRef("active");
+  viewModeRef.current = viewMode;
 
   const [documents, setDocuments] = useState([]);
   const [listLoading, setListLoading] = useState(true);
@@ -244,15 +259,23 @@ export default function DocumentTracking() {
   selectedIdRef.current = selectedId; // assigned during render so it is never stale
 
   // `opts.silent === true` refreshes in place without a loading state.
+  // Reads the active or archive list depending on viewModeRef.
   const loadList = useCallback(async (opts) => {
     const requestId = ++listRequestIdRef.current;
     const silent = opts?.silent === true;
+    const archivedView = viewModeRef.current === "archived";
     if (!silent) setListLoading(true);
     setListError(null);
     try {
-      const rows = await trackingRead("/api/documents");
+      const rows = await trackingRead(
+        archivedView ? "/api/documents?archived=true" : "/api/documents"
+      );
       if (listRequestIdRef.current !== requestId) return []; // superseded
-      const mapped = (rows || []).map(mapDocumentSummary);
+      const mapped = (rows || [])
+        .map(mapDocumentSummary)
+        // Strict split on the client: Active shows only non-archived,
+        // Archive shows only archived. Never trust the query param alone.
+        .filter((d) => (archivedView ? d.archived : !d.archived));
       setDocuments(mapped);
       // Keep the current selection if it still exists, else pick the first.
       setSelectedId((prev) =>
@@ -446,7 +469,20 @@ export default function DocumentTracking() {
 
   const visibleDocuments = filtered.slice(0, visibleCount);
 
-  // Wraps a mutating call: run it, refresh detail + list in place, surface errors.
+  // Switches between the active list and the archive. Clears the selection
+  // so the detail pane never shows a document from the other view.
+  const switchView = (mode) => {
+    if (mode === viewModeRef.current) return;
+    viewModeRef.current = mode;
+    setViewMode(mode);
+    setDocuments([]);
+    setVisibleCount(DOCUMENT_PAGE_SIZE);
+    setSelectedId(null);
+    setConfirmModal(null);
+    loadList();
+  };
+
+  // Wraps the mutating call: run it, refresh the list in place, surface errors.
   const runAction = useCallback(async (fn, successMsg) => {
     setBusy(true);
     setActionError(null);
@@ -473,6 +509,60 @@ export default function DocumentTracking() {
       setBusy(false);
     }
   }, [loadDetail, loadList, flashSaved]);
+
+  // Online-only server actions (archive, restore, permanent delete). These
+  // cannot be queued safely, so they refuse to run while offline. Removing the
+  // selected document from the current list makes loadList pick the next one.
+  const runServerAction = async (fn, successMsg, offlineMsg) => {
+    if (!isDbAvailable()) {
+      notify(offlineMsg, "error");
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      await fn();
+      await loadList({ silent: true });
+      flashSaved();
+      notify(successMsg, "success");
+    } catch (e) {
+      console.error("[DocumentTracking] Server action failed:", e);
+      setActionError(e.message || "Something went wrong.");
+      notify(e.message || "Something went wrong.", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const archiveDocument = () => {
+    const id = selectedId;
+    if (id == null) return;
+    runServerAction(
+      () => apiFetch(`/api/documents/${id}/archive`, { method: "POST" }),
+      "Document moved to archive.",
+      "Archiving needs the connection. Try again when it returns."
+    );
+  };
+
+  const restoreDocument = () => {
+    const id = selectedId;
+    if (id == null) return;
+    runServerAction(
+      () => apiFetch(`/api/documents/${id}/restore`, { method: "POST" }),
+      "Document restored to the active list.",
+      "Restoring needs the connection. Try again when it returns."
+    );
+  };
+
+  const deleteDocumentPermanently = () => {
+    const id = selectedId;
+    if (id == null) return;
+    runServerAction(
+      () => apiFetch(`/api/documents/${id}`, { method: "DELETE" }),
+      "Document permanently deleted.",
+      "Deleting needs the connection. Try again when it returns."
+    );
+  };
 
   const advanceStage = (stageOrder) =>
     runAction(
@@ -616,31 +706,6 @@ export default function DocumentTracking() {
     }
   };
 
-  // Admin-only. Online only: deleting a document cannot be queued safely.
-  const deleteDocument = async () => {
-    if (!isDbAvailable()) {
-      notify("Deleting needs the connection. Try again when it returns.", "error");
-      return;
-    }
-    if (selectedId == null) return;
-    setBusy(true);
-    setActionError(null);
-    try {
-      await apiFetch(`/api/documents/${selectedId}`, { method: "DELETE" });
-      setSelectedId(null);
-      setDetail(null);
-      await loadList();
-      flashSaved();
-      notify("Document deleted.", "success");
-    } catch (e) {
-      console.error("[DocumentTracking] Failed to delete document:", e);
-      setActionError(e.message || "Could not delete this document.");
-      notify(e.message || "Could not delete this document.", "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const toggleStage = (i, hasComments) => {
     if (!hasComments) return;
     setOpenStage((prev) => (prev === i ? null : i));
@@ -648,16 +713,59 @@ export default function DocumentTracking() {
 
   // Never show a detail that belongs to a different document than the one selected.
   const selected = detail && String(detail.id) === String(selectedId) ? detail : null;
-  const activeIndex = selected ? getActiveIndex(selected.stages) : -1;
+  // Archived documents are paused: no active stage, so no action panels.
+  const activeIndex = selected && !selected.archived ? getActiveIndex(selected.stages) : -1;
+  const inArchive = viewMode === "archived";
+
+  const askArchive = () =>
+    setConfirmModal({
+      title: "Move to archive",
+      message: `Move ${selected.docNumber} to the archive? Processing will pause and it will be hidden from the active list. You can restore it anytime from the Archive.`,
+      confirmLabel: "Archive",
+      danger: false,
+      onConfirm: () => {
+        setConfirmModal(null);
+        archiveDocument();
+      },
+    });
+
+  const askPermanentDelete = () =>
+    setConfirmModal({
+      title: "Delete permanently",
+      message: `Permanently delete ${selected.docNumber}? This cannot be undone and the document will be removed from the system.`,
+      confirmLabel: "Delete permanently",
+      danger: true,
+      onConfirm: () => {
+        setConfirmModal(null);
+        deleteDocumentPermanently();
+      },
+    });
 
   return (
     <div className="dt-root">
       <div className="dt-page">
         {!dbOnline && (
-          <div className="dt-empty" style={{ marginBottom: 12, background: "var(--amber-soft)", color: "var(--amber-ink)" }}>
-            Offline. Changes are saved on this device and will sync when the connection returns.
+          <div className="dt-offline-banner" role="status">
+            You are offline. Your changes are saved on this device and will be
+            uploaded automatically when the internet connection comes back.
           </div>
         )}
+
+        <div className="dt-view-switch" role="tablist" aria-label="Choose which documents to show">
+          {VIEW_MODES.map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              role="tab"
+              aria-selected={viewMode === v.key}
+              className="dt-view-btn"
+              data-active={viewMode === v.key}
+              onClick={() => switchView(v.key)}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
 
         <div className="dt-tabs" role="tablist" aria-label="Filter documents by status">
           {FILTERS.map((f) => (
@@ -689,11 +797,11 @@ export default function DocumentTracking() {
           <div className="dt-card dt-list-card">
             <div className="dt-card-head">
               <div>
-                <h2>Documents</h2>
+                <h2>{inArchive ? "Archive" : "Documents"}</h2>
                 <p>{listLoading ? "Loading…" : `${visibleDocuments.length} of ${filtered.length} shown`}</p>
               </div>
               <div className="dt-toolbar">
-                {is_admin && (
+                {is_admin && !inArchive && (
                   <button
                     type="button"
                     className="dt-btn dt-btn-primary dt-btn-lg"
@@ -732,7 +840,11 @@ export default function DocumentTracking() {
                 ))
               )}
               {!listLoading && filtered.length === 0 && (
-                <div className="dt-empty">No documents match this search or filter.</div>
+                <div className="dt-empty">
+                  {inArchive && documents.length === 0
+                    ? "The archive is empty."
+                    : "No documents match this search or filter."}
+                </div>
               )}
               {visibleDocuments.map((doc) => (
                 <DocumentRow
@@ -791,7 +903,9 @@ export default function DocumentTracking() {
                     <button className="dt-btn dt-btn-ghost" onClick={() => loadDetail(selectedId)}>Retry</button>
                   </>
                 ) : documents.length === 0 ? (
-                  "No documents yet — they'll appear here once submitted."
+                  inArchive
+                    ? "Nothing archived yet."
+                    : "No documents yet — they'll appear here once submitted."
                 ) : (
                   "Select a document from the list to see its details."
                 )}
@@ -817,29 +931,47 @@ export default function DocumentTracking() {
                   <span className="dt-save-note">
                     {justSaved ? "Saved" : "\u00A0"}
                   </span>
-                  {is_admin && (
+                  {is_admin && !selected.archived && (
                     <button
                       type="button"
-                      className="dt-btn dt-btn-danger"
+                      className="dt-btn dt-btn-ghost"
                       disabled={busy}
-                      onClick={() => {
-                        setConfirmModal({
-                          title: "Delete document",
-                          message: `Delete ${selected.docNumber}? This permanently removes the document and cannot be undone.`,
-                          confirmLabel: "Delete",
-                          danger: true,
-                          onConfirm: () => {
-                            setConfirmModal(null);
-                            deleteDocument();
-                          },
-                        });
-                      }}
+                      onClick={askArchive}
                     >
-                      Delete
+                      Archive
                     </button>
+                  )}
+                  {is_admin && selected.archived && (
+                    <>
+                      <button
+                        type="button"
+                        className="dt-btn dt-btn-primary"
+                        disabled={busy}
+                        onClick={restoreDocument}
+                      >
+                        Restore
+                      </button>
+                      <button
+                        type="button"
+                        className="dt-btn dt-btn-danger"
+                        disabled={busy}
+                        onClick={askPermanentDelete}
+                      >
+                        Delete permanently
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
+
+              {selected.archived && (
+                <div className="dt-archived-banner" role="status">
+                  This document is in the archive
+                  {selected.archivedAt ? ` since ${formatDate(selected.archivedAt)}` : ""}.
+                  Processing is paused
+                  {is_admin ? ". Restore it to continue, or delete it permanently." : "."}
+                </div>
+              )}
 
               {actionError && (
                 <div className="dt-empty" style={{ marginBottom: 12 }}>{actionError}</div>
@@ -1174,7 +1306,7 @@ export default function DocumentTracking() {
                 })}
               </ul>
 
-              {activeIndex === -1 && !selected.rejected && (
+              {activeIndex === -1 && !selected.rejected && !selected.archived && (
                 <p className="dt-pipeline-done" style={{ marginTop: 12 }}>
                   All steps complete — this document is fully processed.
                 </p>
@@ -1431,7 +1563,7 @@ export default function DocumentTracking() {
         </div>
       )}
 
-      {/* Generic confirm modal (Reject / Delete) */}
+      {/* Generic confirm modal (Archive / Delete permanently / Reject) */}
       {confirmModal && (
         <div
           className="dt-modal-overlay"

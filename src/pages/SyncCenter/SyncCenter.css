@@ -87,3 +87,113 @@
     box-shadow: none;
   }
 }
+/* ─── CONFIRM MODAL ─────────────────────────────────────────────────── */
+.sc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1000;
+  animation: sc-fade-in 0.15s ease-out;
+}
+
+.sc-modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.35);
+  text-align: left;
+  animation: sc-pop-in 0.18s ease-out;
+}
+
+.sc-modal__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #1e40af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.sc-modal__icon--danger {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.sc-modal__title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.sc-modal__message {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.sc-modal__detail {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #334155;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 18px;
+  word-break: break-word;
+}
+
+.sc-modal__error {
+  color: #b91c1c;
+}
+
+.sc-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sc-btn--danger-solid {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+.sc-btn--danger-solid:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+@keyframes sc-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes sc-pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@media (max-width: 640px) {
+  .sc-modal {
+    padding: 18px;
+  }
+  .sc-modal__footer .sc-btn {
+    flex: 1 1 auto;
+  }
+}

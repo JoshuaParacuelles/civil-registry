@@ -48,7 +48,7 @@ export function OfflineProvider({ children }) {
     }
   }, []);
 
-  const notify = useCallback((nowOnline) => {
+     const notify = useCallback((nowOnline) => {
     if (lastNotified.current === nowOnline) return;
     const firstCheck = lastNotified.current === null;
     lastNotified.current = nowOnline;
@@ -58,15 +58,17 @@ export function OfflineProvider({ children }) {
       pushToast({
         title: 'Back online',
         message: 'Connection restored. Saved changes will sync now.',
-        success: true,
+        type: 'success',
+        presentation: 'status',
         duration: 4000,
       });
     } else {
-      // Offline is a status, not an error, so it uses the warning tone (amber), not red.
+      // Offline is a status, not an error, so it uses the neutral (gray) tone.
       pushToast({
         title: 'Offline mode',
         message: 'Changes are saved on this device and will sync when the connection returns.',
-        tone: 'warning',
+        type: 'neutral',
+        presentation: 'status',
         duration: 6000,
       });
     }

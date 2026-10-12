@@ -115,3 +115,4 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 export const supabase = client;
+export const isSupabaseConfigured = client !== noopClient;

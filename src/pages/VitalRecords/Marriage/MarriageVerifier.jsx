@@ -12,11 +12,15 @@ import {
   useVitalData, loadPdfForRecord, deleteRecordSmart, queueUpload, queueTransaction,
 } from "../../../offline/vitalOffline";
 import { verifyArchivePasswordOffline, refreshOfflineCredential } from "../../../offline/archivePassword";
+import { useDataChanged } from "../../../hooks/useDataChanged";
 
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/marriage`;
 const ENTITY = "marriage";
 const FEE = 75;
 const MAX_UPLOAD = 5;
+
+// Realtime: tables nga mo-trigger og reload sa Marriage Verifier.
+const MARRIAGE_LIVE_TABLES = ["marriage_records", "marriage_transactions"];
 
 // Adapter: keeps showNotif("message", "success" | "error") working
 // on top of the shared toastService (which uses success: true/false).
@@ -1177,8 +1181,7 @@ function uploadWithProgress(url, formData, onProgress) {
 
 // Inline layout for the "matching surname records" list. Marriage names
 // are "Groom & Bride" and much longer than Birth/Death names, so without this
-// the date dropped under the name and the modal grew past the screen (the
-// Done button got cut off).
+// the date dropped under the name and the modal grew past the screen.
 const MATCH_LIST_STYLE = { maxHeight: 260, overflowY: "auto" };
 const MATCH_ROW_STYLE = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "nowrap", gap: 12 };
 const MATCH_LEFT_STYLE = { display: "flex", alignItems: "center", flexWrap: "nowrap", gap: 8, flex: "1 1 auto", minWidth: 0 };
@@ -1592,6 +1595,11 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     toBlob: createPdfBlobFromData, showNotif,
   });
 
+  // Realtime: i-reload ang lists kung naay bag-ong marriage record o transaction (gikan sa bisan asang device).
+  useDataChanged(() => {
+    if (isOnline()) { fetchRecords(); fetchArchived(); }
+  }, { tables: MARRIAGE_LIVE_TABLES, debounceMs: 750 });
+
   const [archiveSearch, setArchiveSearch] = useState("");
   const [archiveUnlocked, setArchiveUnlocked] = useState(false);
 
@@ -1765,7 +1773,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
           body: JSON.stringify(payload),
         });
       } catch { return await saveOffline(); }
-      if (res.status >= 500 && !(await checkNow())) return await saveOffline(); // server/DB down
+      if (res.status >= 500 && !(await checkNow())) return await saveOffline();
 
       let data = {};
       try { data = await res.json(); } catch { /* non-JSON */ }

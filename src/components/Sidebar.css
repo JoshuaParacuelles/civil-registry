@@ -154,7 +154,9 @@
 
 .sidebar-menu {
   list-style: none;
-  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 16px 16px 12px;
   margin: 0;
   flex: 1;
   overflow-y: auto;
@@ -168,6 +170,11 @@
 .sidebar-menu::-webkit-scrollbar-track { background: transparent; }
 .sidebar-menu::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 4px; }
 .sidebar-menu::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+
+/* Every direct child keeps its natural height so nothing gets squeezed to zero. */
+.sidebar-menu > * {
+  flex-shrink: 0;
+}
 
 .sidebar-group-label {
   font-size: 9.5px;
@@ -184,7 +191,8 @@
 
 .sidebar-menu > li {
   padding: 9px 10px;
-  margin-bottom: 2px;
+  min-height: 52px;
+  margin-bottom: 18px;
   cursor: pointer;
   border-radius: 9px;
   display: flex;
@@ -196,10 +204,13 @@
   font-weight: 500;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  min-height: 42px;
   letter-spacing: 0.1px;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.sidebar-menu > li:last-of-type {
+  margin-bottom: 0;
 }
 
 /* Label text takes the remaining space and truncates. */
@@ -211,6 +222,7 @@
   text-overflow: ellipsis;
 }
 
+/* Hover: subtle, neutral. */
 .sidebar-menu > li:hover {
   background: var(--sidebar-hover-bg);
   color: #ffffff;
@@ -218,8 +230,17 @@
 
 .sidebar-menu > li:active { transform: scale(0.99); }
 
+/* Active main item: primary blue. */
 .sidebar-menu > li.active {
-  background: var(--sidebar-active-bg);
+  background: var(--sidebar-active-bg, #2563eb);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Parent (Vital Records / System Settings) stays primary blue while
+   one of its submenu pages is open. */
+.sidebar-menu > li.parent-only.active {
+  background: var(--sidebar-active-bg, #2563eb);
   color: #ffffff;
   font-weight: 700;
 }
@@ -227,6 +248,7 @@
 .sidebar.collapsed .sidebar-menu > li {
   justify-content: center;
   padding: 9px 0;
+  margin-bottom: 18px;
 }
 
 /* ---------- Icons ---------- */
@@ -248,11 +270,6 @@
 .sidebar-menu > li.active .menu-icon,
 .sidebar-footer .footer-item:hover .menu-icon {
   opacity: 1;
-}
-
-/* Sync icon is a dark PNG: force it white so it matches the other icons. */
-.sidebar-menu > li .menu-icon.menu-icon--sync {
-  filter: brightness(0) invert(1);
 }
 
 /* ---------- Arrow (parent menus) ---------- */
@@ -312,6 +329,7 @@
 
 .submenu {
   list-style: none;
+  flex-shrink: 0;
   padding-left: 0;
   max-height: 0;
   opacity: 0;
@@ -325,7 +343,7 @@
 .submenu.open {
   max-height: 600px;
   opacity: 1;
-  padding: 2px 6px 8px;
+  padding: 2px 0 8px;
 }
 
 .submenu li {
@@ -362,32 +380,26 @@
   background: var(--sidebar-hover-bg);
   color: #ffffff;
 }
-.submenu li:hover::before { background: rgba(255, 255, 255, 0.75); }
+.submenu li:hover::before { background: rgba(255, 255, 255, 0.6); }
 .submenu li:active { transform: scale(0.99); }
+
+/* Active submenu item: primary blue, same as the main active item. */
 .submenu li.active {
-  color: #93c5fd;
+  background: var(--sidebar-active-bg, #2563eb);
+  color: #ffffff;
   font-weight: 700;
-  background: rgba(255, 255, 255, 0.05);
 }
-.submenu li.active::before { background: #93c5fd; }
+.submenu li.active::before { background: #ffffff; }
 
-/* ---------- Separator ---------- */
+/* ---------- Separator (hidden) ---------- */
 
-.menu-separator {
-  border: none;
-  border-top: 1px solid var(--sidebar-border);
-  margin: 8px 6px;
-  padding: 0;
-  list-style: none;
-  display: block;
-}
+.menu-separator { display: none !important; }
 
 /* ---------- Footer (logout) ---------- */
 
 .sidebar-footer {
   margin-top: auto;
   padding: 10px 8px 12px;
-  border-top: 1px solid var(--sidebar-border);
   flex-shrink: 0;
   background: var(--sidebar-bg-deeper);
 }

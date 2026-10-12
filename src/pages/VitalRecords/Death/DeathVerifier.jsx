@@ -12,11 +12,15 @@ import {
   useVitalData, loadPdfForRecord, deleteRecordSmart, queueUpload, queueTransaction,
 } from "../../../offline/vitalOffline";
 import { verifyArchivePasswordOffline, refreshOfflineCredential } from "../../../offline/archivePassword";
+import { useDataChanged } from "../../../hooks/useDataChanged";
 
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/death`;
 const ENTITY = "death";
 const FEE = 75;
 const MAX_UPLOAD = 5;
+
+// Realtime: tables nga mo-trigger og reload sa Death Verifier.
+const DEATH_LIVE_TABLES = ["death_records", "death_transactions"];
 
 function useShowNotif() {
   return (message, type = "success") => {
@@ -227,6 +231,16 @@ function getRecordFirstName(record) {
   return "";
 }
 
+// First + middle name, used only for the accuracy score.
+function getRecordGivenNames(record) {
+  const first  = cleanNamePart(record?.deceased_first_name);
+  const middle = cleanNamePart(record?.deceased_middle_name);
+  if (first) return [first, middle].filter(Boolean).join(" ");
+  const parts = cleanNamePart(record?.deceased_full_name).split(/\s+/).filter(Boolean);
+  if (parts.length > 1) return parts.slice(0, -1).join(" ");
+  return parts[0] || "";
+}
+
 function createPdfBlobFromData(pdfData) {
   if (!pdfData) return null;
   try {
@@ -322,22 +336,11 @@ const OfficeLogo = ({ className = "" }) => {
     );
   }
   return (
-    <svg
-      className={className}
-      viewBox="0 0 100 100"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg className={className} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
       <circle cx="50" cy="50" r="47" fill="#f8fafc" stroke="#1a3c6e" strokeWidth="2.5" />
       <circle cx="50" cy="50" r="39" fill="none" stroke="#1a3c6e" strokeWidth="1.2" />
-      <path
-        d="M50 20 L54 32 L67 32 L57 40 L61 53 L50 45 L39 53 L43 40 L33 32 L46 32 Z"
-        fill="#1a3c6e"
-      />
-      <text
-        x="50" y="72" textAnchor="middle"
-        fontFamily="Times New Roman, serif" fontSize="8.5" fontWeight="700"
-        fill="#1a3c6e" letterSpacing="0.5"
-      >
+      <path d="M50 20 L54 32 L67 32 L57 40 L61 53 L50 45 L39 53 L43 40 L33 32 L46 32 Z" fill="#1a3c6e" />
+      <text x="50" y="72" textAnchor="middle" fontFamily="Times New Roman, serif" fontSize="8.5" fontWeight="700" fill="#1a3c6e" letterSpacing="0.5">
         OFFICE SEAL
       </text>
     </svg>
@@ -460,7 +463,6 @@ function printNegativeCertificate(certData) {
   .neg-print-payment-colon { min-width: 8pt; flex-shrink: 0; margin-right: 4pt; }
   .neg-print-payment-value { flex: 1; font-size: 12pt; color: #000; }
   .neg-print-payment-blank { flex: 1; min-width: 100pt; height: 14pt; display: inline-block; }
-
   .neg-cert-doc__highlight { font-weight: bold; color: #000; }
 </style>
 </head>
@@ -720,7 +722,7 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
 };
 
 const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
-  const [pdfUrl,   setPdfUrl]   = useState("");
+  const [pdfUrl, setPdfUrl] = useState("");
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
@@ -755,7 +757,7 @@ const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
                 {printing ? "Printing…" : "Print"}
               </button>
             )}
-            <button className="hdr-btn hdr-btn--close" onClick={onClose}>&#10005; Close</button>
+            <button className="hdr-btn hdr-btn--close" onClick={onClose}>✕ Close</button>
           </div>
         </div>
         <div className="pdf-body">
@@ -782,9 +784,9 @@ const StepBar = ({ current }) => {
       <div className="ubr-stepbar">
         <div className="ubr-stepbar__inner">
           {STEPS.map((s, i) => {
-            const done   = i < idx;
+            const done = i < idx;
             const active = i === idx;
-            const mod    = done ? "done" : active ? "active" : "pending";
+            const mod = done ? "done" : active ? "active" : "pending";
             const isLast = i === STEPS.length - 1;
             const segDone = i < idx;
             return (
@@ -827,20 +829,11 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
       } else if (result === "wrong") {
         showNotif("Incorrect password.", "error");
       } else if (result === "locked") {
-        showNotif(
-          "Too many wrong attempts. Try again in 5 minutes.",
-          "error"
-        );
+        showNotif("Too many wrong attempts. Try again in 5 minutes.", "error");
       } else if (result === "unset") {
-        showNotif(
-          "No password is set for this module yet.",
-          "error"
-        );
+        showNotif("No password is set for this module yet.", "error");
       } else {
-        showNotif(
-          "This device hasn't saved the password data yet. Open the app once while online and logged in.",
-          "error"
-        );
+        showNotif("This device hasn't saved the password data yet. Open the app once while online and logged in.", "error");
       }
     } catch (error) {
       console.error("Offline archive password verification failed:", error);
@@ -850,53 +843,30 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
 
   const handleSubmit = async () => {
     const pw = pwInput.trim();
-
-    if (!pw) {
-      showNotif("Password is required.", "error");
-      return;
-    }
-
+    if (!pw) { showNotif("Password is required.", "error"); return; }
     setLoading(true);
-
     try {
-      if (!isOnline()) {
-        await unlockOffline(pw);
-        return;
-      }
+      if (!isOnline()) { await unlockOffline(pw); return; }
 
       let res;
-
       try {
         res = await fetch(`${API}/auth/verify`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            module,
-            password: pw,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ module, password: pw }),
         });
       } catch {
         await unlockOffline(pw);
         return;
       }
-
-      if (res.status >= 500) {
-        await unlockOffline(pw);
-        return;
-      }
+      if (res.status >= 500) { await unlockOffline(pw); return; }
 
       const data = await res.json().catch(() => ({}));
-
       if (data.success) {
         refreshOfflineCredential();
         onUnlock();
       } else {
-        showNotif(
-          data.message || "Incorrect password.",
-          "error"
-        );
+        showNotif(data.message || "Incorrect password.", "error");
       }
     } catch (error) {
       console.error("Archive password verification failed:", error);
@@ -908,20 +878,10 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
 
   return (
     <div className="pw-gate">
-      <div className="pw-gate__icon">
-        <IconLock />
-      </div>
-
+      <div className="pw-gate__icon"><IconLock /></div>
       <p className="pw-gate__desc">{description}</p>
-
       <div className="pw-gate__form">
-        <label
-          className="pw-lbl"
-          htmlFor="archive-admin-password"
-        >
-          Administrator Password
-        </label>
-
+        <label className="pw-lbl" htmlFor="archive-admin-password">Administrator Password</label>
         <div className="pw-input-wrap">
           <input
             id="archive-admin-password"
@@ -929,18 +889,13 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
             type={showPw ? "text" : "password"}
             value={pwInput}
             onChange={(e) => setPwInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !loading) {
-                handleSubmit();
-              }
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !loading) handleSubmit(); }}
             placeholder="Enter password"
             className="pw-input"
             autoComplete="current-password"
             autoFocus
             disabled={loading}
           />
-
           <button
             className="pw-toggle"
             type="button"
@@ -952,20 +907,8 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
             {showPw ? <IconEyeOff /> : <IconEye />}
           </button>
         </div>
-
-        <button
-          className="btn btn-primary pw-gate__submit-btn"
-          onClick={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? (
-            <>
-              <div className="spinner spinner--sm" />
-              &nbsp;Verifying…
-            </>
-          ) : (
-            "Unlock & View Records →"
-          )}
+        <button className="btn btn-primary pw-gate__submit-btn" onClick={handleSubmit} disabled={loading}>
+          {loading ? (<><div className="spinner spinner--sm" />&nbsp;Verifying…</>) : "Unlock & View Records →"}
         </button>
       </div>
     </div>
@@ -989,9 +932,9 @@ const NegativeCertPreview = ({
   orNumber, onOrNumberChange, onPrint,
 }) => {
   const todayDate = formatTodayLong();
-  const officer   = OFFICE_CONFIG.certifyingOfficer;
-  const verified  = OFFICE_CONFIG.verifiedBy;
-  const year      = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
+  const officer = OFFICE_CONFIG.certifyingOfficer;
+  const verified = OFFICE_CONFIG.verifiedBy;
+  const year = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
 
   return (
     <div className="neg-cert-preview-wrap">
@@ -1100,7 +1043,6 @@ const NegativeCertPreview = ({
   );
 };
 
-// Green progress bar used in the upload dialog (self-styled, no CSS file needed).
 const UploadProgressBar = ({ value = 0, width = "100%", height = 10, showLabel = true }) => {
   const pct = Math.max(0, Math.min(100, Math.round(value)));
   return (
@@ -1147,8 +1089,6 @@ function uploadWithProgress(url, formData, onProgress) {
   });
 }
 
-// Single-line rows for the "uploaded records" list; long names are cut off
-// with an ellipsis (full name on hover) so the icon, badge and date never wrap.
 const MATCH_LIST_STYLE  = { maxHeight: 260, overflowY: "auto" };
 const MATCH_ROW_STYLE   = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "nowrap", gap: 12 };
 const MATCH_LEFT_STYLE  = { display: "flex", alignItems: "center", flexWrap: "nowrap", gap: 8, flex: "1 1 auto", minWidth: 0 };
@@ -1158,14 +1098,14 @@ const MATCH_BADGE_STYLE = { flexShrink: 0, whiteSpace: "nowrap" };
 const MATCH_DATE_STYLE  = { flexShrink: 0, whiteSpace: "nowrap" };
 
 const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
-  const [stage,           setStage]           = useState("upload");
-  const [queue,           setQueue]           = useState([]);
+  const [stage, setStage] = useState("upload");
+  const [queue, setQueue] = useState([]);
   const [uploadedRecords, setUploadedRecords] = useState([]);
-  const [matches,         setMatches]         = useState([]);
-  const [isUploading,     setIsUploading]     = useState(false);
+  const [matches, setMatches] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
   const fileRef = useRef(null);
 
-  const slotsLeft    = MAX_UPLOAD - queue.length;
+  const slotsLeft = MAX_UPLOAD - queue.length;
   const limitReached = queue.length >= MAX_UPLOAD;
 
   const overallProgress = queue.length
@@ -1173,7 +1113,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
     : 0;
 
   const getLimitClass = () => {
-    if (limitReached)                   return "upl-limit-badge--reached";
+    if (limitReached) return "upl-limit-badge--reached";
     if (queue.length >= MAX_UPLOAD - 1) return "upl-limit-badge--warn";
     return "upl-limit-badge--ok";
   };
@@ -1259,7 +1199,7 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
                 : `${uploadedRecords.length} file${uploadedRecords.length > 1 ? "s" : ""} uploaded successfully`}
             </div>
           </div>
-          <button className="upl-close" onClick={onClose} aria-label="Close upload dialog">&#10005;</button>
+          <button className="upl-close" onClick={onClose} aria-label="Close upload dialog">✕</button>
         </div>
 
         {stage === "upload" && (
@@ -1427,8 +1367,8 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
 };
 
 const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) => {
-  const displayName             = record ? getRecordDisplayName(record) : "";
-  const [pdfUrl,   setPdfUrl]   = useState("");
+  const displayName = record ? getRecordDisplayName(record) : "";
+  const [pdfUrl, setPdfUrl] = useState("");
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
@@ -1510,15 +1450,7 @@ const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, on
       <div className="mobile-record-card__date">{formatDate(record.archived_at)}</div>
       <div className="mobile-record-card__actions">
         <button className="tbl-btn tbl-btn--blue" onClick={onView}>View</button>
-        <button
-          className="tbl-btn tbl-btn--green"
-          style={{ background: "#059669", borderColor: "#059669", color: "#fff" }}
-          onClick={onRestore}
-          disabled={restoring}
-        >
-          {restoring ? "Restoring…" : "Restore"}
-        </button>
-        <button className="tbl-btn tbl-btn--red"  onClick={onDelete}>Delete</button>
+        <button className="tbl-btn tbl-btn--red" onClick={onDelete}>Delete</button>
       </div>
     </div>
   );
@@ -1526,30 +1458,30 @@ const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, on
 
 /* ── Main Component ──────────────────────────────────────────────────────── */
 export default function UnifiedDeathRegistry({ initialView = null }) {
-  const [tab,             setTab]             = useState(initialView === "archive" ? "archive" : "transaction");
-  const [confirmModal,    setConfirmModal]    = useState(null);
+  const [tab, setTab] = useState(initialView === "archive" ? "archive" : "transaction");
+  const [confirmModal, setConfirmModal] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [pdfModal,        setPdfModal]        = useState(null);
-  const [negCertModal,    setNegCertModal]    = useState(null);
-  const [negCertInfo,     setNegCertInfo]     = useState({ fatherName: "", motherName: "", dateOfDeath: "", requestorName: "" });
-  const [orNumber,        setOrNumber]        = useState("");
+  const [pdfModal, setPdfModal] = useState(null);
+  const [negCertModal, setNegCertModal] = useState(null);
+  const [negCertInfo, setNegCertInfo] = useState({ fatherName: "", motherName: "", dateOfDeath: "", requestorName: "" });
+  const [orNumber, setOrNumber] = useState("");
 
   const showNotif = useShowNotif();
 
-  const [step,           setStep]           = useState("select");
-  const [srchFirstName,  setSrchFirstName]  = useState("");
-  const [srchLastName,   setSrchLastName]   = useState("");
-  const [hasSearched,    setHasSearched]    = useState(false);
+  const [step, setStep] = useState("select");
+  const [srchFirstName, setSrchFirstName] = useState("");
+  const [srchLastName, setSrchLastName] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
   const [firstNameError, setFirstNameError] = useState("");
-  const [lastNameError,  setLastNameError]  = useState("");
+  const [lastNameError, setLastNameError] = useState("");
   const [selectedRecord, setSelectedRecord] = useState(null);
-  const [recordStatus,   setRecordStatus]   = useState(null);
-  const [subjectName,    setSubjectName]    = useState("");
-  const [payRef,         setPayRef]         = useState("");
-  const [processing,     setProcessing]     = useState(false);
+  const [recordStatus, setRecordStatus] = useState(null);
+  const [subjectName, setSubjectName] = useState("");
+  const [payRef, setPayRef] = useState("");
+  const [processing, setProcessing] = useState(false);
 
-  const [step2PdfData,     setStep2PdfData]     = useState(null);
-  const [step2PdfLoading,  setStep2PdfLoading]  = useState(false);
+  const [step2PdfData, setStep2PdfData] = useState(null);
+  const [step2PdfLoading, setStep2PdfLoading] = useState(false);
   const [previewLoadingId, setPreviewLoadingId] = useState(null);
 
   const { allRecords, allArchivedRecords, loadingRecords, fetchRecords, fetchArchived } = useVitalData({
@@ -1557,11 +1489,15 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     toBlob: createPdfBlobFromData, showNotif,
   });
 
-  const [archiveSearch,      setArchiveSearch]      = useState("");
-  const [archiveUnlocked,    setArchiveUnlocked]    = useState(false);
+  // Realtime: i-reload ang lists kung naay bag-ong death record o transaction (gikan sa bisan asang device).
+  useDataChanged(() => {
+    if (isOnline()) { fetchRecords(); fetchArchived(); }
+  }, { tables: DEATH_LIVE_TABLES, debounceMs: 750 });
 
-  // Bulk selection (Archive tab)
-  const [selectedIds,  setSelectedIds]  = useState(new Set());
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const [archiveUnlocked, setArchiveUnlocked] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { isMobile, isTablet } = useViewport();
@@ -1589,41 +1525,34 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
 
   const searchResults = hasSearched && searchLN
     ? allRecordsForSearch.filter((r) => {
-        const ln      = getRecordLastName(r);
+        const ln = getRecordLastName(r);
         const lnWords = ln.split(/\s+/).filter(Boolean);
-        const qWords  = searchLN.split(/\s+/).filter(Boolean);
+        const qWords = searchLN.split(/\s+/).filter(Boolean);
         return qWords.every((qw) => lnWords.some((lw) => lw === qw));
       })
     : [];
 
-  // Accuracy of a record vs. what was searched (used for the badge and the sort tiebreaker)
   const getAccuracy = (r) =>
     computeAccuracy(
       { lastName: srchLastName, firstName: srchFirstName },
-      { lastName: getRecordLastName(r), firstName: getRecordFirstName(r) }
+      { lastName: getRecordLastName(r), firstName: getRecordGivenNames(r) }
     );
 
   const sortedResults = [...searchResults].sort((a, b) => {
     const aFN = getRecordFirstName(a); const bFN = getRecordFirstName(b);
     if (!a._isArchived && b._isArchived) return -1;
-    if (a._isArchived  && !b._isArchived) return 1;
+    if (a._isArchived && !b._isArchived) return 1;
     const aExact = searchFN && aFN === searchFN;
     const bExact = searchFN && bFN === searchFN;
     if (aExact && !bExact) return -1;
     if (!aExact && bExact) return 1;
-
-    // Tiebreaker: higher accuracy first, then alphabetical
     const diff = getAccuracy(b) - getAccuracy(a);
     if (diff !== 0) return diff;
     return aFN.localeCompare(bFN);
   });
 
-  // Selecting a record — whether active or archived — is purely a
-  // local/UI action. It never calls the backend and never changes the
-  // record's real is_archived status in the database.
   const handleSelectFromSearch = (record) => {
     const displayName = getRecordDisplayName(record);
-
     setSelectedRecord(record);
     setRecordStatus("ACTIVE");
     setSubjectName(displayName);
@@ -1673,7 +1602,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   };
 
   const isPositive = recordStatus === "ACTIVE";
-  const issuedDoc  = isPositive
+  const issuedDoc = isPositive
     ? "Certified True Copy of Death Certificate (Actual)"
     : "Certificate of No Death Record (Negative Certificate)";
 
@@ -1684,14 +1613,14 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     }
     printNegativeCertificate({
       subjectName,
-      dateOfDeath:       negCertInfo.dateOfDeath  || null,
-      fatherName:        negCertInfo.fatherName    || null,
-      motherName:        negCertInfo.motherName    || null,
-      requestorName:     negCertInfo.requestorName || null,
-      cityMunicipality:  OFFICE_CONFIG.cityMunicipality,
+      dateOfDeath: negCertInfo.dateOfDeath || null,
+      fatherName: negCertInfo.fatherName || null,
+      motherName: negCertInfo.motherName || null,
+      requestorName: negCertInfo.requestorName || null,
+      cityMunicipality: OFFICE_CONFIG.cityMunicipality,
       certifyingOfficer: OFFICE_CONFIG.certifyingOfficer,
-      verifiedBy:        OFFICE_CONFIG.verifiedBy,
-      amountPaid:        OFFICE_CONFIG.amountPaid,
+      verifiedBy: OFFICE_CONFIG.verifiedBy,
+      amountPaid: OFFICE_CONFIG.amountPaid,
       orNumber: orNumber.trim(),
       datePaid: formatTodayLong(),
       todayDate: formatTodayLong(),
@@ -1734,7 +1663,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
           body: JSON.stringify(payload),
         });
       } catch { return await saveOffline(); }
-      if (res.status >= 500 && !(await checkNow())) return await saveOffline(); // server/DB down
+      if (res.status >= 500 && !(await checkNow())) return await saveOffline();
 
       let data = {};
       try { data = await res.json(); } catch { /* non-JSON */ }
@@ -1788,9 +1717,8 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     ? allArchivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
     : allArchivedRecords;
 
-  // ── Bulk selection (Archive) ─────────────────────────────────────────────
-  const filteredIds  = filteredArchived.map((r) => r.id);
-  const allSelected  = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const filteredIds = filteredArchived.map((r) => r.id);
+  const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
   const someSelected = !allSelected && filteredIds.some((id) => selectedIds.has(id));
 
   const toggleSelect = (id) =>
@@ -1800,23 +1728,21 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
       return next;
     });
 
-  // Select All only affects the rows currently visible (respects the search box).
   const toggleSelectAll = () =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allSelected) filteredIds.forEach((id) => next.delete(id));
-      else             filteredIds.forEach((id) => next.add(id));
+      else filteredIds.forEach((id) => next.add(id));
       return next;
     });
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  // Drop selections whose records no longer exist (after delete / refetch).
   useEffect(() => {
     setSelectedIds((prev) => {
       if (prev.size === 0) return prev;
       const valid = new Set(allArchivedRecords.map((r) => r.id));
-      const next  = new Set([...prev].filter((id) => valid.has(id)));
+      const next = new Set([...prev].filter((id) => valid.has(id)));
       return next.size === prev.size ? prev : next;
     });
   }, [allArchivedRecords]);
@@ -1836,11 +1762,11 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
         const results = await Promise.allSettled(
           ids.map((id) => deleteRecordSmart(ENTITY, API, id, byId.get(id), getRecordDisplayName(byId.get(id)))),
         );
-        const failed  = results.filter((r) => r.status === "rejected").length;
-        const queued  = results.filter((r) => r.status === "fulfilled" && r.value === "queued").length;
+        const failed = results.filter((r) => r.status === "rejected").length;
+        const queued = results.filter((r) => r.status === "fulfilled" && r.value === "queued").length;
         const deleted = ids.length - failed;
         if (deleted > 0) showNotif(`${deleted} record${deleted !== 1 ? "s" : ""} deleted` + (queued ? ` (${queued} will finish syncing when you're back online).` : "."), "success");
-        if (failed  > 0) showNotif(`${failed} record${failed !== 1 ? "s" : ""} could not be deleted.`, "error");
+        if (failed > 0) showNotif(`${failed} record${failed !== 1 ? "s" : ""} could not be deleted.`, "error");
         clearSelection();
         if (isOnline()) await fetchArchived();
         setBulkDeleting(false);
@@ -1848,7 +1774,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     });
   };
 
-  /* ── Render ────────────────────────────────────────────────────────────── */
   return (
     <div className="ubr-root">
 
@@ -1874,7 +1799,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
         />
       )}
 
-      {/* ── Header / Tab bar ──────────────────────────────────────────── */}
       <div className="ubr-header">
         <div className="ubr-header__brand">
           <span className="ubr-header__logo"><IconGrid /></span>
@@ -1896,7 +1820,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
         </div>
       </div>
 
-      {/* ── Transaction Tab ───────────────────────────────────────────── */}
       {tab === "transaction" && (
         <div className="ubr-body">
           <div className="ubr-tx">
@@ -1904,7 +1827,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
             <div className="ubr-tx__scroll">
               <div className="ubr-card">
 
-                {/* Step 1 — Select */}
                 {step === "select" && (
                   <>
                     <div className="step-scroll">
@@ -1974,15 +1896,13 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                             ) : (
                               <>
                                 {sortedResults.map((r) => {
-                                  const display       = getRecordDisplayName(r);
-                                  const father        = getFatherDisplayName(r);
-                                  const mother        = getMotherDisplayName(r);
+                                  const display = getRecordDisplayName(r);
+                                  const father = getFatherDisplayName(r);
+                                  const mother = getMotherDisplayName(r);
                                   const isLoadingPrev = previewLoadingId === r.id;
-                                  const isSelected    =
+                                  const isSelected =
                                     selectedRecord?.id === r.id &&
                                     !!selectedRecord?._isArchived === !!r._isArchived;
-
-                                  // Accuracy % of this record vs. what was searched
                                   const accuracy = getAccuracy(r);
 
                                   return (
@@ -2054,7 +1974,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                   </>
                 )}
 
-                {/* Step 2 — Review & Print */}
                 {step === "payment" && (
                   <>
                     <div className="step-scroll">
@@ -2098,7 +2017,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                   </>
                 )}
 
-                {/* Step 3 — Release */}
                 {step === "releasing" && (
                   <>
                     <div className="step-scroll">
@@ -2151,7 +2069,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
         </div>
       )}
 
-      {/* ── Archive Tab ───────────────────────────────────────────────── */}
       {tab === "archive" && (
         <div className="tab-wrap">
           {!archiveUnlocked ? (
@@ -2201,7 +2118,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                 </div>
               </div>
               <div className="tab-card">
-                {/* Bulk action bar — only visible when something is selected */}
                 {selectedIds.size > 0 && (
                   <div className="bulk-bar">
                     <span className="bulk-bar__count">{selectedIds.size} selected</span>
