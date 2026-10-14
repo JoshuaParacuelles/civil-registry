@@ -164,14 +164,10 @@
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--sidebar-hover-bg) transparent;
+  scrollbar-width: none;            /* itinago ang scrollbar, scrollable pa rin */
 }
 
-.sidebar-menu::-webkit-scrollbar { width: 4px; }
-.sidebar-menu::-webkit-scrollbar-track { background: transparent; }
-.sidebar-menu::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 4px; }
-.sidebar-menu::-webkit-scrollbar-thumb:hover { background: var(--sidebar-border); }
+.sidebar-menu::-webkit-scrollbar { display: none; width: 0; }
 
 /* Every direct child keeps its natural height so nothing gets squeezed to zero. */
 .sidebar-menu > * {
@@ -212,7 +208,7 @@
   overflow: hidden;
 }
 
-.sidebar-menu > li:last-of-type {
+.sidebar-menu > li:last-of-type:not(.parent-only) {
   margin-bottom: 0;
 }
 
@@ -225,27 +221,26 @@
   text-overflow: ellipsis;
 }
 
+/* Parent groups have no margin of their own. The gap below them comes from
+   their submenu, so it animates together with the submenu's height. */
+.sidebar-menu > li.parent-only {
+  margin-bottom: 0;
+}
+
 /* Hover: subtle, neutral. */
 .sidebar-menu > li:hover {
   background: var(--sidebar-hover-subtle, rgba(255, 255, 255, 0.05));
-  
 }
 
 .sidebar-menu > li:active { transform: scale(0.99); }
 
-/* Active main item: lighter navy fill with a gold bar on the left edge. */
+/* Active main item: lighter navy fill. */
 .sidebar-menu > li.active {
   background: var(--sidebar-active-subtle, rgba(255, 255, 255, 0.09));
   color: var(--sidebar-text-strong);
 }
 
-/* Parent (Vital Records / System Settings) keeps the active look while
-   one of its submenu pages is open. */
-.sidebar-menu > li.parent-only.active {
-  background: var(--sidebar-active-subtle, rgba(255, 255, 255, 0.09));
-  color: var(--sidebar-text-strong);
-}
-
+/* Collapsed rail has no submenus rendered, so parents keep their normal gap. */
 .sidebar.collapsed .sidebar-menu > li {
   justify-content: center;
   padding: 9px 0;
@@ -326,49 +321,73 @@
 
 .sidebar.collapsed .sidebar-menu > li .sync-badge { display: none; }
 
-/* ---------- Submenu ---------- */
+/* ---------- Submenu ----------
+   The submenu <ul> is a sibling of its parent <li>, not nested inside it,
+   so clicks inside submenu items never bubble to the parent's onClick.
 
-.submenu {
+   The 18px gap below the group lives in the submenu's padding-bottom. It is
+   always there (open or closed), so the spacing never snaps, and it animates
+   with the same height transition as the items. */
+
+.sidebar-menu > .submenu {
   list-style: none;
   flex-shrink: 0;
-  padding-left: 0;
+  margin: 0;
+  padding: 0 0 18px;
   max-height: 0;
   opacity: 0;
+  visibility: hidden;
   overflow: hidden;
   transition:
-    max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    max-height 0.3s ease,
     opacity 0.3s ease,
-    padding 0.3s ease;
+    padding-top 0.3s ease,
+    visibility 0.3s ease;
 }
 
-.submenu.open {
+.sidebar-menu > .submenu.open {
   max-height: 600px;
   opacity: 1;
-  padding: 2px 0 8px;
+  visibility: visible;
+  padding-top: 2px;
 }
 
+/* Last group in the menu doesn't need a gap below it. */
+.sidebar-menu > .submenu:last-child {
+  padding-bottom: 0;
+}
+
+/* Submenu items: text starts under the parent label.
+   Parent text x = 12px menu padding + 10px li padding + 18px icon + 10px gap = 50px.
+   Submenu bullet is centered under the parent icon. */
 .submenu li {
-  padding: 7px 10px 7px 26px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--sidebar-text-muted);
-  border-radius: 8px;
-  margin: 2px 0;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
-  cursor: pointer;
-  min-height: 34px;
+  position: relative;
   display: flex;
   align-items: center;
+  min-height: 34px;
+  margin: 0 0 2px;
+  padding: 7px 10px 7px 38px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--sidebar-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  position: relative;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.submenu li:last-child {
+  margin-bottom: 0;
 }
 
 .submenu li::before {
   content: "";
   position: absolute;
-  left: 12px;
+  left: 17px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -379,14 +398,19 @@
 
 .submenu li:hover {
   background: var(--sidebar-hover-subtle, rgba(255, 255, 255, 0.05));
-  
+  color: var(--sidebar-text-strong);
 }
+
 .submenu li:active { transform: scale(0.99); }
 
-/* Active submenu item: same lighter navy fill with the gold bar. */
+/* Active submenu item: same lighter navy fill, bullet turns bright. */
 .submenu li.active {
   background: var(--sidebar-active-subtle, rgba(255, 255, 255, 0.09));
   color: var(--sidebar-text-strong);
+}
+
+.submenu li.active::before {
+  background: var(--sidebar-text-strong);
 }
 
 /* ---------- Separator (hidden) ---------- */
@@ -535,13 +559,9 @@
 
 
 /* =====================================================================
-   Page shell, topbar, notifications, modals (merged from Home.css)
-   ===================================================================== */
-
-/* =====================================================================
    Page shell, topbar, notifications, modals and toasts.
    Theme tokens (colors, fonts, spacing) are defined in index.css.
-   Sidebar styles live in Sidebar.css.
+   Sidebar styles live above.
    ===================================================================== */
 
 .dashboard-container {

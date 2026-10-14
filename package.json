@@ -1,8 +1,12 @@
 {
   "name": "civil-registry",
+  "productName": "Civil Registry System",
+  "description": "Civil Registry System",
+  "author": "Civil Registry Team",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "allowScripts": {
     "esbuild": true
   },
@@ -10,7 +14,34 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && cross-env ELECTRON_START_URL=http://localhost:5173 electron .\"",
+    "electron:build": "cross-env ELECTRON=1 VITE_API_BASE_URL=http://127.0.0.1:5000 vite build && electron-builder --win nsis",
+    "electron:start": "electron ."
+  },
+  "build": {
+    "appId": "ph.civilregistry.desktop",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Civil Registry System"
+    }
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
@@ -31,6 +62,10 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.27",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -38,6 +73,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.3.3",
     "vite": "^7.2.4",
-    "vite-plugin-pwa": "^2.0.0"
+    "vite-plugin-pwa": "^2.0.0",
+    "wait-on": "^9.5.1"
   }
 }

@@ -50,29 +50,30 @@ const ShieldIcon = () => (
 
 // ── CONFIG ─────────────────────────────────────────────────────────────────
 
-// Relative on purpose. In dev, the Vite proxy forwards /api to Flask; on
-// Vercel, the rewrite in vercel.json forwards /api to Render. Either way the
-// browser only ever talks to its own origin, so the session cookie is
-// first-party and no CORS is involved. Never hardcode http://localhost here.
-const API_BASE = "";
+// Uses the same base URL as the rest of the app. Electron needs the absolute
+// backend address (from .env), because app://civil-registry has no /api route.
+// In browser dev, leave VITE_API_BASE_URL empty so the Vite proxy is used.
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
+// All three module passwords go through the same backend route. The module
+// is selected by the `module` field in the request body.
 const MODULE_CONFIGS = {
   archiveBirth: {
     label: "Archive Birth",
     archiveLabel: "Birth Archive Password",
-    endpoint: `${API_BASE}/api/birth/change-module-password`,
+    endpoint: `${API_BASE}/api/change-module-password`,
     moduleKey: "archive_birth",
   },
   marriageArchive: {
     label: "Marriage Archive",
     archiveLabel: "Marriage Archive Password",
-    endpoint: `${API_BASE}/api/marriage/change-module-password`,
+    endpoint: `${API_BASE}/api/change-module-password`,
     moduleKey: "archive_marriage",
   },
   deathArchive: {
     label: "Death Archive",
     archiveLabel: "Death Archive Password",
-    endpoint: `${API_BASE}/api/death/change-module-password`,
+    endpoint: `${API_BASE}/api/change-module-password`,
     moduleKey: "archive_death",
   },
 };
@@ -311,7 +312,7 @@ const ChangePassword = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("password");
 
-  const showNotify = (success, title, message) => {
+      const showNotify = (success, title, message) => {
     pushToast({ title, message, success, duration: 5000 });
   };
 

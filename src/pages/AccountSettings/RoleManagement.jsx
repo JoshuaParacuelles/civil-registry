@@ -4,7 +4,7 @@ import { pushToast } from "../../services/toastService";
 import "./RoleManagement.css";
 
 // Use empty string to route via Vite proxy, avoiding CORS/Cookie domain mismatches
-const API = "";
+const API = import.meta.env.VITE_API_BASE_URL || "";
 
 const MODULE_LABELS = {
   dashboard:                  "Dashboard",

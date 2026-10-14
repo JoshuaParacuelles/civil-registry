@@ -1,6 +1,7 @@
 // src/services/requestSnapshotService.js
-// Loads the LATEST request row from the same session-gated backend endpoint
-// that Home.jsx already used (GET /api/requests/:id).
+// Loads the LATEST request row from the session-gated backend (GET /api/requests/:id).
+
+const API = import.meta.env.VITE_API_BASE_URL || "";
 
 export const fetchSnapshot = async (notification) => {
   const stored = notification?.request_snapshot || {};
@@ -9,7 +10,7 @@ export const fetchSnapshot = async (notification) => {
   // Everything else just shows the stored snapshot.
   if (!notification?.record_id || stored.source !== "online_request") return stored;
 
-  const res = await fetch(`/api/requests/${notification.record_id}`, {
+  const res = await fetch(`${API}/api/requests/${notification.record_id}`, {
     credentials: "include",
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

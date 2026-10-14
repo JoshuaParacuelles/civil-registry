@@ -45,6 +45,7 @@ const detailValue = (v) => (v === null || v === undefined || v === "" ? "—" : 
 
 const NotificationDetailModal = ({
   notification,
+  liveStatus,          // latest saved status from Home.jsx (wins over the hook cache)
   onClose,
   canAccess,
   timeAgo,
@@ -65,18 +66,19 @@ const NotificationDetailModal = ({
   getSignatureSrc,
   REQUEST_STATUS_OPTIONS,
   REQUEST_STATUS_LABELS,
-  fetchSnapshot, // async (notification) => latest request snapshot
+  fetchSnapshot,       // async (notification) => latest request snapshot
 }) => {
   // Hooks must run before any early return.
   const { key, phase, snapshot, refresh, retry } = useRequestDetail(notification, fetchSnapshot);
 
   const snap = snapshot || {};
-  const currentStatus = (snap.status || "").toUpperCase();
+  // Home's live status wins over the hook cache, so the modal is never stale after a save.
+  const currentStatus = (liveStatus || snap.status || "").toUpperCase();
   const loading = phase === "loading";
   const ready = phase === "ready";
   const editorLocked = loading || phase === "fallback";
 
-  // Once fresh data lands, align the dropdown with the real status (and reset per-notification state).
+  // Reset per-notification UI state when a different notification opens.
   useEffect(() => {
     if (!key) return;
     setSigFailed(false);
@@ -85,16 +87,31 @@ const NotificationDetailModal = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  // Align the dropdown with the saved status once fresh data is ready.
   useEffect(() => {
     if (ready) setStatusDraft(currentStatus);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, key, currentStatus]);
 
+  // Close the enlarged signature with Escape first, before closing the modal.
+  // (Home.jsx has its own Escape handler; this one only runs while zoomed.)
+  useEffect(() => {
+    if (!sigZoomed) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setSigZoomed(false);
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [sigZoomed, setSigZoomed]);
+
   if (!notification) return null;
 
   const type = notification.record_type;
   const sections = [TYPE_SECTIONS[type], ...COMMON_SECTIONS].filter(Boolean);
-  const target = NOTIF_TARGETS[type]; // only used for the header icon color now
+  const target = NOTIF_TARGETS[type];
   const signatureSrc = getSignatureSrc(snap, type, notification.record_id);
   const showSignatureImage = Boolean(snap.has_signature) && !sigFailed;
 
@@ -115,7 +132,7 @@ const NotificationDetailModal = ({
     try {
       await updateRequestStatus();
     } finally {
-      refresh(); // pull the new saved status so the header pill updates
+      refresh(); // pull the new saved status so the header pill and the hook cache update
     }
   };
 
@@ -173,7 +190,12 @@ const NotificationDetailModal = ({
                 <h3>{section.title}</h3>
                 <dl className="notif-detail-grid">
                   {section.fields.map(([fieldKey, label]) => (
-                    <div key={fieldKey} className="notif-detail-field">
+                    <div
+                      key={fieldKey}
+                      className={`notif-detail-field${
+                        fieldKey === SIGNATURE_FIELD_KEY && showSignatureImage ? " is-signature" : ""
+                      }`}
+                    >
                       <dt>{label}</dt>
                       {loading ? (
                         <dd>
@@ -184,32 +206,32 @@ const NotificationDetailModal = ({
                         </dd>
                       ) : fieldKey === SIGNATURE_FIELD_KEY && showSignatureImage ? (
                         <dd className="notif-detail-signature-wrap">
-  <div className="notif-detail-signature-inner">
-    <img
-      className="notif-detail-signature"
-      src={signatureSrc}
-      alt="Requester signature — click to enlarge"
-      title="Click to enlarge"
-      loading="eager"
-      decoding="sync"
-      onError={() => setSigFailed(true)}
-      onClick={() => setSigZoomed(true)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          setSigZoomed(true);
-        }
-      }}
-    />
-    {snap.signature_printed_name && snap.signature_printed_name.trim() && (
-      <span className="notif-detail-signature-name">
-        {snap.signature_printed_name.trim()}
-      </span>
-    )}
-  </div>
-</dd>
+                          <div className="notif-detail-signature-inner">
+                            <img
+                              className="notif-detail-signature"
+                              src={signatureSrc}
+                              alt="Requester signature — click to enlarge"
+                              title="Click to enlarge"
+                              loading="eager"
+                              decoding="sync"
+                              onError={() => setSigFailed(true)}
+                              onClick={() => setSigZoomed(true)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setSigZoomed(true);
+                                }
+                              }}
+                            />
+                            {snap.signature_printed_name && snap.signature_printed_name.trim() && (
+                              <span className="notif-detail-signature-name">
+                                {snap.signature_printed_name.trim()}
+                              </span>
+                            )}
+                          </div>
+                        </dd>
                       ) : (
                         <dd>{detailValue(snap[fieldKey])}</dd>
                       )}
@@ -275,13 +297,14 @@ const NotificationDetailModal = ({
         </div>
       </div>
 
-      {sigZoomed && (
+      {sigZoomed && showSignatureImage && (
         <div
-  key={fieldKey}
-  className={`notif-detail-field${
-    fieldKey === SIGNATURE_FIELD_KEY && showSignatureImage ? " is-signature" : ""
-  }`}
->
+          className="sig-zoom-overlay"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSigZoomed(false);
+          }}
+        >
           <img
             className="sig-zoom-img"
             src={signatureSrc}

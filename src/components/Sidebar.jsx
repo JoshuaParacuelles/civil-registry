@@ -171,6 +171,9 @@ const Sidebar = ({
                   Role Management
                 </li>
               )}
+              <li role="menuitem" className={activeSubMenu === MENU_KEYS.DISPLAY ? "active" : ""} onClick={() => handleSubMenuClick(MENU_KEYS.DISPLAY, MENU_KEYS.SETTINGS)}>
+                Display
+              </li>
             </ul>
           )}
         </ul>

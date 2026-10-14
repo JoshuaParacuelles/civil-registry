@@ -5,6 +5,7 @@ import LoadingScreen from "../../routes/LoadingScreen";
 const ChangePassword = lazy(() => import("../AccountSettings/ChangePassword"));
 const AuditLogs = lazy(() => import("../AccountSettings/AuditLogs"));
 const RoleManagement = lazy(() => import("../AccountSettings/RoleManagement"));
+const DisplaySettings = lazy(() => import("../AccountSettings/Settings"));
 const UnifiedBirthRegistry = lazy(() => import("../VitalRecords/Birth/BirthVerifier"));
 const UnifiedMarriageRegistry = lazy(() => import("../VitalRecords/Marriage/MarriageVerifier"));
 const DeathVerifier = lazy(() => import("../VitalRecords/Death/DeathVerifier"));
@@ -50,11 +51,12 @@ const MENU_KEYS = {
   ACCOUNT:           "Update Account",
   AUDIT:             "Audit Logs",
   ROLE_MANAGEMENT:   "Role Management",
+  DISPLAY:           "Display Settings",
   OFFLINE_SYNC:      "Offline Data & Sync",
 };
 
 const VITAL_CHILDREN    = [MENU_KEYS.BIRTH, MENU_KEYS.MARRIAGE, MENU_KEYS.DEATH, MENU_KEYS.SCIMS];
-const SETTINGS_CHILDREN = [MENU_KEYS.ACCOUNT, MENU_KEYS.AUDIT, MENU_KEYS.ROLE_MANAGEMENT];
+const SETTINGS_CHILDREN = [MENU_KEYS.ACCOUNT, MENU_KEYS.AUDIT, MENU_KEYS.ROLE_MANAGEMENT, MENU_KEYS.DISPLAY];
 
 // ROUTING: each page has its own URL. The URL is the source of truth for
 // which page is active.
@@ -69,6 +71,7 @@ const MENU_ROUTES = {
   [MENU_KEYS.ACCOUNT]:           "/settings/update-account",
   [MENU_KEYS.AUDIT]:             "/settings/audit-logs",
   [MENU_KEYS.ROLE_MANAGEMENT]:   "/settings/role-management",
+  [MENU_KEYS.DISPLAY]:           "/settings/display",
   [MENU_KEYS.OFFLINE_SYNC]:      "/offline-sync",
 };
 
@@ -626,6 +629,8 @@ const Home = () => {
         return canAccess("document_tracking") ? <DocumentTracking /> : <AccessDenied />;
       case MENU_KEYS.ACCOUNT:
         return <ChangePassword />;
+      case MENU_KEYS.DISPLAY:
+        return <DisplaySettings />;
       case MENU_KEYS.BIRTH:
         return canAccess("birth_verification") ? <UnifiedBirthRegistry initialView={verifierEntry} /> : <AccessDenied />;
       case MENU_KEYS.MARRIAGE:
@@ -730,8 +735,13 @@ const Home = () => {
         </main>
       </div>
 
-      <NotificationDetailModal
+            <NotificationDetailModal
         notification={modalNotification}
+        liveStatus={
+          requestDetail && selectedNotif && requestDetail.notifId === selectedNotif.id
+            ? requestDetail.data?.status ?? null
+            : null
+        }
         isOnlineRequest={isOnlineRequest}
         onClose={closeNotifDetails}
         canAccess={canAccess}

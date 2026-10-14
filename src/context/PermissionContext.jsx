@@ -259,23 +259,6 @@ export function PermissionProvider({ children }) {
     };
   }, [refresh]);
 
-  useEffect(() => {
-    if (!authenticated) return;
-
-    const sendOfflineBeacon = () => {
-      try {
-        navigator.sendBeacon(`${API}/api/logout-beacon`);
-      } catch (e) {
-        console.warn("[Permissions] sendBeacon failed:", e);
-      }
-    };
-
-    window.addEventListener("pagehide", sendOfflineBeacon);
-    return () => {
-      window.removeEventListener("pagehide", sendOfflineBeacon);
-    };
-  }, [authenticated]);
-
   const hasAccess = useCallback(
     (mod) => {
       if (isAdmin) return true;

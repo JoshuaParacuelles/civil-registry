@@ -8,6 +8,7 @@ import AccuracyBadge from "../../../components/AccuracyBadge";
 import { computeMarriageAccuracy } from "../../../utils/matchAccuracy";
 import { isOnline, checkNow } from "../../../offline/connectivityService";
 import { newOpId } from "../../../offline/outboxQueue";
+import { apiFetch } from "../../../services/apiFetch";
 import {
   useVitalData, loadPdfForRecord, deleteRecordSmart, queueUpload, queueTransaction,
 } from "../../../offline/vitalOffline";
@@ -86,7 +87,7 @@ async function fetchJsonWithRetry(url, { signal, retries = 2, delay = 500 } = {}
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(url, { signal });
+      const res = await apiFetch(url, { signal });
       let body = null;
       try { body = await res.json(); } catch { /* non-JSON body */ }
       if (!res.ok) throw new Error(body?.error || `Server responded with ${res.status}`);
@@ -952,7 +953,7 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
       if (!isOnline()) { await unlockOffline(pw); return; }
       let res;
       try {
-        res = await fetch(`${API}/auth/verify`, {
+        res = await apiFetch(`${API}/auth/verify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ module, password: pw }),
@@ -1165,6 +1166,7 @@ function uploadWithProgress(url, formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
+    xhr.withCredentials = true;
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.min(99, (e.loaded / e.total) * 100));
     };
@@ -1767,7 +1769,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
       if (!isOnline()) return await saveOffline();
       let res;
       try {
-        res = await fetch(url, {
+        res = await apiFetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Offline-Op-Id": opId },
           body: JSON.stringify(payload),

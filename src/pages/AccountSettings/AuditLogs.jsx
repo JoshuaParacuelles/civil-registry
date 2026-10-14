@@ -5,7 +5,7 @@ import "./AuditLogs.css";
 // Vercel, the rewrite in vercel.json forwards /api to Render. Either way the
 // browser only ever talks to its own origin, so the session cookie is
 // first-party and no CORS is involved. Never hardcode http://localhost here.
-const API_URL = "/api";
+const API_URL = `${import.meta.env.VITE_API_BASE_URL || ""}/api`;
 
 // Each action maps to a small set of semantic tones instead of its own
 // colour + emoji. Tones are rendered as a status dot in the table and the
@@ -63,6 +63,13 @@ const formatDate = (iso) => {
   return date.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
 };
 
+const formatDateTimeFull = (iso) => {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-PH");
+};
+
 const timeAgo = (iso) => {
   if (!iso) return "—";
   const date = new Date(iso);
@@ -94,6 +101,13 @@ const describeLoadError = (error) => {
   if (msg.includes("401")) return "Your session has expired. Please log in again.";
   if (msg.includes("403")) return "Your account doesn't have permission to view audit logs.";
   return `The server didn't respond (${msg || "unknown error"}). If it was idle, it may still be waking up — try Refresh in a minute.`;
+};
+
+// Quote every cell and neutralise spreadsheet formulas (=, +, -, @, tab, CR).
+const csvCell = (value) => {
+  let text = value === null || value === undefined ? "" : String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
 };
 
 /* ── Small inline icons (replace the emoji glyphs) ─────────────────────── */
@@ -181,6 +195,8 @@ const POLL_MS = 30000;
 
 const AuditLogs = () => {
   const [logs, setLogs] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [actionCatalog, setActionCatalog] = useState({});
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -201,10 +217,20 @@ const AuditLogs = () => {
   useEffect(() => { logsRef.current = logs; }, [logs]);
   useEffect(() => { filterRef.current = filterAction; }, [filterAction]);
 
+  // Load the grouped action catalog once. Failure only hides the grouped
+  // filter; the table still works.
+  useEffect(() => {
+    fetch(`${API_URL}/audit/actions`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((json) => setActionCatalog(json.categories || {}))
+      .catch((err) => console.warn("Could not load action catalog:", err));
+  }, []);
+
   const fetchInitial = useCallback(async () => {
     setLoading(true);
     setError(null);
     setLogs([]);
+    setTotal(0);
     setOffset(0);
     setHasMore(true);
     setExpandedId(null);
@@ -218,12 +244,14 @@ const AuditLogs = () => {
       const json = await response.json();
       const data = Array.isArray(json) ? json : json.data ?? [];
       setLogs(data);
+      setTotal(Number(json.total) || data.length);
       setOffset(data.length);
       setHasMore(data.length === FETCH_LIMIT);
       setCurrentPage(1);
     } catch (err) {
       console.error("Failed to fetch audit logs:", err);
       setLogs([]);
+      setTotal(0);
       setOffset(0);
       setHasMore(false);
       setError(describeLoadError(err));
@@ -245,6 +273,7 @@ const AuditLogs = () => {
       const json = await response.json();
       const data = Array.isArray(json) ? json : json.data ?? [];
       setLogs((prev) => [...prev, ...data]);
+      setTotal(Number(json.total) || 0);
       setOffset((prev) => prev + data.length);
       setHasMore(data.length === FETCH_LIMIT);
     } catch (err) {
@@ -278,6 +307,7 @@ const AuditLogs = () => {
       if (fresh.length === 0) return;
 
       setLogs((prev) => [...fresh, ...prev]);
+      setTotal(Number(json.total) || 0);
       setOffset((prev) => prev + fresh.length);
     } catch (err) {
       console.warn("Background audit refresh failed:", err);
@@ -307,8 +337,6 @@ const AuditLogs = () => {
     return () => observer.disconnect();
   }, [fetchMore, hasMore, loading, loadingMore]);
 
-  const actionTypes = Object.keys(ACTION_CONFIG);
-
   const filtered = useMemo(() => {
     if (!search.trim()) return logs;
     const q = search.toLowerCase();
@@ -333,23 +361,43 @@ const AuditLogs = () => {
     return filtered.slice(start, start + ROWS_PER_PAGE);
   }, [filtered, currentPage]);
 
-  const exportCSV = () => {
-    const headers = ["Timestamp", "User", "IP", "Action", "Description"];
-    const rows = logs.map((log) => [
-      log.created_at ? new Date(log.created_at).toLocaleString("en-PH") : "—",
+  // Exports only the rows currently loaded and matching the on-screen filter.
+  // Scroll to the end first if you need every row.
+  const exportCSV = async () => {
+    const headers = ["Time", "User", "Role", "Action", "Status", "Resource", "Description", "IP Address"];
+    const rows = filtered.map((log) => [
+      formatDateTimeFull(log.occurred_at || log.created_at),
       log.username || "System",
+      log.role || "—",
+      getActionConfig(log.action).label,
+      log.status || "SUCCESS",
+      log.resource_type || "—",
+      log.description || "—",
       log.ip_address || "—",
-      log.action || "—",
-      `"${(log.description || "").replace(/"/g, "'")}"`,
     ]);
-    const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const csv = [headers, ...rows]
+      .map((row) => row.map(csvCell).join(","))
+      .join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `audit_logs_${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+
+    // Record the export on the server so exports leave an audit trail.
+    fetch(`${API_URL}/audit/export-event`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        row_count: filtered.length,
+        action: filterAction || undefined,
+        search: search.trim() || undefined,
+      }),
+    }).catch((err) => console.warn("Export event not recorded:", err));
   };
 
   const summaryCounts = useMemo(() => {
@@ -388,7 +436,7 @@ const AuditLogs = () => {
             <IconRefresh /> Refresh
           </button>
           <button className="audit-btn-export" onClick={exportCSV}>
-            <IconDownload /> Print Auditlogs
+            <IconDownload /> Export CSV
           </button>
         </div>
       </div>
@@ -397,7 +445,7 @@ const AuditLogs = () => {
       <div className="audit-summary-strip">
         <div className="audit-summary-item">
           <span className="audit-summary-num">
-            <AnimatedCount value={logs.length} />
+            <AnimatedCount value={total || logs.length} />
             {hasMore && <span className="audit-summary-plus">+</span>}
           </span>
           <span className="audit-summary-label">Total Actions</span>
@@ -459,10 +507,14 @@ const AuditLogs = () => {
           onChange={(e) => { setFilterAction(e.target.value); setCurrentPage(1); }}
         >
           <option value="">All Actions</option>
-          {actionTypes.map((action) => (
-            <option key={action} value={action}>
-              {ACTION_CONFIG[action]?.label || action}
-            </option>
+          {Object.entries(actionCatalog).map(([category, actions]) => (
+            <optgroup key={category} label={category}>
+              {actions.map((action) => (
+                <option key={action} value={action}>
+                  {getActionConfig(action).label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
 
@@ -516,8 +568,15 @@ const AuditLogs = () => {
                     <React.Fragment key={log.id || `${log.created_at}-${idx}`}>
                       <tr className="audit-tr">
                         <td className="audit-td audit-td-time">
-                          <span className="audit-time">{formatTime(log.created_at)}</span>
-                          <span className="audit-date">{formatDate(log.created_at)}</span>
+                          <span
+                            className="audit-time"
+                            title={`Received by server: ${formatDateTimeFull(log.created_at)}`}
+                          >
+                            {formatTime(log.occurred_at || log.created_at)}
+                          </span>
+                          <span className="audit-date">
+                            {formatDate(log.occurred_at || log.created_at)}
+                          </span>
                         </td>
 
                         <td className="audit-td">

@@ -1,0 +1,242 @@
+/* ─── SETTINGS.CSS ───────────────────────────────────────── */
+
+.st-root {
+  --st-surface:   #ffffff;
+  --st-soft:      #f8fafc;
+  --st-raised:    #f1f5f9;
+  --st-border:    #e5e7eb;
+  --st-text-1:    #0f172a;
+  --st-text-2:    #475569;
+  --st-text-3:    #94a3b8;
+  --st-accent:    #2563eb;
+  --st-accent-h:  #1d4ed8;
+  --st-accent-bg: rgba(37, 99, 235, 0.08);
+  --st-accent-bd: rgba(37, 99, 235, 0.25);
+  --st-radius:    8px;
+  --st-radius-lg: 14px;
+  --st-shadow:    0 2px 10px rgba(0, 0, 0, 0.06);
+
+  width: 100%;
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  color: var(--st-text-1);
+  box-sizing: border-box;
+}
+
+.st-root *,
+.st-root *::before,
+.st-root *::after {
+  box-sizing: border-box;
+}
+
+.st-body {
+  width: 100%;
+  padding: 20px;
+  max-width: 900px;
+}
+
+/* ── Tabs ── */
+.st-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.st-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--st-surface);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-lg);
+  box-shadow: var(--st-shadow);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.st-tab:hover {
+  background: var(--st-soft);
+}
+
+.st-tab.active {
+  background: var(--st-accent-bg);
+  border-color: var(--st-accent-bd);
+}
+
+.st-tab-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--st-text-2);
+}
+
+.st-tab.active .st-tab-label {
+  color: var(--st-accent);
+}
+
+.st-tab-desc {
+  font-size: 11.5px;
+  color: var(--st-text-3);
+  font-weight: 500;
+}
+
+/* ── Panel ── */
+.st-panel {
+  background: var(--st-surface);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-lg);
+  box-shadow: var(--st-shadow);
+  overflow: hidden;
+}
+
+.st-panel-head {
+  padding: 16px 20px;
+  background: var(--st-soft);
+  border-bottom: 1px solid var(--st-border);
+}
+
+.st-panel-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+
+.st-panel-desc {
+  font-size: 12px;
+  color: var(--st-text-3);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.st-panel-body {
+  padding: 20px;
+}
+
+/* ── Sections ── */
+.st-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.st-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.st-section-desc,
+.st-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--st-text-2);
+  line-height: 1.5;
+}
+
+.st-note {
+  color: var(--st-text-3);
+  font-style: italic;
+}
+
+/* ── Buttons ── */
+.st-btn {
+  align-self: flex-start;
+  padding: 9px 20px;
+  border-radius: var(--st-radius);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.st-btn--primary {
+  background: var(--st-accent);
+  border: 1px solid var(--st-accent);
+  color: #ffffff;
+}
+
+.st-btn--primary:hover {
+  background: var(--st-accent-h);
+  border-color: var(--st-accent-h);
+}
+
+/* ── Info list (About) ── */
+.st-info {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.st-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--st-soft);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius);
+  font-size: 13px;
+}
+
+.st-info-row dt {
+  color: var(--st-text-2);
+  font-weight: 600;
+}
+
+.st-info-row dd {
+  margin: 0;
+  color: var(--st-text-1);
+  font-weight: 500;
+  text-align: right;
+}
+
+/* Embedded ChangePassword: its own root padding is reset so it sits
+   inside this panel without a double border or extra gutter. */
+.st-embed .cp-body {
+  padding: 0;
+}
+
+.st-embed .cp-form-card {
+  border: none;
+  box-shadow: none;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .st-body {
+    padding: 12px;
+  }
+
+  .st-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .st-tab {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .st-panel-body {
+    padding: 14px;
+  }
+}
+/* Embedded ChangePassword: itago ang sariling header (ang Settings panel na
+   ang naay title) ug tangtangon ang duplicate padding. */
+.st-embed .cp-form-card-top {
+  display: none;
+}
+
+.st-embed .cp-form-card-body {
+  padding: 0;
+}
+
+.st-embed .cp-form-card {
+  background: transparent;
+}

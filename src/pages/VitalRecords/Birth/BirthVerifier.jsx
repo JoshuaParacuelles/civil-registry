@@ -12,6 +12,7 @@ import { isOnline } from "../../../offline/connectivityService";
 import { subscribeSyncState } from "../../../offline/syncEngine";
 import { newOpId, removeOp } from "../../../offline/outboxQueue";
 import { getFile } from "../../../offline/fileStore";
+import { apiFetch } from "../../../services/apiFetch";
 import {
   saveList, loadList,
   getCachedPdf, cachePdf, startPdfPrefetch,
@@ -97,7 +98,7 @@ async function fetchJsonWithRetry(url, { signal, retries = 2, delay = 500 } = {}
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(url, { signal });
+     const res = await apiFetch(url, { signal });
       let body = null;
       try { body = await res.json(); } catch { /* non-JSON body */ }
       if (!res.ok) throw new Error(body?.error || `Server responded with ${res.status}`);
@@ -432,7 +433,7 @@ async function loadPdfForRecord(id, record) {
   //    "VIEW" audit entry (GET /records/<id> logs it) and refreshes the local copy.
   if (isOnline()) {
     let res = null;
-    try { res = await fetch(`${API}/records/${id}`); }
+    try { res = await apiFetch(`${API}/records/${id}`); }
     catch { /* network dropped: fall through to the saved copy */ }
 
     if (res && res.ok) {
@@ -468,7 +469,7 @@ async function deleteRecordSmart(id, record) {
   };
   if (!isOnline()) return queueIt();
   let res;
-  try { res = await fetch(`${API}/records/${id}`, { method: "DELETE" }); }
+  try { res = await apiFetch(`${API}/records/${id}`, { method: "DELETE" }); }
   catch { return queueIt(); }
   if (!res.ok) {
     let msg = "";
@@ -996,7 +997,7 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
       // ONLINE MODE → password stored in the database
       let res;
       try {
-        res = await fetch(`${API}/auth/verify`, {
+        res = await apiFetch(`${API}/auth/verify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ module, password: pw }),
@@ -1214,6 +1215,7 @@ function uploadWithProgress(url, formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
+    xhr.withCredentials = true;
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.min(99, (e.loaded / e.total) * 100));
     };
@@ -1221,7 +1223,7 @@ function uploadWithProgress(url, formData, onProgress) {
       let data = {};
       try { data = JSON.parse(xhr.responseText || "{}"); } catch { /* non-JSON body */ }
       if (xhr.status >= 200 && xhr.status < 300) { onProgress(100); resolve(data); }
-      else reject(new Error(data.error || "Upload failed"));
+      else { const e = new Error(data.error || "Upload failed"); e.status = xhr.status; reject(e); }
     };
     xhr.onerror = () => reject(new Error("Cannot reach server."));
     xhr.send(formData);
@@ -1904,7 +1906,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
 
       let res;
       try {
-        res = await fetch(url, {
+        res = await apiFetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Offline-Op-Id": opId },
           body: JSON.stringify(payload),
