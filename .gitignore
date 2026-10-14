@@ -1,9 +1,19 @@
-﻿node_modules
-dist
-.env
-.env.local
-.env*.local
-.vercel
+﻿# ---------- Environment variables ----------
 .env
 .env.*
-dist
+!.env.example
+
+# ---------- Node / Vite / Electron ----------
+node_modules/
+dist/
+dist-electron/
+release/
+.vercel/
+coverage/
+
+# ---------- Logs and editor junk ----------
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

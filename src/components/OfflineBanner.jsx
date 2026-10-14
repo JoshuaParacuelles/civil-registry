@@ -1,9 +1,9 @@
-import useConnectivity from '../hooks/useConnectivity'
+import useOnlineStatus from '../hooks/useOnlineStatus'
 import useSyncStatus from '../hooks/useSyncStatus'
 import './OfflineBanner.css'
 
 export default function OfflineBanner() {
-  const { online } = useConnectivity()
+  const online = useOnlineStatus()
   const { waiting, syncing } = useSyncStatus()
 
   if (online && waiting === 0) return null
