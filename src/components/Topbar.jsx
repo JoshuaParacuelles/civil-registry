@@ -1,5 +1,5 @@
-import React, { memo, useEffect, useRef, useState } from "react";
-import { useGlobalRefresh } from "../context/RefreshContext";
+import React, { memo, useEffect, useState } from "react";
+import { hardRefresh } from "../utils/hardRefresh";
 import "./Topbar.css";
 
 const dateFmt = new Intl.DateTimeFormat("en-PH", {
@@ -55,10 +55,8 @@ const TopbarDate = memo(function TopbarDate() {
 });
 
 const RefreshButton = memo(function RefreshButton() {
-  const { refresh, isRefreshing } = useGlobalRefresh();
-  const [status, setStatus] = useState(null); // null | "ok" | "error"
   const [online, setOnline] = useState(() => navigator.onLine);
-  const statusTimer = useRef(null);
+  const [reloading, setReloading] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => setOnline(true);
@@ -71,55 +69,36 @@ const RefreshButton = memo(function RefreshButton() {
     };
   }, []);
 
-  useEffect(() => () => clearTimeout(statusTimer.current), []);
-
-  const handleClick = async () => {
-    if (isRefreshing) return;
-
-    const res = await refresh();
-    if (res.reason === "busy") return;
-
-    setStatus(res.ok ? "ok" : "error");
-    clearTimeout(statusTimer.current);
-    statusTimer.current = setTimeout(() => setStatus(null), 1800);
+  const handleClick = () => {
+    if (reloading) return;
+    setReloading(true);
+    // Full browser reload (same as F5). Returns false only if the user cancels
+    // the unsaved-changes prompt, so reset the spinner in that case.
+    const started = hardRefresh();
+    if (started === false) setReloading(false);
   };
 
-  const state = isRefreshing ? "loading" : status ?? "idle";
-
-  const title = isRefreshing
-    ? "Refreshing…"
-    : status === "error"
-      ? "Refresh failed. Showing previous content."
-      : online
-        ? "Refresh page data"
-        : "Offline: reload cached data";
+  const title = reloading
+    ? "Reloading…"
+    : online
+      ? "Reload page"
+      : "Offline: reload cached data";
 
   return (
-    <>
-      <button
-        type="button"
-        className="topbar-refresh-btn"
-        data-state={state}
-        onClick={handleClick}
-        disabled={isRefreshing}
-        aria-busy={isRefreshing}
-        aria-label="Refresh page data"
-        title={title}
-      >
-        <span className="topbar-refresh-icon-wrap">
-          <RefreshIcon />
-        </span>
-      </button>
-      <span className="topbar-refresh-sr" role="status" aria-live="polite">
-        {isRefreshing
-          ? "Refreshing data"
-          : status === "ok"
-            ? "Data refreshed"
-            : status === "error"
-              ? "Refresh failed"
-              : ""}
+    <button
+      type="button"
+      className="topbar-refresh-btn"
+      data-state={reloading ? "loading" : "idle"}
+      onClick={handleClick}
+      disabled={reloading}
+      aria-busy={reloading}
+      aria-label="Reload page"
+      title={title}
+    >
+      <span className="topbar-refresh-icon-wrap">
+        <RefreshIcon />
       </span>
-    </>
+    </button>
   );
 });
 

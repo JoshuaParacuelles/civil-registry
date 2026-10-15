@@ -1,10 +1,10 @@
 import { useState, useMemo, memo, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { usePermissions } from "../../context/PermissionContext";
+import { useRegisterRefresh } from "../../context/RefreshContext";
 import { supabase } from "../../services/supabaseClient";
 import { pushToast } from "../../services/toastService";
 import { isDbAvailable, subscribeDb } from "../../offline/connectivityService";
 import { subscribeSyncState } from "../../offline/syncEngine";
-import { useRegisterRefresh } from "../../context/RefreshContext";
 import {
   trackingRead,
   trackingWrite,
@@ -13,6 +13,7 @@ import {
   peekTrackingList,
 } from "../../offline/adapters/documentTrackingOffline";
 import useOnlineStatus from "../../hooks/useOnlineStatus";
+import { Skeleton, SkeletonText } from "../../components/Skeleton";
 import "./DocumentTracking.css";
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -232,6 +233,31 @@ function getActiveIndex(stages) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Loading skeletons
+// ─────────────────────────────────────────────────────────────────────────
+
+const DetailSkeleton = () => (
+  <div className="dt-card dt-detail-card" aria-busy="true" aria-label="Loading document">
+    <div className="dt-card-head">
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Skeleton variant="text" w="60%" h={16} />
+        <Skeleton variant="text" w="30%" style={{ marginTop: 8 }} />
+      </div>
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} style={{ display: "flex", gap: 14 }}>
+          <Skeleton variant="pill" w={12} h={12} radius="50%" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SkeletonText lines={2} gap="8px" />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────
 // List row
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -385,6 +411,7 @@ export default function DocumentTracking() {
 
   // Shows the saved copy at once, then refreshes from the server. The loading
   // state only shows when there is nothing saved to display for this view.
+  // Returns true when the list is up to date, false when the server failed.
   const loadList = useCallback(async (opts) => {
     const requestId = ++listRequestIdRef.current;
     const silent = opts?.silent === true;
@@ -404,14 +431,16 @@ export default function DocumentTracking() {
       const rows = await withTimeout(trackingRead(
         archivedView ? "/api/documents?archived=true" : "/api/documents"
       ));
-      if (listRequestIdRef.current !== requestId) return [];
-      return applyRows(rows, archivedView);
+      // A newer request has already started and decides the outcome.
+      if (listRequestIdRef.current !== requestId) return true;
+      applyRows(rows, archivedView);
+      return true;
     } catch (e) {
-      if (listRequestIdRef.current !== requestId) return [];
+      if (listRequestIdRef.current !== requestId) return true;
       console.error("[DocumentTracking] Failed to load documents:", e);
       // Keep showing the saved copy if there is one; only report an error when empty.
       if (!cached) setListError(e.message || "Could not reach the server.");
-      return [];
+      return false;
     } finally {
       if (listRequestIdRef.current === requestId) setListLoading(false);
     }
@@ -427,24 +456,16 @@ export default function DocumentTracking() {
 
   // Loads the selected document. Silent refreshes are skipped while that
   // document still has unsettled writes; the last write to settle triggers one.
+  // Returns true when the detail is up to date, false when the server failed.
   const loadDetail = useCallback(async (id, opts) => {
     if (id == null) {
       detailRequestIdRef.current += 1;
       setDetail(null);
       setDetailLoading(false);
-      return;
+      return true;
     }
-
-    const refreshAll = useCallback(async () => {
-  await loadList();
-  if (selectedIdRef.current != null) {
-    await loadDetail(selectedIdRef.current, { silent: true });
-  }
-}, [loadList, loadDetail]);
-
-useRegisterRefresh(refreshAll);
     const key = String(id);
-    if (opts?.silent && (pendingWritesRef.current.get(key) || 0) > 0) return;
+    if (opts?.silent && (pendingWritesRef.current.get(key) || 0) > 0) return true;
 
     const requestId = ++detailRequestIdRef.current;
     const silent = opts?.silent === true && String(detailRef.current?.id) === key;
@@ -454,18 +475,38 @@ useRegisterRefresh(refreshAll);
     }
     try {
       const doc = await withTimeout(trackingRead(`/api/documents/${id}`));
-      if (detailRequestIdRef.current !== requestId) return;
-      if (String(selectedIdRef.current) !== key) return; // selection moved on
+      if (detailRequestIdRef.current !== requestId) return true;
+      if (String(selectedIdRef.current) !== key) return true; // selection moved on
       setDetail(mapDocumentDetail(doc));
+      return true;
     } catch (e) {
-      if (detailRequestIdRef.current !== requestId) return;
+      if (detailRequestIdRef.current !== requestId) return true;
       console.error("[DocumentTracking] Failed to load document detail:", e);
       setDetailError(e.message || "Could not reach the server.");
       setDetail(null);
+      return false;
     } finally {
       if (detailRequestIdRef.current === requestId) setDetailLoading(false);
     }
   }, []);
+
+  // Manual refresh (the global Refresh button via RefreshContext).
+  // The list reloads non-silently so the loading state shows when nothing is
+  // cached. The detail reloads silently so its card does not flash.
+  // Throws on failure so the Topbar shows a failed state.
+  // Top level of the component, after loadDetail, so it follows the Rules of Hooks.
+  const refreshAll = useCallback(async () => {
+    const listOk = await loadList();
+    if (!listOk) throw new Error("Could not refresh the document list.");
+
+    if (selectedIdRef.current != null) {
+      const detailOk = await loadDetail(selectedIdRef.current, { silent: true });
+      if (!detailOk) throw new Error("Could not refresh the selected document.");
+    }
+  }, [loadList, loadDetail]);
+
+  // Always runs the latest refreshAll, so no extra wrapper is needed.
+  useRegisterRefresh(refreshAll);
 
   // ── Write tracking ───────────────────────────────────────────────────
   const beginWrite = (docId) => {
@@ -678,6 +719,10 @@ useRegisterRefresh(refreshAll);
   const activeIndex = selected && !selected.archived ? getActiveIndex(selected.stages) : -1;
   const inArchive = viewMode === "archived";
   const requiresPosting = selected ? REQUIRES_POSTING_PATTERN.test(selected.type || "") : false;
+
+  // Detail pane shows a skeleton while the detail loads, or while the list
+  // is loading and there is no selected document yet.
+  const showDetailSkeleton = detailLoading || (listLoading && !selected);
 
   // ── Navigation ───────────────────────────────────────────────────────
   // Switches between the active list and the archive. The new view's saved
@@ -1178,18 +1223,21 @@ useRegisterRefresh(refreshAll);
               </div>
             </div>
 
-            <div className="dt-list">
-              {listLoading && documents.length === 0 &&
-                Array.from({ length: 5 }).map((_, i) => (
-                  <div className="dt-skeleton-row" key={`dt-skeleton-${i}`} aria-hidden="true">
-                    <div className="dt-skeleton-main">
-                      <div className="dt-skeleton-line dt-skeleton-id" />
-                      <div className="dt-skeleton-line dt-skeleton-title" />
-                      <div className="dt-skeleton-line dt-skeleton-meta" />
+            <div className="dt-list" aria-busy={listLoading}>
+              {listLoading && documents.length === 0 && (
+                <>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div className="dt-skeleton-row" key={`dt-skeleton-${i}`} aria-hidden="true">
+                      <div className="dt-skeleton-main">
+                        <Skeleton variant="text" w="38%" />
+                        <Skeleton variant="text" w="68%" h={12} />
+                        <Skeleton variant="text" w="52%" />
+                      </div>
+                      <Skeleton variant="pill" w={62} h={21} />
                     </div>
-                    <div className="dt-skeleton-line dt-skeleton-badge" />
-                  </div>
-                ))}
+                  ))}
+                </>
+              )}
 
               {!listLoading && filtered.length === 0 && (
                 <div className="dt-empty">
@@ -1223,13 +1271,9 @@ useRegisterRefresh(refreshAll);
           </div>
 
           {/* ── Detail states ── */}
-          {detailLoading && (
-            <div className="dt-card dt-detail-card">
-              <div className="dt-empty">Loading document…</div>
-            </div>
-          )}
+          {showDetailSkeleton && <DetailSkeleton />}
 
-          {!detailLoading && detailError && (
+          {!showDetailSkeleton && !detailLoading && detailError && (
             <div className="dt-card dt-detail-card">
               <div className="dt-empty">
                 Could not load this document: {detailError}{" "}
@@ -1238,7 +1282,7 @@ useRegisterRefresh(refreshAll);
             </div>
           )}
 
-          {!detailLoading && !detailError && !selected && (
+          {!showDetailSkeleton && !detailError && !selected && (
             <div className="dt-card dt-detail-card">
               <div
                 className="dt-empty"
@@ -1251,9 +1295,7 @@ useRegisterRefresh(refreshAll);
                   gap: 8,
                 }}
               >
-                {listLoading ? (
-                  "Loading documents…"
-                ) : listError ? (
+                {listError ? (
                   <>
                     Could not load documents.{" "}
                     <button className="dt-btn dt-btn-ghost" onClick={() => loadList()}>Retry</button>
@@ -1275,7 +1317,7 @@ useRegisterRefresh(refreshAll);
           )}
 
           {/* ── Selected document ── */}
-          {!detailLoading && !detailError && selected && (
+          {!showDetailSkeleton && !detailError && selected && (
             <div className="dt-card dt-detail-card">
               <div className="dt-card-head">
                 <div>
@@ -1292,10 +1334,10 @@ useRegisterRefresh(refreshAll);
                 <div className="dt-head-actions">
                   <span className="dt-save-note">{justSaved ? "Saved" : "\u00A0"}</span>
                   {is_admin && !selected.archived && (
-  <button type="button" className="dt-btn dt-btn-primary" disabled={busy} onClick={askArchive}>
-    Archive
-  </button>
-)}
+                    <button type="button" className="dt-btn dt-btn-primary" disabled={busy} onClick={askArchive}>
+                      Archive
+                    </button>
+                  )}
                   {is_admin && selected.archived && (
                     <>
                       <button type="button" className="dt-btn dt-btn-primary" disabled={busy} onClick={restoreDocument}>

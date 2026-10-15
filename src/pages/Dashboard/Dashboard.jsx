@@ -4,6 +4,7 @@ import useOnlineStatus from "../../hooks/useOnlineStatus";
 import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 import { useRegisterRefresh } from "../../context/RefreshContext";
 import LiveIndicator from "../../components/LiveIndicator";
+import { Skeleton, SkeletonGrid } from "../../components/Skeleton";
 import "./Dashboard.css";
 
 /* ══ CONSTANTS ═══════════════════════════════════════════════════════════════ */
@@ -557,10 +558,6 @@ const Panel = ({ title, sub, children, full = false }) => (
   </section>
 );
 
-/* ══ SKELETON ════════════════════════════════════════════════════════════════ */
-const Skeleton = ({ h = 200 }) => (
-  <div className="an-skeleton" style={{ height: h, background: "#e2e8f0", borderRadius: "8px" }} />
-);
 
 /* ══ EMPTY ═══════════════════════════════════════════════════════════════════ */
 const Empty = ({ msg = "No data available" }) => (
@@ -1013,15 +1010,11 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     { id: "today",      label: "Today"       },
   ];
 
-  if (loading) {
+    if (loading) {
     return (
       <div className="an-wrapper">
         <Skeleton h={140} />
-        <div className="an-loading-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "1rem" }}>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} h={92} />
-          ))}
-        </div>
+        <SkeletonGrid count={3} h={92} columns={3} style={{ marginTop: "0.75rem" }} />
         <div style={{ marginTop: "1rem" }}>
           <Skeleton h={320} />
         </div>

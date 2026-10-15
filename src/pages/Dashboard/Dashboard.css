@@ -344,25 +344,7 @@
   font-weight: 500;
 }
 
-/* ─── Skeleton ───────────────────────────────────────────────── */
-.an-skeleton {
-  border-radius: var(--radius-md, 8px);
-  background: linear-gradient(90deg, var(--an-surface-raised) 25%, var(--an-surface-soft) 50%, var(--an-surface-raised) 75%);
-  background-size: 200% 100%;
-  animation: anShimmer 1.6s infinite linear;
-}
 
-@keyframes anShimmer {
-  0%   { background-position:  200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-.an-loading-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 0.75rem;
-}
 
 /* ─── Empty ──────────────────────────────────────────────────── */
 .an-empty {

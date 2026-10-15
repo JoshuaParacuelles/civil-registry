@@ -28,8 +28,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <GlobalRealtime />
       <PermissionProvider>
         <OfflineProvider>
-          {/* Global refresh: lives above the routes so the Topbar button and every
-              registered page loader survive navigation between modules. */}
+          {/* Global refresh: lives above the routes so every registered page loader
+              survives navigation between modules. */}
           <RefreshProvider>
             <Routes>
               {/* Public routes */}

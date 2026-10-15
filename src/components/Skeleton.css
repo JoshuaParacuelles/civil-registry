@@ -1,0 +1,58 @@
+/* Shared loading placeholders.
+   Colors are hardcoded on the element so they don't depend on page variables. */
+.ui-skeleton {
+  display: block;
+  border-radius: 8px;
+  background-color: #cbd5e1;
+  background-image: linear-gradient(
+    90deg,
+    #cbd5e1 0%,
+    #e2e8f0 50%,
+    #cbd5e1 100%
+  );
+  background-size: 200% 100%;
+  animation: ui-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.ui-skeleton--text {
+  height: 10px;
+  border-radius: 999px;
+}
+
+.ui-skeleton--pill {
+  border-radius: 999px;
+}
+
+.ui-skeleton-surface {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.ui-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--skeleton-cols, 3), minmax(0, 1fr));
+}
+
+.ui-skeleton-text-group {
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes ui-skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (max-width: 640px) {
+  .ui-skeleton-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-skeleton {
+    animation: none;
+  }
+}

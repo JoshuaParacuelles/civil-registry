@@ -5,6 +5,7 @@ import sccLogo from "../../../assets/images/scc.png";
 import lcrLogo from "../../../assets/images/lcr.jpg";
 import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
+import { Skeleton, SkeletonTable } from "../../../components/Skeleton";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
 import useOnlineStatus from "../../../hooks/useOnlineStatus";
 import { useDataChanged } from "../../../hooks/useDataChanged";
@@ -49,6 +50,7 @@ function useShowNotif() {
     });
   };
 }
+
 // ── Office details ─────────────────────────────────────────────────────────
 const OFFICE_CONFIG = {
   cityMunicipality: "this city/municipality",
@@ -99,7 +101,7 @@ async function fetchJsonWithRetry(url, { signal, retries = 2, delay = 500 } = {}
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-     const res = await apiFetch(url, { signal });
+      const res = await apiFetch(url, { signal });
       let body = null;
       try { body = await res.json(); } catch { /* non-JSON body */ }
       if (!res.ok) throw new Error(body?.error || `Server responded with ${res.status}`);
@@ -1549,7 +1551,10 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
   };
 
   if (loadingPdf) return (
-    <div className="pdf-inline-loading"><div className="spinner" /><span>Loading document…</span></div>
+    <div className="ui-skeleton-surface">
+      <Skeleton h={34} />
+      <Skeleton h="46vh" style={{ marginTop: 12 }} />
+    </div>
   );
 
   if (!pdfUrl) return (
@@ -1682,6 +1687,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   const recordsAbortRef  = useRef(null);
   const archivedAbortRef = useRef(null);
 
+  // Returns true when the list is up to date, false when it could not be loaded.
   const fetchRecords = useCallback(async () => {
     if (recordsAbortRef.current) recordsAbortRef.current.abort();
     const controller = new AbortController();
@@ -1692,33 +1698,33 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
       const { data, fromCache } = await loadListWithFallback(`${API}/records`, "records", controller.signal);
       setAllRecords(data);
       if (fromCache && isOnline()) showNotif("Server unreachable. Showing records saved on this device.", "error");
+      return true;
     } catch (err) {
-      if (err?.name !== "AbortError") {
-        showNotif(`Failed to load records. ${err?.message || ""}`.trim(), "error");
-      }
+      // A newer request has taken over; it decides the outcome.
+      if (err?.name === "AbortError") return true;
+      showNotif(`Failed to load records. ${err?.message || ""}`.trim(), "error");
+      return false;
     } finally {
       if (recordsAbortRef.current === controller) setLoadingRecords(false);
     }
   }, []);
 
+  // Returns true when the list is up to date, false when it could not be loaded.
   const fetchArchived = useCallback(async () => {
     if (archivedAbortRef.current) archivedAbortRef.current.abort();
     const controller = new AbortController();
     archivedAbortRef.current = controller;
-
-useRegisterRefresh(async () => {
-  await Promise.all([fetchRecords(), fetchArchived()]);
-});
 
     setLoadingRecords(true);
     try {
       const { data, fromCache } = await loadListWithFallback(`${API}/archived`, "archived", controller.signal);
       setAllArchivedRecords(data);
       if (fromCache && isOnline()) showNotif("Server unreachable. Showing archive saved on this device.", "error");
+      return true;
     } catch (err) {
-      if (err?.name !== "AbortError") {
-        showNotif(`Failed to load archived records. ${err?.message || ""}`.trim(), "error");
-      }
+      if (err?.name === "AbortError") return true;
+      showNotif(`Failed to load archived records. ${err?.message || ""}`.trim(), "error");
+      return false;
     } finally {
       if (archivedAbortRef.current === controller) setLoadingRecords(false);
     }
@@ -1730,6 +1736,13 @@ useRegisterRefresh(async () => {
   useDataChanged(() => {
     if (isOnline()) { fetchRecords(); fetchArchived(); }
   }, { tables: BIRTH_LIVE_TABLES, debounceMs: 750 });
+
+  // Top-level registration: the loader always runs the latest fetch functions.
+  // Throws when either list fails, so the Topbar refresh button shows "Refresh failed".
+  useRegisterRefresh(async () => {
+    const results = await Promise.all([fetchRecords(), fetchArchived()]);
+    if (results.includes(false)) throw new Error("Could not refresh birth records.");
+  });
 
   useEffect(() => {
     if (online) refreshOfflineCredential("archive_birth", API);
@@ -2418,10 +2431,7 @@ useRegisterRefresh(async () => {
                 )}
 
                 {loadingRecords ? (
-                  <div className="tbl-loading">
-                    <div className="spinner" />
-                    <span>Loading archived records…</span>
-                  </div>
+                  <SkeletonTable rows={5} cols={4} />
                 ) : filteredArchived.length === 0 ? (
                   <div className="tbl-empty">
                     <span className="tbl-empty__icon"><IconFolder /></span>

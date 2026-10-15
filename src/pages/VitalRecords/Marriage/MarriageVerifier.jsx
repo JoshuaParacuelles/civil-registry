@@ -5,6 +5,7 @@ import sccLogo from "../../../assets/images/scc.png";
 import lcrLogo from "../../../assets/images/lcr.jpg";
 import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
+import { Skeleton, SkeletonTable } from "../../../components/Skeleton";
 import { computeMarriageAccuracy } from "../../../utils/matchAccuracy";
 import { isOnline, checkNow } from "../../../offline/connectivityService";
 import { newOpId } from "../../../offline/outboxQueue";
@@ -1496,7 +1497,10 @@ const InlinePdfViewer = ({ pdfData, pdfError, record, onPrint, loadingPdf, showN
   };
 
   if (loadingPdf) return (
-    <div className="pdf-inline-loading"><div className="spinner" /><span>Loading document…</span></div>
+    <div className="ui-skeleton-surface">
+      <Skeleton h={34} />
+      <Skeleton h="46vh" style={{ marginTop: 12 }} />
+    </div>
   );
 
   if (!pdfUrl) return (
@@ -1598,9 +1602,10 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     toBlob: createPdfBlobFromData, showNotif,
   });
 
+  // Top-level registration: the loader always runs the latest fetch functions.
   useRegisterRefresh(async () => {
-  await Promise.all([fetchRecords(), fetchArchived()]);
-});
+    await Promise.all([fetchRecords(), fetchArchived()]);
+  });
 
   // Realtime: i-reload ang lists kung naay bag-ong marriage record o transaction (gikan sa bisan asang device).
   useDataChanged(() => {
@@ -2271,10 +2276,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
                 )}
 
                 {loadingRecords ? (
-                  <div className="tbl-loading">
-                    <div className="spinner" />
-                    <span>Loading archived records…</span>
-                  </div>
+                  <SkeletonTable rows={5} cols={4} />
                 ) : filteredArchived.length === 0 ? (
                   <div className="tbl-empty">
                     <span className="tbl-empty__icon"><IconFolder /></span>

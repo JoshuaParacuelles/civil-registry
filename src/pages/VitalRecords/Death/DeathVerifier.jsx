@@ -5,6 +5,7 @@ import sccLogo from "../../../assets/images/scc.png";
 import lcrLogo from "../../../assets/images/lcr.jpg";
 import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
+import { Skeleton, SkeletonTable } from "../../../components/Skeleton";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
 import { isOnline, checkNow } from "../../../offline/connectivityService";
 import { newOpId } from "../../../offline/outboxQueue";
@@ -1091,6 +1092,7 @@ function uploadWithProgress(url, formData, onProgress) {
     xhr.send(formData);
   });
 }
+
 const MATCH_LIST_STYLE  = { maxHeight: 260, overflowY: "auto" };
 const MATCH_ROW_STYLE   = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "nowrap", gap: 12 };
 const MATCH_LEFT_STYLE  = { display: "flex", alignItems: "center", flexWrap: "nowrap", gap: 8, flex: "1 1 auto", minWidth: 0 };
@@ -1153,8 +1155,10 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
 
       const saveOffline = async () => {
         const op = await queueUpload(ENTITY, `${API}/records`, item.file);
-        uploaded.push({ id: `offline-${op.opId}`, file_name: item.file.name,
-          uploaded_at: new Date(op.createdAt).toISOString(), _pending: true });
+        uploaded.push({
+          id: `offline-${op.opId}`, file_name: item.file.name,
+          uploaded_at: new Date(op.createdAt).toISOString(), _pending: true,
+        });
         setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "queued", progress: 100 } : qi));
       };
 
@@ -1163,7 +1167,8 @@ const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
         const fd = new FormData();
         fd.append("file", item.file);
         const data = await uploadWithProgress(`${API}/records`, fd, (pct) =>
-          setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, progress: pct } : qi)));
+          setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, progress: pct } : qi)),
+        );
         uploaded.push(data);
         setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "done", progress: 100 } : qi));
       } catch (err) {
@@ -1394,7 +1399,10 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
   };
 
   if (loadingPdf) return (
-    <div className="pdf-inline-loading"><div className="spinner" /><span>Loading document…</span></div>
+    <div className="ui-skeleton-surface">
+      <Skeleton h={34} />
+      <Skeleton h="46vh" style={{ marginTop: 12 }} />
+    </div>
   );
 
   if (!pdfUrl) return (
@@ -1426,7 +1434,7 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
 };
 
 // Checkbox for bulk selection (selected / onToggle props).
-const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete, onRestore, restoring }) => {
+const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
   const father      = getFatherDisplayName(record);
   const mother      = getMotherDisplayName(record);
@@ -1491,9 +1499,10 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     toBlob: createPdfBlobFromData, showNotif,
   });
 
-useRegisterRefresh(async () => {
-  await Promise.all([fetchRecords(), fetchArchived()]);
-});
+  // Top-level registration: the loader always runs the latest fetch functions.
+  useRegisterRefresh(async () => {
+    await Promise.all([fetchRecords(), fetchArchived()]);
+  });
 
   // Realtime: i-reload ang lists kung naay bag-ong death record o transaction (gikan sa bisan asang device).
   useDataChanged(() => {
@@ -1663,8 +1672,7 @@ useRegisterRefresh(async () => {
       if (!isOnline()) return await saveOffline();
       let res;
       try {
-        res = await apiFetch(
-          url, {
+        res = await apiFetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Offline-Op-Id": opId },
           body: JSON.stringify(payload),
@@ -1805,8 +1813,6 @@ useRegisterRefresh(async () => {
           showNotif={showNotif}
         />
       )}
-
-
 
       <div className="ubr-header">
         <div className="ubr-header__brand">
@@ -2148,10 +2154,7 @@ useRegisterRefresh(async () => {
                 )}
 
                 {loadingRecords ? (
-                  <div className="tbl-loading">
-                    <div className="spinner" />
-                    <span>Loading archived records…</span>
-                  </div>
+                  <SkeletonTable rows={5} cols={4} />
                 ) : filteredArchived.length === 0 ? (
                   <div className="tbl-empty">
                     <span className="tbl-empty__icon"><IconFolder /></span>
