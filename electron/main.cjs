@@ -3,6 +3,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
 const { spawn, spawnSync } = require('child_process');
+const { initAutoUpdater } = require('./updater.cjs');
 
 const isDev = !app.isPackaged && !!process.env.ELECTRON_START_URL;
 const DEV_URL = process.env.ELECTRON_START_URL || 'http://localhost:5173';
@@ -460,6 +461,9 @@ function initApp() {
     }
 
     createWindow();
+
+    // Auto-update: i-check ang GitHub Releases human mo-load ang app (packaged build ra)
+    initAutoUpdater();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
