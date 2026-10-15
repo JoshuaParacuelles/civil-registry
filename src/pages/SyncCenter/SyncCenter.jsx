@@ -3,6 +3,7 @@ import { useOffline } from '../../context/OfflineContext';
 import { usePermissions } from '../../context/PermissionContext';
 import { listAll, subscribeOutbox, requeueOne, removeOp } from '../../offline/outboxQueue';
 import { getAllowedEntities } from '../../offline/syncScope';
+import { useRegisterRefresh } from "../../context/RefreshContext";
 import './SyncCenter.css';
 
 const TABS = [
@@ -144,6 +145,8 @@ export default function SyncCenter() {
     load();
     return subscribeOutbox(load);
   }, [load]);
+
+useRegisterRefresh(load);
 
   // Only the rows this user is allowed to see.
   const scopedRows = useMemo(

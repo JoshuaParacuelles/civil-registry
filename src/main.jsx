@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import "./index.css";
 import { PermissionProvider } from "./context/PermissionContext";
 import { OfflineProvider } from "./context/OfflineContext";
+import { RefreshProvider } from "./context/RefreshContext";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import Login from "./pages/Auth/Login";
 import AccessDenied from "./pages/AccountSettings/AccessDenied";
@@ -27,35 +28,39 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <GlobalRealtime />
       <PermissionProvider>
         <OfflineProvider>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="/login" element={<><Login /><HomePreloader /></>} />
-            <Route path="/access-denied" element={<AccessDenied />} />
+          {/* Global refresh: lives above the routes so the Topbar button and every
+              registered page loader survive navigation between modules. */}
+          <RefreshProvider>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route path="/login" element={<><Login /><HomePreloader /></>} />
+              <Route path="/access-denied" element={<AccessDenied />} />
 
-            {/* Protected shell. One pathless layout route keeps Home mounted
-                while you move between pages; Home reads the URL itself to
-                decide which page to show. */}
-            <Route
-              element={
-                <ProtectedRoute module="dashboard">
-                  <Suspense fallback={<LoadingScreen />}>
-                    <Home />
-                  </Suspense>
-                </ProtectedRoute>
-              }
-            >
-              <Route path="dashboard" element={<></>} />
-              <Route path="vital-records/*" element={<></>} />
-              <Route path="heatmaps" element={<></>} />
-              <Route path="document-tracking" element={<></>} />
-              <Route path="settings/*" element={<></>} />
-              <Route path="offline-sync" element={<></>} />
-            </Route>
+              {/* Protected shell. One pathless layout route keeps Home mounted
+                  while you move between pages; Home reads the URL itself to
+                  decide which page to show. */}
+              <Route
+                element={
+                  <ProtectedRoute module="dashboard">
+                    <Suspense fallback={<LoadingScreen />}>
+                      <Home />
+                    </Suspense>
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="dashboard" element={<></>} />
+                <Route path="vital-records/*" element={<></>} />
+                <Route path="heatmaps" element={<></>} />
+                <Route path="document-tracking" element={<></>} />
+                <Route path="settings/*" element={<></>} />
+                <Route path="offline-sync" element={<></>} />
+              </Route>
 
-            {/* Catch-all */}
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
+              {/* Catch-all */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
+          </RefreshProvider>
         </OfflineProvider>
       </PermissionProvider>
     </Router>

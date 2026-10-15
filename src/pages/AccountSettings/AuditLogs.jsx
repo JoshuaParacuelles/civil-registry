@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useRegisterRefresh } from "../../context/RefreshContext";
 import "./AuditLogs.css";
 
 // Relative on purpose. In dev, the Vite proxy forwards /api to Flask; on
@@ -226,13 +227,11 @@ const AuditLogs = () => {
       .catch((err) => console.warn("Could not load action catalog:", err));
   }, []);
 
+  // Reloads the first page. Current rows stay on screen while loading, and
+  // they are kept if the request fails; only the error message is shown.
   const fetchInitial = useCallback(async () => {
     setLoading(true);
     setError(null);
-    setLogs([]);
-    setTotal(0);
-    setOffset(0);
-    setHasMore(true);
     setExpandedId(null);
     try {
       const params = new URLSearchParams({ limit: String(FETCH_LIMIT), offset: "0" });
@@ -250,10 +249,7 @@ const AuditLogs = () => {
       setCurrentPage(1);
     } catch (err) {
       console.error("Failed to fetch audit logs:", err);
-      setLogs([]);
-      setTotal(0);
-      setOffset(0);
-      setHasMore(false);
+      // Keep the current rows on screen; only show the error.
       setError(describeLoadError(err));
     } finally {
       setLoading(false);
@@ -315,6 +311,10 @@ const AuditLogs = () => {
   }, [filterAction]);
 
   useEffect(() => { fetchInitial(); }, [fetchInitial]);
+
+  // Registers the latest fetchInitial with RefreshContext, so the page-level
+  // refresh reloads the first page without clearing the table.
+  useRegisterRefresh(fetchInitial);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -432,7 +432,7 @@ const AuditLogs = () => {
           </div>
         </div>
         <div className="audit-header-actions">
-          <button className="audit-btn-refresh" onClick={fetchInitial}>
+          <button className="audit-btn-refresh" onClick={() => fetchInitial()}>
             <IconRefresh /> Refresh
           </button>
           <button className="audit-btn-export" onClick={exportCSV}>
@@ -538,7 +538,7 @@ const AuditLogs = () => {
                 <h3>{error ? "Couldn't load audit logs" : "No records found"}</h3>
                 <p>{error || "We couldn't find any audit logs for the selected filters."}</p>
                 <div style={{ marginTop: 14 }}>
-                  <button className="audit-btn-refresh" onClick={fetchInitial}>
+                  <button className="audit-btn-refresh" onClick={() => fetchInitial()}>
                     <IconRefresh /> Retry
                   </button>
                 </div>

@@ -1,4 +1,5 @@
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
+import { useGlobalRefresh } from "../context/RefreshContext";
 import "./Topbar.css";
 
 const dateFmt = new Intl.DateTimeFormat("en-PH", {
@@ -14,6 +15,13 @@ const CalendarIcon = () => (
     <path d="M3 9.5H21" stroke="currentColor" strokeWidth="1.6" />
     <path d="M8 3V6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     <path d="M16 3V6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const RefreshIcon = () => (
+  <svg className="topbar-refresh-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M20 12a8 8 0 1 1-2.34-5.66" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M20 4v5h-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -46,6 +54,75 @@ const TopbarDate = memo(function TopbarDate() {
   );
 });
 
+const RefreshButton = memo(function RefreshButton() {
+  const { refresh, isRefreshing } = useGlobalRefresh();
+  const [status, setStatus] = useState(null); // null | "ok" | "error"
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const statusTimer = useRef(null);
+
+  useEffect(() => {
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => () => clearTimeout(statusTimer.current), []);
+
+  const handleClick = async () => {
+    if (isRefreshing) return;
+
+    const res = await refresh();
+    if (res.reason === "busy") return;
+
+    setStatus(res.ok ? "ok" : "error");
+    clearTimeout(statusTimer.current);
+    statusTimer.current = setTimeout(() => setStatus(null), 1800);
+  };
+
+  const state = isRefreshing ? "loading" : status ?? "idle";
+
+  const title = isRefreshing
+    ? "Refreshing…"
+    : status === "error"
+      ? "Refresh failed. Showing previous content."
+      : online
+        ? "Refresh page data"
+        : "Offline: reload cached data";
+
+  return (
+    <>
+      <button
+        type="button"
+        className="topbar-refresh-btn"
+        data-state={state}
+        onClick={handleClick}
+        disabled={isRefreshing}
+        aria-busy={isRefreshing}
+        aria-label="Refresh page data"
+        title={title}
+      >
+        <span className="topbar-refresh-icon-wrap">
+          <RefreshIcon />
+        </span>
+      </button>
+      <span className="topbar-refresh-sr" role="status" aria-live="polite">
+        {isRefreshing
+          ? "Refreshing data"
+          : status === "ok"
+            ? "Data refreshed"
+            : status === "error"
+              ? "Refresh failed"
+              : ""}
+      </span>
+    </>
+  );
+});
+
 const Topbar = ({ activeSubMenu, toggleSidebar, children }) => (
   <header className="topbar">
     <div className="topbar-left">
@@ -57,6 +134,7 @@ const Topbar = ({ activeSubMenu, toggleSidebar, children }) => (
 
     <div className="topbar-right">
       <TopbarDate />
+      <RefreshButton />
       {children}
     </div>
   </header>

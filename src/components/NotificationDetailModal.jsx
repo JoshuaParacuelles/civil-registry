@@ -45,6 +45,7 @@ const detailValue = (v) => (v === null || v === undefined || v === "" ? "—" : 
 
 const NotificationDetailModal = ({
   notification,
+  isOnlineRequest,     // true only for source === "online_request"; gates the Request Status editor
   liveStatus,          // latest saved status from Home.jsx (wins over the hook cache)
   onClose,
   canAccess,
@@ -87,11 +88,13 @@ const NotificationDetailModal = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  // Align the dropdown with the saved status once fresh data is ready.
+  // The saved status is the source of truth. Whenever the request or its saved
+  // status changes, the draft and remark are reset to match, without waiting for "ready".
   useEffect(() => {
-    if (ready) setStatusDraft(currentStatus);
+    setStatusDraft(currentStatus);
+    setStatusNote("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, key, currentStatus]);
+  }, [key, currentStatus]);
 
   // Close the enlarged signature with Escape first, before closing the modal.
   // (Home.jsx has its own Escape handler; this one only runs while zoomed.)
@@ -119,14 +122,16 @@ const NotificationDetailModal = ({
   const topStatusValue = currentStatus;
   const topStatusLabel = REQUEST_STATUS_LABELS[topStatusValue] || topStatusValue;
 
-  const statusOptions = Array.from(new Set([...(REQUEST_STATUS_OPTIONS || []), "REJECTED"]));
+  const statusOptions = Array.from(
+    new Set([...(REQUEST_STATUS_OPTIONS || []), "REJECTED", currentStatus].filter(Boolean))
+  );
   const statusOptionLabel = (status) =>
     REQUEST_STATUS_LABELS[status] || (status === "REJECTED" ? "Rejected" : status);
-  const selectValue = statusDraft || currentStatus;
-  const isRejecting = selectValue === "REJECTED";
-  const remarkMissing = isRejecting && !statusNote.trim();
   const FINAL_STATUSES = ["COMPLETED", "REJECTED"];
   const isFinalized = FINAL_STATUSES.includes(currentStatus);
+  const selectValue = isFinalized ? currentStatus : (statusDraft || currentStatus);
+  const isRejecting = selectValue === "REJECTED";
+  const remarkMissing = isRejecting && !statusNote.trim();
 
   const handleUpdate = async () => {
     try {
@@ -242,7 +247,9 @@ const NotificationDetailModal = ({
             ))
           )}
 
-          {canAccess("citizen_requests") && (
+          {/* Status editor only applies to online requests. Payment notifications
+              (birth/marriage/death) have no civil_registry_request row to update. */}
+          {canAccess("citizen_requests") && isOnlineRequest && (
             <section className="notif-detail-section">
               <h3>Request Status</h3>
               <div className="notif-status-editor">

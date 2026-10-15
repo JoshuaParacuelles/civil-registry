@@ -1,11 +1,12 @@
 // src/hooks/useRequestDetail.js
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
-const TTL_MS = 15000;     // how long a fetched snapshot is considered fresh
-const TIMEOUT_MS = 6000;  // give up and show the "Retry" banner after this
+const TTL_MS = 15000;
+const TIMEOUT_MS = 6000;
 
-const cache = new Map();    // key -> { data, ts }
-const inflight = new Map(); // key -> Promise
+const cache = new Map();          // key -> { data, ts }
+const inflight = new Map();       // key -> Promise
+const statusOverrides = new Map(); // key -> { status, updated_at }
 
 export const requestKey = (n) =>
   n ? `${n.record_type}:${n.record_id ?? ""}:${n.control_no ?? ""}` : null;
@@ -13,6 +14,21 @@ export const requestKey = (n) =>
 const readFresh = (key) => {
   const hit = key ? cache.get(key) : null;
   return hit && Date.now() - hit.ts < TTL_MS ? hit.data : null;
+};
+
+/**
+ * Apply a status this admin just saved. The override is ignored once the
+ * server row has a newer updated_at than our save (someone else changed it).
+ */
+const applyOverride = (key, data) => {
+  const o = key ? statusOverrides.get(key) : null;
+  if (!o || !data) return data;
+  const serverStamp = Date.parse(data.updated_at || "");
+  const savedStamp = Date.parse(o.updated_at);
+  if (!Number.isNaN(serverStamp) && !Number.isNaN(savedStamp) && serverStamp > savedStamp) {
+    return data;
+  }
+  return { ...data, status: o.status };
 };
 
 const withTimeout = (promise, ms) =>
@@ -38,8 +54,9 @@ export function loadSnapshot(notification, fetcher, { force = false } = {}) {
   const p = withTimeout(new Promise((resolve) => resolve(fetcher(notification))), TIMEOUT_MS)
     .then((data) => {
       if (!data) throw new Error("empty snapshot");
-      cache.set(key, { data, ts: Date.now() });
-      return data;
+      const merged = applyOverride(key, data);
+      cache.set(key, { data: merged, ts: Date.now() });
+      return merged;
     })
     .finally(() => {
       if (inflight.get(key) === p) inflight.delete(key);
@@ -48,16 +65,32 @@ export function loadSnapshot(notification, fetcher, { force = false } = {}) {
   return p;
 }
 
-/** Warm the cache (call on hover / focus / touchstart). Never throws. */
+/** Warm the cache (hover / focus / touch). Never throws. */
 export function prefetchRequestSnapshot(notification, fetcher) {
   if (!notification?.request_snapshot) return;
   loadSnapshot(notification, fetcher).catch(() => {});
 }
 
-/** Put a known-good snapshot straight into the cache (e.g. from a realtime event). */
+/** Put a known-good snapshot straight into the cache. */
 export function primeRequestSnapshot(notification, data) {
   const key = requestKey(notification);
-  if (key) cache.set(key, { data, ts: Date.now() });
+  if (key) cache.set(key, { data: applyOverride(key, data), ts: Date.now() });
+}
+
+/**
+ * Record a status the server just confirmed. Every later read of this request
+ * (cache, live fetch, stored snapshot fallback) shows this status until the
+ * server reports a newer change.
+ */
+export function recordSavedStatus(notification, status, updatedAt) {
+  const key = requestKey(notification);
+  if (!key || !status) return;
+  statusOverrides.set(key, {
+    status: String(status).toUpperCase(),
+    updated_at: updatedAt || new Date().toISOString(),
+  });
+  const hit = cache.get(key);
+  if (hit) cache.set(key, { data: applyOverride(key, hit.data), ts: hit.ts });
 }
 
 export function invalidateRequestSnapshot(notification) {
@@ -67,10 +100,10 @@ export function invalidateRequestSnapshot(notification) {
 
 /**
  * phase:
- *  "idle"     – nothing to fetch (e.g. system notification)
- *  "loading"  – fresh data not here yet -> show skeleton, NEVER the stale snapshot
+ *  "idle"     – nothing to fetch
+ *  "loading"  – fresh data not here yet
  *  "ready"    – fresh data available
- *  "fallback" – fetch failed/timed out -> showing the saved copy with a banner
+ *  "fallback" – fetch failed; showing the saved copy with a banner
  */
 export function useRequestDetail(notification, fetcher) {
   const hasFetcher = typeof fetcher === "function";
@@ -86,7 +119,6 @@ export function useRequestDetail(notification, fetcher) {
   fetcherRef.current = fetcher;
   notifRef.current = notification;
 
-  // Keep the last good data for this key so a TTL expiry can't flip us back to loading.
   const fresh = readFresh(key);
   if (fresh) held.current = { key, data: fresh };
   const data = held.current.key === key ? held.current.data : null;
@@ -101,7 +133,6 @@ export function useRequestDetail(notification, fetcher) {
     return () => { cancelled = true; };
   }, [key]);
 
-  /** Silent re-fetch that keeps showing current data until the new data lands. */
   const refresh = useCallback(async () => {
     try {
       await loadSnapshot(notifRef.current, fetcherRef.current, { force: true });
@@ -124,7 +155,8 @@ export function useRequestDetail(notification, fetcher) {
   return {
     key,
     phase,
-    snapshot: data ?? notification?.request_snapshot ?? null,
+    // Apply the saved override on every path, including the stored-snapshot fallback.
+    snapshot: applyOverride(key, data ?? notification?.request_snapshot ?? null),
     refresh,
     retry,
   };

@@ -11,6 +11,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { pushToast } from "../../services/toastService";
 import { fetchResidents } from "../../services/demographicsService";
+import { useRegisterRefresh } from "../../context/RefreshContext";
 import {
   AGE_GROUPS,
   DEMOGRAPHIC_TYPES,
@@ -712,6 +713,12 @@ export default function Heatmaps() {
       });
     }
   }, []);
+  
+const refreshHeatmap = useCallback(() => {
+  return isDemo ? loadResidents() : Promise.resolve();
+}, [isDemo, loadResidents]);
+
+useRegisterRefresh(refreshHeatmap);
 
   useEffect(() => {
     if (isDemo && residentStatus === "idle") {

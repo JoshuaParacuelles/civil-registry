@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 import { isDbAvailable, subscribeDb } from "../offline/connectivityService";
+import { useRegisterRefresh } from "../context/RefreshContext";
 
 const NOTIFICATION_TABLE = "notification";
 const READS_TABLE = "notification_reads";
@@ -17,6 +18,12 @@ const toNotif = (row) => {
   return { ...rest, is_read: Array.isArray(reads) && reads.length > 0 };
 };
 
+// Status shown in the bell pill, taken from the snapshot that request.py includes.
+const statusFromSnapshot = (snapshot) => {
+  const status = (snapshot?.status || "").toUpperCase();
+  return status || null;
+};
+
 const sameNotification = (a, b) =>
   a.id === b.id &&
   a.record_type === b.record_type &&
@@ -26,6 +33,7 @@ const sameNotification = (a, b) =>
   a.message === b.message &&
   a.created_at === b.created_at &&
   a.is_read === b.is_read &&
+  a.request_status === b.request_status &&
   JSON.stringify(a.request_snapshot) === JSON.stringify(b.request_snapshot);
 
 const retainUnchangedNotifications = (previous, next) => {
@@ -98,12 +106,14 @@ export default function useNotifications({ username, allowedTypes, onOpenVerifie
     statusRef.current = notifStatus;
   }, [notifStatus]);
 
+  // Returns true when the list is up to date (or a newer request is already
+  // deciding the outcome), false when the server failed.
   const fetchNotifications = useCallback(async () => {
     // Database unreachable: skip the direct Supabase calls and show the offline state.
     if (!isDbAvailable()) {
       setNotifLoading(false);
       setNotifStatus("offline");
-      return;
+      return false;
     }
 
     // No document types assigned: nothing to show.
@@ -111,7 +121,7 @@ export default function useNotifications({ username, allowedTypes, onOpenVerifie
       setNotifications([]);
       setUnreadCount(0);
       setNotifLoading(false);
-      return;
+      return true;
     }
 
     const sequence = ++fetchSeqRef.current;
@@ -130,17 +140,25 @@ export default function useNotifications({ username, allowedTypes, onOpenVerifie
         }),
       ]);
 
-      if (sequence !== fetchSeqRef.current) return;
+      // A newer request has started and decides the outcome.
+      if (sequence !== fetchSeqRef.current) return true;
       if (listResult.error) throw listResult.error;
       if (countResult.error) throw countResult.error;
 
       const rows = (Array.isArray(listResult.data) ? listResult.data : []).map(toNotif);
+
+      // Adds request_status to each row so the pill has a value on first render.
+      const rowsWithStatus = rows.map((n) => ({
+        ...n,
+        request_status: statusFromSnapshot(n.request_snapshot),
+      }));
+
       const serverCount = typeof countResult.data === "number" ? countResult.data : 0;
 
       // Keep optimistic changes until the server agrees (or they expire).
       const nowMs = Date.now();
       let adjust = 0;
-      const merged = rows.map((n) => {
+      const merged = rowsWithStatus.map((n) => {
         const p = pendingRef.current.get(n.id);
         if (!p) return n;
         if (nowMs - p.ts > PENDING_TTL_MS || p.is_read === n.is_read) {
@@ -153,16 +171,30 @@ export default function useNotifications({ username, allowedTypes, onOpenVerifie
 
       setNotifications((previous) => retainUnchangedNotifications(previous, merged));
       setUnreadCount(Math.max(0, serverCount + adjust));
-
       setNotifStatus((prev) => (prev === "live" ? "live" : "connecting"));
+      return true;
     } catch (err) {
-      if (sequence !== fetchSeqRef.current) return;
+      if (sequence !== fetchSeqRef.current) return true;
       console.error("[Home] Could not load notifications:", err);
       setNotifStatus("error");
+      return false;
     } finally {
       if (sequence === fetchSeqRef.current) setNotifLoading(false);
     }
   }, [reader, typeList]);
+
+  // Used by the global refresh button. Throws on failure so the button shows an
+  // error and the current list stays on screen.
+  const refreshNotifications = useCallback(async () => {
+    if (!isDbAvailable()) {
+      throw new Error("Offline: showing the last loaded notifications.");
+    }
+    const ok = await fetchNotifications();
+    if (!ok) throw new Error("Could not refresh notifications.");
+  }, [fetchNotifications]);
+
+  // Registered unconditionally at the top level, so hook order stays stable.
+  useRegisterRefresh(refreshNotifications);
 
   // Realtime channel + polling. The channel is only open while the database is
   // reachable and the user has document types, so the browser does not keep
@@ -208,7 +240,11 @@ export default function useNotifications({ username, allowedTypes, onOpenVerifie
           if (payload.eventType === "INSERT") {
             // Only show new notifications for document types this user handles.
             if (!typeList.includes(payload.new.record_type)) return;
-            const row = { ...payload.new, is_read: false };
+            const row = {
+              ...payload.new,
+              is_read: false,
+              request_status: payload.new.request_snapshot?.status ?? null,
+            };
             setNotifications((prev) => (prev.some((n) => n.id === row.id) ? prev : [row, ...prev].slice(0, 50)));
             setUnreadCount((c) => c + 1);
           } else if (payload.eventType === "UPDATE") {
@@ -217,7 +253,15 @@ export default function useNotifications({ username, allowedTypes, onOpenVerifie
             delete rest.is_read;
             delete rest.read_at;
             delete rest.read_by;
-            setNotifications((prev) => prev.map((n) => (n.id === rest.id ? { ...n, ...rest } : n)));
+            setNotifications((prev) =>
+              prev.map((n) => {
+                if (n.id !== rest.id) return n;
+                const merged = { ...n, ...rest };
+                // Keep the pill in sync when the snapshot status changes.
+                merged.request_status = statusFromSnapshot(merged.request_snapshot);
+                return merged;
+              })
+            );
           } else if (payload.eventType === "DELETE") {
             const row = payload.old;
             const removed = notificationsRef.current.find((n) => n.id === row.id);

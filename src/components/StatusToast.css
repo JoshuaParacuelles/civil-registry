@@ -58,6 +58,7 @@
 .notif-toast--success .notif-toast__icon-wrap { color: #059669; }
 .notif-toast--warning .notif-toast__icon-wrap { color: #d97706; }
 .notif-toast--error   .notif-toast__icon-wrap { color: #dc2626; }
+.notif-toast--neutral .notif-toast__icon-wrap { color: #64748b; }
 
 .notif-toast__body {
   flex: 1;

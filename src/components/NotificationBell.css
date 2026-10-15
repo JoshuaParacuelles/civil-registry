@@ -257,6 +257,46 @@
   font-weight: 500;
 }
 
+/* ---------- Request status pill (bell list) ---------- */
+.notif-status-pill {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.notif-status-pill.pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.notif-status-pill.processing {
+  background: rgba(37, 99, 235, 0.10);
+  color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.25);
+}
+
+.notif-status-pill.completed {
+  background: rgba(16, 185, 129, 0.10);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.notif-status-pill.rejected {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
 .notif-kebab-wrap {
   position: relative;
   flex-shrink: 0;

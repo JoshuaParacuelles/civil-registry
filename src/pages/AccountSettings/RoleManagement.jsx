@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { usePermissions } from "../../context/PermissionContext";
+import { useRegisterRefresh } from "../../context/RefreshContext";
 import { pushToast } from "../../services/toastService";
 import "./RoleManagement.css";
 
@@ -181,6 +182,9 @@ export default function Rolemanagement() {
     return "Unknown error";
   };
 
+  // Returns true when the data is up to date, false when it could not be loaded.
+  // On failure, userRoles is left as it was, so the table keeps showing the
+  // last good data.
   const fetchAll = useCallback(async (isSilent = false) => {
     try {
       const [rolesRes, userRolesRes] = await Promise.all([
@@ -282,6 +286,17 @@ export default function Rolemanagement() {
       setLoading(false);
     }
   }, [showToast]);
+
+  // Manual refresh from the page-level Refresh button (RefreshContext).
+  // fetchAll reports failure by returning false, so this wrapper turns that
+  // into a thrown error, which lets the caller's button show a failed state.
+  // The table keeps its last good data either way.
+  const refreshRoles = useCallback(async () => {
+    const ok = await fetchAll(false);
+    if (!ok) throw new Error("Role data could not be refreshed.");
+  }, [fetchAll]);
+
+  useRegisterRefresh(refreshRoles);
 
   useEffect(() => {
     if (!is_admin) return;

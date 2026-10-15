@@ -9,6 +9,7 @@ import { computeAccuracy } from "../../../utils/matchAccuracy";
 import { isOnline, checkNow } from "../../../offline/connectivityService";
 import { newOpId } from "../../../offline/outboxQueue";
 import { apiFetch } from "../../../services/apiFetch";
+import { useRegisterRefresh } from "../../../context/RefreshContext";
 import {
   useVitalData, loadPdfForRecord, deleteRecordSmart, queueUpload, queueTransaction,
 } from "../../../offline/vitalOffline";
@@ -1490,6 +1491,10 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     toBlob: createPdfBlobFromData, showNotif,
   });
 
+useRegisterRefresh(async () => {
+  await Promise.all([fetchRecords(), fetchArchived()]);
+});
+
   // Realtime: i-reload ang lists kung naay bag-ong death record o transaction (gikan sa bisan asang device).
   useDataChanged(() => {
     if (isOnline()) { fetchRecords(); fetchArchived(); }
@@ -1658,7 +1663,8 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
       if (!isOnline()) return await saveOffline();
       let res;
       try {
-        res = await apiFetch(url, {
+        res = await apiFetch(
+          url, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Offline-Op-Id": opId },
           body: JSON.stringify(payload),
@@ -1799,6 +1805,8 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
           showNotif={showNotif}
         />
       )}
+
+
 
       <div className="ubr-header">
         <div className="ubr-header__brand">

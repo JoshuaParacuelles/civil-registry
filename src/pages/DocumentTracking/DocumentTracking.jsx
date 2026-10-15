@@ -4,6 +4,7 @@ import { supabase } from "../../services/supabaseClient";
 import { pushToast } from "../../services/toastService";
 import { isDbAvailable, subscribeDb } from "../../offline/connectivityService";
 import { subscribeSyncState } from "../../offline/syncEngine";
+import { useRegisterRefresh } from "../../context/RefreshContext";
 import {
   trackingRead,
   trackingWrite,
@@ -433,6 +434,15 @@ export default function DocumentTracking() {
       setDetailLoading(false);
       return;
     }
+
+    const refreshAll = useCallback(async () => {
+  await loadList();
+  if (selectedIdRef.current != null) {
+    await loadDetail(selectedIdRef.current, { silent: true });
+  }
+}, [loadList, loadDetail]);
+
+useRegisterRefresh(refreshAll);
     const key = String(id);
     if (opts?.silent && (pendingWritesRef.current.get(key) || 0) > 0) return;
 

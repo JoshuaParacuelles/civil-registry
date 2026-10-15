@@ -99,19 +99,68 @@
   flex-shrink: 0;
 }
 
-@media (min-width: 768px) and (max-width: 1024px) {
-  .topbar-datetime { font-size: 11px; padding: 6px 9px; }
+/* ---------- Global refresh button ---------- */
+
+.topbar-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 
-@media (max-width: 767px) {
-  .topbar { padding-left: 60px; }
-  .topbar-toggle { display: none; }
-  .topbar-datetime-item span:last-child { font-size: 11px; }
-  .topbar-datetime { padding: 6px 8px; gap: 6px; }
+.topbar-refresh-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: rgba(0, 0, 0, 0.20);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.06);
 }
 
-@media (max-width: 480px) {
-  .topbar { padding-left: 56px; padding-right: 10px; gap: 8px; }
-  .topbar-breadcrumb-current { font-size: 13px; }
-  .topbar-datetime-item span:last-child { font-size: 10.5px; }
+.topbar-refresh-btn:active:not(:disabled) { transform: scale(0.97); }
+
+.topbar-refresh-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.55);
+  outline-offset: 2px;
 }
+
+.topbar-refresh-btn:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.topbar-refresh-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-refresh-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Success / error feedback, shown briefly after a refresh finishes */
+.topbar-refresh-btn[data-state="ok"] {
+  color: #15803d;
+  border-color: rgba(21, 128, 61, 0.35);
+}
+
+.topbar-refresh-btn[data-state="error"] {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.35);
+}
+
+/* Spinning state while a refresh is in flight */
+.topbar-refresh-btn[data-state="loading"] .topbar-refresh-icon {
+  animation: topbar-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes

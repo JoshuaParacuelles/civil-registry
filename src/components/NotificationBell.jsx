@@ -1,6 +1,13 @@
 import React, { memo, useEffect, useLayoutEffect, useState } from "react";
 import "./NotificationBell.css";
 
+const REQUEST_STATUS_LABELS = {
+  PENDING: "Pending Review",
+  PROCESSING: "Being Processed",
+  COMPLETED: "Completed",
+  REJECTED: "Rejected",
+};
+
 const BellIcon = () => (
   <svg className="notif-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -103,6 +110,11 @@ const NotifItem = memo(function NotifItem({
           <p className="notif-msg">{n.message || n.title}</p>
           {!n.is_read && <span className="notif-new-badge">NEW</span>}
         </div>
+        {n.request_status && (
+          <span className={`notif-status-pill ${n.request_status.toLowerCase()}`}>
+            {REQUEST_STATUS_LABELS[n.request_status] || n.request_status}
+          </span>
+        )}
         <span className="notif-time">{timeAgo(n.created_at)}</span>
       </div>
       <div className="notif-kebab-wrap">

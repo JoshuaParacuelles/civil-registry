@@ -24,8 +24,8 @@ import LogoutModal from "../../components/LogoutModal";
 import NotificationBell from "../../components/NotificationBell";
 import NotificationDetailModal from "../../components/NotificationDetailModal";
 import useNotifications from "../../hooks/useNotifications";
-import { loadSnapshot, prefetchRequestSnapshot } from "../../hooks/useRequestDetail";
-import { fetchSnapshot } from "../../services/requestSnapshotService";
+import { loadSnapshot, prefetchRequestSnapshot, recordSavedStatus } from "../../hooks/useRequestDetail";
+import { fetchSnapshot, saveRequestStatus } from "../../services/requestSnapshotService";
 import { pushToast } from "../../services/toastService";
 
 import logoImg from "../../assets/icons/sidebar/scc.png";
@@ -418,7 +418,11 @@ const Home = () => {
           setNotifications((prev) =>
             prev.map((n) =>
               n.id === notif.id
-                ? { ...n, request_snapshot: { ...(n.request_snapshot || {}), status: liveStatus } }
+                ? {
+                    ...n,
+                    request_status: liveStatus,
+                    request_snapshot: { ...(n.request_snapshot || {}), status: liveStatus },
+                  }
                 : n
             )
           );
@@ -443,28 +447,26 @@ const Home = () => {
     if (!selectedNotif?.record_id || !isOnlineRequest) return;
     setStatusSaving(true);
     try {
-      const res = await fetch(`/api/requests/${selectedNotif.record_id}/status`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: statusDraft,
-          note: statusNote.trim() || undefined,
-          notify_via: notifyVia,
-        }),
+      const data = await saveRequestStatus(selectedNotif, statusDraft, {
+        note: statusNote.trim(),
+        notifyVia,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`);
 
       const savedStatus = (data.status || statusDraft).toUpperCase();
 
-      // Exact message for Being Processed / Completed / Rejected:
-      //   "Status updated to <status>"
+      // Store the confirmed status so every later read of this request shows it.
+      recordSavedStatus(selectedNotif, savedStatus, data.updated_at);
+
+      // Update the bell pill right away instead of waiting for the next poll.
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === selectedNotif.id ? { ...n, request_status: savedStatus } : n
+        )
+      );
+
       const statusLabel = REQUEST_STATUS_LABELS[savedStatus] || savedStatus;
       showStatusToast("Success", `Status updated to ${statusLabel}`, "success");
 
-      // Only warn if an email was actually supposed to go out (Completed or
-      // Rejected) and it failed. Being Processed never sends an email.
       if (data.email_attempted && !data.email_sent) {
         showStatusToast(
           "Notice",
@@ -476,11 +478,9 @@ const Home = () => {
       setStatusDraft(savedStatus);
       setStatusNote("");
 
-      // Update local state only; the modal re-reads the live row right after this
-      // (see handleUpdate in NotificationDetailModal) so its header pill stays correct.
       setRequestDetail((prev) =>
         prev && prev.notifId === selectedNotif.id
-          ? { ...prev, data: { ...prev.data, status: savedStatus } }
+          ? { ...prev, data: { ...prev.data, status: savedStatus, updated_at: data.updated_at ?? prev.data.updated_at } }
           : prev
       );
       setSelectedNotif((prev) =>
@@ -735,13 +735,8 @@ const Home = () => {
         </main>
       </div>
 
-            <NotificationDetailModal
+      <NotificationDetailModal
         notification={modalNotification}
-        liveStatus={
-          requestDetail && selectedNotif && requestDetail.notifId === selectedNotif.id
-            ? requestDetail.data?.status ?? null
-            : null
-        }
         isOnlineRequest={isOnlineRequest}
         onClose={closeNotifDetails}
         canAccess={canAccess}

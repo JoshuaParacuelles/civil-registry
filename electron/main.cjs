@@ -57,6 +57,66 @@ function initApp() {
   let backendProc = null;   // only set when THIS app started the backend
   let backendFailed = false;
 
+  // ---------- Splash progress ----------
+
+  let splashReady = false;
+  let splashFinishing = false;
+  let splashState = { pct: 0, text: 'Starting up…' };
+
+  function pushSplash() {
+    if (!splash || splash.isDestroyed() || !splashReady) return;
+    splash.webContents
+      .executeJavaScript(
+        `window.setProgress && window.setProgress(${splashState.pct}, ${JSON.stringify(splashState.text)})`
+      )
+      .catch(() => {});
+  }
+
+  function setProgress(pct, text) {
+    if (splashFinishing) return;
+    if (typeof text === 'string') splashState.text = text;
+    splashState.pct = Math.max(splashState.pct, Math.min(100, pct));
+    pushSplash();
+  }
+
+  // Ipakita ang 100%, i-fade out, dayon i-close ang splash ug ipakita ang main window
+   // Ipakita ang 100%, dayon i-close ang splash ug ipakita ang main window sa parehas nga higayon
+  function finishSplash() {
+    if (splashFinishing) return;
+    splashFinishing = true;
+
+    splashState.pct = 100;
+    splashState.text = 'Ready';
+    pushSplash();
+
+    // Hatagi og gamay nga oras aron makita sa user ang 100%
+    setTimeout(() => {
+      if (splash && !splash.isDestroyed()) splash.close();
+      splash = null;
+      if (win && !win.isDestroyed()) win.show();
+    }, 600);
+  }
+
+  function createSplash() {
+    splash = new BrowserWindow({
+      width: 420, height: 260, frame: false, resizable: false, center: true,
+      alwaysOnTop: true, backgroundColor: '#ffffff', show: true,
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+    });
+
+    splashReady = false;
+    splash.webContents.once('did-finish-load', () => {
+      splashReady = true;
+      pushSplash();
+    });
+    splash.on('closed', () => {
+      splash = null;
+      splashReady = false;
+    });
+
+    splash.loadFile(path.join(__dirname, 'splash.html'));
+  }
+
   // ---------- Backend management ----------
 
   function logPath() {
@@ -104,22 +164,40 @@ function initApp() {
   }
 
   async function waitForBackend() {
-    const deadline = Date.now() + BACKEND_TIMEOUT_MS;
+    const started = Date.now();
+    const deadline = started + BACKEND_TIMEOUT_MS;
+
     while (Date.now() < deadline) {
       if (backendFailed) return false;
-      if (await isBackendUp()) return true;
+
+      if (await isBackendUp()) {
+        setProgress(70, 'Backend connected');
+        return true;
+      }
+
+      // Estimated progress: mabagal sa dulo, pero dili gihapon mo-stuck
+      const elapsed = Date.now() - started;
+      setProgress(15 + 55 * (1 - Math.exp(-elapsed / 9000)), 'Preparing system…');
+
       await new Promise((r) => setTimeout(r, 500));
     }
     return false;
   }
 
   async function ensureBackend() {
-    if (SKIP_BACKEND) return true;
+    if (SKIP_BACKEND) {
+      setProgress(70, 'Skipping backend check');
+      return true;
+    }
 
     // Gamita ang backend nga naa na nga nagdagan (pananglitan gi-start nimo manually)
     // Note: kung manual nga nagdagan, ELECTRON_MODE wala gyud na-set. I-close ang
     // manual nga terminal sa python app.py kung gusto nimo i-apply ang Electron cookie mode.
-    if (await isBackendUp()) return true;
+    setProgress(10, 'Checking backend…');
+    if (await isBackendUp()) {
+      setProgress(70, 'Backend already running');
+      return true;
+    }
 
     if (!fs.existsSync(path.join(BACKEND_DIR, 'app.py'))) {
       dialog.showErrorBox('Local Civil Register',
@@ -164,22 +242,6 @@ function initApp() {
 
   // ---------- Windows ----------
 
-  function createSplash() {
-    splash = new BrowserWindow({
-      width: 360, height: 160, frame: false, resizable: false,
-      alwaysOnTop: true, backgroundColor: '#ffffff', show: true,
-      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
-    });
-
-    const html = `<!doctype html><html><body style="margin:0;height:100vh;display:flex;
-      align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;
-      color:#333;border:1px solid #ddd;box-sizing:border-box">
-      <div>Starting Local Civil Register…</div></body></html>`;
-
-    splash.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-    splash.on('closed', () => { splash = null; });
-  }
-
   function createWindow() {
     win = new BrowserWindow({
       width: 1366, height: 820, minWidth: 1024, minHeight: 650,
@@ -201,8 +263,7 @@ function initApp() {
 
     win.once('ready-to-show', () => {
       console.log('[window] ready-to-show fired');
-      if (splash) splash.close();
-      win.show();
+      finishSplash();
     });
 
     win.on('closed', () => { win = null; });
@@ -253,25 +314,28 @@ function initApp() {
       }
     });
 
-    win.loadURL(isDev ? DEV_URL : `${APP_ORIGIN}/index.html`);
+    // ---------- Progress hooks (window loading) ----------
+    win.webContents.on('did-start-loading', () => setProgress(74, 'Loading interface…'));
+    win.webContents.on('dom-ready', () => setProgress(86, 'Preparing dashboard…'));
 
     // ---------- Diagnostics ----------
     win.webContents.on('did-finish-load', () => {
       console.log('[window] did-finish-load');
+      setProgress(94, 'Almost there…');
     });
 
     win.webContents.on('did-fail-load', (_e, code, desc, url) => {
       console.error(`[window] failed to load ${url}: ${code} ${desc}`);
-      if (splash) splash.close();
-      if (win) win.show();
+      finishSplash();
     });
+
+    win.loadURL(isDev ? DEV_URL : `${APP_ORIGIN}/index.html`);
 
     // Safety: kung wala gihapon ang ready-to-show sulod sa 15 segundos, ipakita ang window
     setTimeout(() => {
-      if (win && !win.isVisible()) {
+      if (win && !win.isDestroyed() && !win.isVisible()) {
         console.error('[window] ready-to-show did not fire, showing window anyway');
-        if (splash) splash.close();
-        win.show();
+        finishSplash();
       }
     }, 15000);
   }
@@ -337,20 +401,23 @@ function initApp() {
       registerAppProtocol();
     }
 
+    // Ipakita dayon ang loading screen
+    createSplash();
+    setProgress(5, 'Starting up…');
+
     // Burahin ang service worker at cache na naiwan ng mga naunang run.
     // IndexedDB (offline data) at localStorage ay HINDI apektado.
     await session.defaultSession.clearStorageData({
       storages: ['serviceworkers', 'cachestorage'],
     });
+    setProgress(8, 'Preparing session…');
 
     allowBackendRequests();
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
 
-    createSplash();
-
     const ok = await ensureBackend();
     if (!ok) {
-      if (splash) splash.close();
+      if (splash && !splash.isDestroyed()) splash.close();
       dialog.showErrorBox('Local Civil Register',
         `The backend server did not start in time.\n\nSee the log for details:\n${logPath()}`);
       app.quit();

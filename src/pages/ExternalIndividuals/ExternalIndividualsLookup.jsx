@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { useRegisterRefresh } from "../../context/RefreshContext";
 import {
   browseExternalIndividuals,
   fetchExternalIndividuals,
@@ -405,6 +406,14 @@ export default function ExternalIndividualsLookup() {
     setSearch("");
     loadPage(1);
   };
+
+  const refreshCurrent = useCallback(() => {
+  return activeSearchTerm
+    ? runSearch(activeSearchTerm)
+    : loadPage(pagination?.current_page || 1);
+}, [activeSearchTerm, runSearch, loadPage, pagination]);
+
+useRegisterRefresh(refreshCurrent);
 
   const viewDetails = useCallback(async (entityNo) => {
     if (!entityNo) {

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { usePermissions } from "../../context/PermissionContext";
+import { useRegisterRefresh } from "../../context/RefreshContext";
 import { pushToast } from "../../services/toastService";
 import "./ChangePassword.css";
 
@@ -312,7 +313,7 @@ const ChangePassword = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("password");
 
-      const showNotify = (success, title, message) => {
+  const showNotify = (success, title, message) => {
     pushToast({ title, message, success, duration: 5000 });
   };
 
@@ -339,33 +340,31 @@ const ChangePassword = () => {
     }
   }, [visibleTabs, activeTab]);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/current-user`, { method: "GET", credentials: "include" });
-        const data = await res.json();
-        if (res.ok && data.username) {
-          setDisplayName(data.username);
-          setSessionConfirmed(true);
-          localStorage.setItem("cp_displayName", data.username);
-        } else {
-          const c = localStorage.getItem("cp_displayName");
-          if (c) setDisplayName(c);
-          setSessionConfirmed(false);
-          showNotify(
-            false,
-            "Not signed in",
-            "Your session could not be verified with the server. Password/username changes will fail until you log in again."
-          );
-        }
-      } catch {
-        const c = localStorage.getItem("cp_displayName");
-        if (c) setDisplayName(c);
-        setSessionConfirmed(false);
+  // Confirms the session with the server. Throws when it cannot be confirmed,
+  // so the page-level Refresh button can show a failed state. No toast here,
+  // so refreshing does not spam notifications.
+  const fetchUser = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/current-user`, { method: "GET", credentials: "include" });
+      const data = await res.json();
+      if (res.ok && data.username) {
+        setDisplayName(data.username);
+        setSessionConfirmed(true);
+        localStorage.setItem("cp_displayName", data.username);
+      } else {
+        throw new Error("Session not confirmed");
       }
-    };
-    fetchUser();
+    } catch (err) {
+      const cached = localStorage.getItem("cp_displayName");
+      if (cached) setDisplayName(cached);
+      setSessionConfirmed(false);
+      throw err;
+    }
   }, []);
+
+  useEffect(() => { fetchUser().catch(() => {}); }, [fetchUser]);
+
+  useRegisterRefresh(fetchUser);
 
   const handleChange = (e) => setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   const toggleShow = (field) => setShow((prev) => ({ ...prev, [field]: !prev[field] }));

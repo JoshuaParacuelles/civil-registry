@@ -2,6 +2,7 @@ import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState }
 import useAnalyticsData from "../../hooks/useAnalyticsData";
 import useOnlineStatus from "../../hooks/useOnlineStatus";
 import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
+import { useRegisterRefresh } from "../../context/RefreshContext";
 import LiveIndicator from "../../components/LiveIndicator";
 import "./Dashboard.css";
 
@@ -888,6 +889,9 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     return refetch();
   }, [refetch]);
 
+  // I-register ang refresh handler sa RefreshContext (naglinis una sa cache, dayon nagre-fetch).
+  useRegisterRefresh(handleRealtimeRefresh);
+
   const { status: liveStatus, lastUpdated } = useRealtimeRefresh({
     tables: DASHBOARD_TABLES,
     onRefresh: handleRealtimeRefresh,
@@ -1035,7 +1039,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
         <div className="an-error-banner" style={OFFLINE_BANNER_STYLE}>
           Offline mode: showing data saved on this device
           {savedAt ? ` (${new Date(savedAt).toLocaleString("en-PH")})` : ""}.
-          <button className="an-error-retry" onClick={refetch} style={OFFLINE_RETRY_STYLE}>Retry</button>
+          <button className="an-error-retry" onClick={() => refetch()} style={OFFLINE_RETRY_STYLE}>Retry</button>
         </div>
       )}
 

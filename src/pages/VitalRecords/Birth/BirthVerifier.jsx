@@ -13,6 +13,7 @@ import { subscribeSyncState } from "../../../offline/syncEngine";
 import { newOpId, removeOp } from "../../../offline/outboxQueue";
 import { getFile } from "../../../offline/fileStore";
 import { apiFetch } from "../../../services/apiFetch";
+import { useRegisterRefresh } from "../../../context/RefreshContext";
 import {
   saveList, loadList,
   getCachedPdf, cachePdf, startPdfPrefetch,
@@ -1704,6 +1705,10 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
     if (archivedAbortRef.current) archivedAbortRef.current.abort();
     const controller = new AbortController();
     archivedAbortRef.current = controller;
+
+useRegisterRefresh(async () => {
+  await Promise.all([fetchRecords(), fetchArchived()]);
+});
 
     setLoadingRecords(true);
     try {
