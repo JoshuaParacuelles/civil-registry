@@ -9,18 +9,37 @@ const DEV_URL = process.env.ELECTRON_START_URL || 'http://localhost:5173';
 const APP_ORIGIN = 'app://civil-registry';
 const DIST_DIR = path.join(__dirname, '..', 'dist');
 
-// Backend settings
+// ---------- Backend settings ----------
+
+// Render backend URL. Kinahanglan parehas ang URL sa VITE_API_BASE_URL sa package.json.
+const REMOTE_API_BASE = 'https://civil-registry.onrender.com';
+
+// Para sa development: i-set ang API_BASE_URL=http://127.0.0.1:5000 aron mogamit sa local app.py
+const API_BASE = (process.env.API_BASE_URL || REMOTE_API_BASE).replace(/\/+$/, '');
+const USE_LOCAL_BACKEND = /127\.0\.0\.1|localhost/.test(API_BASE);
+
 const API_PORT = process.env.API_PORT || '5000';
-const API_BASE = `http://127.0.0.1:${API_PORT}`;
-const API_URLS = [`${API_BASE}/*`, `http://localhost:${API_PORT}/*`];
-const BACKEND_DIR = process.env.BACKEND_DIR || path.join(__dirname, '..', '..', 'backend');
+const API_URLS = USE_LOCAL_BACKEND
+  ? [`${API_BASE}/*`, `http://localhost:${API_PORT}/*`]
+  : [`${API_BASE}/*`];
+
+// Local mode lang: backend source/exe location
+const BACKEND_DIR = process.env.BACKEND_DIR || (app.isPackaged
+  ? path.join(process.resourcesPath, 'backend-server')
+  : path.join(__dirname, '..', '..', 'backend'));
+
+const BACKEND_ENTRY = app.isPackaged
+  ? path.join(BACKEND_DIR, 'backend.exe')
+  : path.join(BACKEND_DIR, 'app.py');
 
 // Kung naa kay virtual environment, i-uncomment ug usba ang path:
 // const PYTHON_EXE = 'C:\\Users\\ACER\\Desktop\\Fcapstone\\backend\\venv\\Scripts\\python.exe';
 const PYTHON_EXE = process.env.PYTHON_EXE || 'python';
 
 const SKIP_BACKEND = process.env.SKIP_BACKEND === '1';
-const BACKEND_TIMEOUT_MS = 60000;
+
+// Render free tier mo-sleep; ang cold start mahimong 30-60 segundos
+const BACKEND_TIMEOUT_MS = USE_LOCAL_BACKEND ? 60000 : 90000;
 
 // Mga header nga gipadala sa frontend. Kinahanglan naa dinhi kung dili ma-block sa preflight.
 const ALLOWED_REQUEST_HEADERS = [
@@ -54,7 +73,7 @@ function initApp() {
 
   let win = null;
   let splash = null;
-  let backendProc = null;   // only set when THIS app started the backend
+  let backendProc = null;   // only set when THIS app started the local backend
   let backendFailed = false;
 
   // ---------- Splash progress ----------
@@ -79,8 +98,7 @@ function initApp() {
     pushSplash();
   }
 
-  // Ipakita ang 100%, i-fade out, dayon i-close ang splash ug ipakita ang main window
-   // Ipakita ang 100%, dayon i-close ang splash ug ipakita ang main window sa parehas nga higayon
+  // Ipakita ang 100%, dayon i-close ang splash ug ipakita ang main window sa parehas nga higayon
   function finishSplash() {
     if (splashFinishing) return;
     splashFinishing = true;
@@ -125,12 +143,13 @@ function initApp() {
     return path.join(dir, 'backend.log');
   }
 
+  // Gamita ang "/" nga lightweight ug walay Supabase call
   async function isBackendUp() {
     try {
-      const res = await fetch(`${API_BASE}/`, { signal: AbortSignal.timeout(1500) });
+      const res = await fetch(`${API_BASE}/`, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) return false;
       const body = await res.json();
-      return !!body && body.service === 'civil-registry API';
+      return body?.service === 'civil-registry API';
     } catch {
       return false;
     }
@@ -139,8 +158,13 @@ function initApp() {
   function startBackend() {
     const out = fs.openSync(logPath(), 'a');
     fs.writeSync(out, `\n--- backend start ${new Date().toISOString()} ---\n`);
+    fs.writeSync(out, `[backend] mode=${app.isPackaged ? 'packaged' : 'development'}\n`);
+    fs.writeSync(out, `[backend] entry=${BACKEND_ENTRY}\n`);
 
-    const proc = spawn(PYTHON_EXE, ['app.py'], {
+    const cmd = app.isPackaged ? BACKEND_ENTRY : PYTHON_EXE;
+    const args = app.isPackaged ? [] : [BACKEND_ENTRY];
+
+    const proc = spawn(cmd, args, {
       cwd: BACKEND_DIR,
       windowsHide: true,
       stdio: ['ignore', out, out],
@@ -151,11 +175,17 @@ function initApp() {
 
     proc.on('error', (err) => {
       console.error('[backend] failed to start:', err.message);
+      try {
+        fs.writeSync(out, `[backend] failed to start: ${err.message}\n`);
+      } catch { /* ignore */ }
       backendFailed = true;
     });
 
     proc.on('exit', (code) => {
       console.log(`[backend] exited with code ${code}`);
+      try {
+        fs.writeSync(out, `[backend] exited with code ${code}\n`);
+      } catch { /* ignore */ }
       if (backendProc === proc) backendProc = null;
       if (code !== 0 && code !== null) backendFailed = true;
     });
@@ -177,7 +207,7 @@ function initApp() {
 
       // Estimated progress: mabagal sa dulo, pero dili gihapon mo-stuck
       const elapsed = Date.now() - started;
-      setProgress(15 + 55 * (1 - Math.exp(-elapsed / 9000)), 'Preparing system…');
+      setProgress(15 + 55 * (1 - Math.exp(-elapsed / 9000)), 'Connecting to server…');
 
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -190,18 +220,22 @@ function initApp() {
       return true;
     }
 
-    // Gamita ang backend nga naa na nga nagdagan (pananglitan gi-start nimo manually)
-    // Note: kung manual nga nagdagan, ELECTRON_MODE wala gyud na-set. I-close ang
-    // manual nga terminal sa python app.py kung gusto nimo i-apply ang Electron cookie mode.
+    // Remote (Render): ayaw i-start ang local backend
+    if (!USE_LOCAL_BACKEND) {
+      setProgress(10, 'Connecting to server…');
+      return waitForBackend();
+    }
+
+    // Local: gamita ang backend nga naa na nga nagdagan, o i-start ang backend.exe / app.py
     setProgress(10, 'Checking backend…');
     if (await isBackendUp()) {
       setProgress(70, 'Backend already running');
       return true;
     }
 
-    if (!fs.existsSync(path.join(BACKEND_DIR, 'app.py'))) {
+    if (!fs.existsSync(BACKEND_ENTRY)) {
       dialog.showErrorBox('Local Civil Register',
-        `Backend not found.\n\nExpected app.py in:\n${BACKEND_DIR}`);
+        `Backend not found.\n\nExpected ${path.basename(BACKEND_ENTRY)} in:\n${BACKEND_DIR}`);
       return false;
     }
 
@@ -269,7 +303,6 @@ function initApp() {
     win.on('closed', () => { win = null; });
 
     // Ipasabot sa renderer kung nag-usab ang fullscreen state
-    // (pananglitan naay nag-Esc o F11), aron ma-update ang Settings button.
     win.on('enter-full-screen', () => {
       if (!win.isDestroyed()) win.webContents.send('window:fullscreen-changed', true);
     });
@@ -294,8 +327,7 @@ function initApp() {
         return;
       }
 
-      // Esc = exit fullscreen (only when fullscreen; ordinary Esc still
-      // closes modals in the React app because we don't block it otherwise)
+      // Esc = exit fullscreen (only when fullscreen)
       if (input.key === 'Escape' && win.isFullScreen()) {
         event.preventDefault();
         setFullscreen(false);
@@ -342,7 +374,7 @@ function initApp() {
 
   // ---------- Network / protocol ----------
 
-  // Gitugotan ang app://civil-registry nga makig-istorya sa Flask (CORS + session cookie)
+  // Gitugotan ang app://civil-registry nga makig-istorya sa backend (CORS + session cookie)
   function allowBackendRequests() {
     session.defaultSession.webRequest.onHeadersReceived(
       { urls: API_URLS },
@@ -406,7 +438,7 @@ function initApp() {
     setProgress(5, 'Starting up…');
 
     // Burahin ang service worker at cache na naiwan ng mga naunang run.
-    // IndexedDB (offline data) at localStorage ay HINDI apektado.
+    // IndexedDB (offline data) ug localStorage HINDI apektado.
     await session.defaultSession.clearStorageData({
       storages: ['serviceworkers', 'cachestorage'],
     });
@@ -418,8 +450,11 @@ function initApp() {
     const ok = await ensureBackend();
     if (!ok) {
       if (splash && !splash.isDestroyed()) splash.close();
+      const detail = USE_LOCAL_BACKEND
+        ? `See the log for details:\n${logPath()}`
+        : `Could not reach the server:\n${API_BASE}\n\nCheck your internet connection, then try again.`;
       dialog.showErrorBox('Local Civil Register',
-        `The backend server did not start in time.\n\nSee the log for details:\n${logPath()}`);
+        `The backend server did not respond in time.\n\n${detail}`);
       app.quit();
       return;
     }
@@ -442,7 +477,7 @@ function initApp() {
     if (process.platform !== 'darwin') app.quit();
   });
 
-  // Hunongon ang backend nga gi-start sa app, ug kana ra
+  // Hunongon ang backend nga gi-start sa app (local mode ra)
   app.on('before-quit', stopBackend);
   app.on('will-quit', stopBackend);
 }
