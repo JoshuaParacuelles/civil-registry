@@ -35,6 +35,16 @@ const CLOCK_TICK_MS = 30000;
 
 const DOCUMENT_PAGE_SIZE = 50;
 
+// How long a locally created/removed document is protected from a stale
+// server or cache copy.
+const LOCAL_GUARD_MS = 10000;
+
+// Length of the delete/archive animation before the row is taken out of the list.
+const LEAVE_ANIM_MS = 220;
+
+// How long the highlight on a newly created row lasts.
+const NEW_ROW_ANIM_MS = 1400;
+
 // Matches POSTING_PERIOD_DAYS in routes/document.py.
 const POSTING_PERIOD_DAYS = 10;
 const POSTING_PERIOD_MS = POSTING_PERIOD_DAYS * 24 * 60 * 60 * 1000;
@@ -78,6 +88,8 @@ function notify(message, type = "success") {
     duration: 4000,
   });
 }
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ─────────────────────────────────────────────────────────────────────────
 // Network helpers
@@ -261,13 +273,16 @@ const DetailSkeleton = () => (
 // List row
 // ─────────────────────────────────────────────────────────────────────────
 
-const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect }) {
+const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect, isNew, leaving }) {
   const style = STATUS_STYLES[doc.status] || STATUS_STYLES["In review"];
   return (
     <button
       className="dt-row"
       data-selected={selected}
-      onClick={() => onSelect(doc.id)}
+      data-new={isNew}
+      data-leaving={leaving}
+      aria-disabled={leaving}
+      onClick={() => { if (!leaving) onSelect(doc.id); }}
     >
       <div className="dt-row-main">
         <span className="dt-row-id">
@@ -323,6 +338,15 @@ export default function DocumentTracking() {
   const deferredQuery = useDeferredValue(query);
   const [visibleCount, setVisibleCount] = useState(DOCUMENT_PAGE_SIZE);
   const [filter, setFilter] = useState("All");
+
+  // Documents created/removed on this device. Each entry: { archived, ts }.
+  // Used so a stale server or cache copy does not undo a change the user just made.
+  const localCreatedRef = useRef(new Map());
+  const localRemovedRef = useRef(new Map());
+
+  // Row animation state.
+  const [justCreatedId, setJustCreatedId] = useState(null);
+  const [leavingIds, setLeavingIds] = useState(() => new Set());
 
   // ── Selected document state ──────────────────────────────────────────
   const [selectedId, setSelectedId] = useState(null);
@@ -394,12 +418,48 @@ export default function DocumentTracking() {
 
   // Puts rows on screen for the current view. Keeps the selection when it
   // still exists, otherwise selects the first row.
+  //
+  // Recently created documents stay on screen until the server returns them.
+  // Recently removed documents stay hidden even if a stale copy still lists them.
   const applyRows = useCallback((rows, archivedView) => {
-    const mapped = (rows || [])
+    const now = Date.now();
+
+    // Drop guards that have expired.
+    for (const [id, e] of localRemovedRef.current) {
+      if (now - e.ts >= LOCAL_GUARD_MS) localRemovedRef.current.delete(id);
+    }
+    for (const [id, e] of localCreatedRef.current) {
+      if (now - e.ts >= LOCAL_GUARD_MS) localCreatedRef.current.delete(id);
+    }
+
+    // A guard only applies to the view it was made in.
+    const isFresh = (e) => now - e.ts < LOCAL_GUARD_MS && e.archived === archivedView;
+
+    const serverRows = (rows || [])
       .map(mapDocumentSummary)
       // Strict split on the client: Active shows only non-archived,
       // Archive shows only archived.
       .filter((d) => (archivedView ? d.archived : !d.archived));
+    const serverIds = new Set(serverRows.map((d) => String(d.id)));
+
+    // The server now has these created documents, so they no longer need a guard.
+    for (const id of serverIds) localCreatedRef.current.delete(id);
+
+    // Keep recently created documents the server does not return yet.
+    const pending = documentsRef.current.filter((d) => {
+      const e = localCreatedRef.current.get(String(d.id));
+      return e && isFresh(e) && !serverIds.has(String(d.id));
+    });
+    const pendingIds = new Set(pending.map((d) => String(d.id)));
+
+    // Hide recently removed documents even if the server or cache still lists them.
+    const kept = serverRows.filter((d) => {
+      if (pendingIds.has(String(d.id))) return false;
+      const e = localRemovedRef.current.get(String(d.id));
+      return !(e && isFresh(e));
+    });
+
+    const mapped = [...pending, ...kept];
 
     documentsRef.current = mapped;
     setDocuments(mapped);
@@ -409,22 +469,20 @@ export default function DocumentTracking() {
     return mapped;
   }, []);
 
-  // Shows the saved copy at once, then refreshes from the server. The loading
-  // state only shows when there is nothing saved to display for this view.
-  // Returns true when the list is up to date, false when the server failed.
+  // Shows the saved copy only when the list is empty. Rows already on screen
+  // are never replaced by an older copy. Returns true when the list is up to
+  // date, false when the server failed.
   const loadList = useCallback(async (opts) => {
     const requestId = ++listRequestIdRef.current;
     const silent = opts?.silent === true;
     const archivedView = viewModeRef.current === "archived";
 
-    const cached = peekTrackingList(archivedView);
-    if (cached) {
-      applyRows(cached, archivedView);
-    } else if (!silent) {
-      documentsRef.current = [];
-      setDocuments([]);
+    if (documentsRef.current.length === 0) {
+      const cached = peekTrackingList(archivedView);
+      if (cached) applyRows(cached, archivedView);
     }
-    if (!silent) setListLoading(!cached);
+    const showingRows = documentsRef.current.length > 0;
+    if (!silent) setListLoading(!showingRows);
     setListError(null);
 
     try {
@@ -438,8 +496,9 @@ export default function DocumentTracking() {
     } catch (e) {
       if (listRequestIdRef.current !== requestId) return true;
       console.error("[DocumentTracking] Failed to load documents:", e);
-      // Keep showing the saved copy if there is one; only report an error when empty.
-      if (!cached) setListError(e.message || "Could not reach the server.");
+      if (documentsRef.current.length === 0) {
+        setListError(e.message || "Could not reach the server.");
+      }
       return false;
     } finally {
       if (listRequestIdRef.current === requestId) setListLoading(false);
@@ -468,7 +527,8 @@ export default function DocumentTracking() {
     if (opts?.silent && (pendingWritesRef.current.get(key) || 0) > 0) return true;
 
     const requestId = ++detailRequestIdRef.current;
-    const silent = opts?.silent === true && String(detailRef.current?.id) === key;
+    // Re-reading the document already on screen never flashes the skeleton.
+    const silent = String(detailRef.current?.id) === key;
     if (!silent) {
       setDetailLoading(true);
       setDetailError(null);
@@ -725,8 +785,8 @@ export default function DocumentTracking() {
   const showDetailSkeleton = detailLoading || (listLoading && !selected);
 
   // ── Navigation ───────────────────────────────────────────────────────
-  // Switches between the active list and the archive. The new view's saved
-  // copy is shown straight away, and the server refresh runs behind it.
+  // Switches between the active list and the archive. The old view's rows are
+  // cleared so the new view's saved copy is the one shown.
   const switchView = (mode) => {
     if (mode === viewModeRef.current) return;
     viewModeRef.current = mode;
@@ -736,6 +796,8 @@ export default function DocumentTracking() {
     setDetail(null);
     setDetailError(null);
     setConfirmModal(null);
+    documentsRef.current = [];
+    setDocuments([]);
     loadList();
   };
 
@@ -758,9 +820,10 @@ export default function DocumentTracking() {
   };
 
   // Shared path for archive, restore and permanent delete.
-  //  1. Remove the row from the screen immediately.
-  //  2. Send the request.
-  //  3. On success, update the local copy and refresh in the background.
+  //  1. Play the leave animation and block the row from coming back.
+  //  2. Send the request in parallel with the animation.
+  //  3. Remove the row after the animation. On success, update the local copy
+  //     and refresh in the background.
   //  4. On failure, put the row back exactly as it was and show the error.
   const runDocumentOperation = async ({ id, call, onSuccessLocal, successMsg, offlineMsg }) => {
     if (!isDbAvailable()) {
@@ -768,30 +831,55 @@ export default function DocumentTracking() {
       return;
     }
 
+    const key = String(id);
     const snapshot = documentsRef.current;
     const previousSelected = selectedIdRef.current;
 
     setBusy(true);
     setActionError(null);
-    removeFromListLocally(id);
 
-    try {
-      await call();
+    // 1. Play the leave animation and block the row from coming back.
+    setLeavingIds((prev) => new Set(prev).add(key));
+    localRemovedRef.current.set(key, {
+      archived: viewModeRef.current === "archived",
+      ts: Date.now(),
+    });
+
+    // 2. Send the request in parallel with the animation.
+    const request = Promise.resolve()
+      .then(() => call())
+      .then(() => ({ error: null }), (error) => ({ error }));
+
+    await wait(LEAVE_ANIM_MS);
+
+    // 3. Take the row out after the animation.
+    removeFromListLocally(id);
+    setLeavingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+
+    const { error } = await request;
+    setBusy(false);
+
+    if (!error) {
       onSuccessLocal?.();
       flashSaved();
       notify(successMsg, "success");
       scheduleListRefresh();
-    } catch (e) {
-      console.error("[DocumentTracking] Server action failed:", e);
-      documentsRef.current = snapshot;
-      setDocuments(snapshot);
-      setSelectedId(previousSelected);
-      const message = e.message || "Something went wrong.";
-      setActionError(message);
-      notify(message, "error");
-    } finally {
-      setBusy(false);
+      return;
     }
+
+    // 4. Failed: put the row back exactly as it was.
+    console.error("[DocumentTracking] Server action failed:", error);
+    localRemovedRef.current.delete(key);
+    documentsRef.current = snapshot;
+    setDocuments(snapshot);
+    setSelectedId(previousSelected);
+    const message = error.message || "Something went wrong.";
+    setActionError(message);
+    notify(message, "error");
   };
 
   // Returns the selected document id as a positive integer, or null.
@@ -1059,13 +1147,25 @@ export default function DocumentTracking() {
       label: `New document ${docNumber}`,
     })
       .then((created) => {
-        // Show the new document in the list at once, then select it.
         if (created?.id != null && viewModeRef.current === "active") {
           const summary = mapDocumentSummary(created);
-          const next = [summary, ...documentsRef.current.filter((d) => String(d.id) !== String(summary.id))];
+          const key = String(summary.id);
+
+          // Protect the new row from a stale server or cache copy.
+          localCreatedRef.current.set(key, { archived: false, ts: Date.now() });
+          localRemovedRef.current.delete(key);
+
+          const next = [summary, ...documentsRef.current.filter((d) => String(d.id) !== key)];
           documentsRef.current = next;
           setDocuments(next);
           setSelectedId(summary.id);
+
+          // Highlight the new row briefly.
+          setJustCreatedId(summary.id);
+          setTimeout(
+            () => setJustCreatedId((current) => (current === summary.id ? null : current)),
+            NEW_ROW_ANIM_MS
+          );
         }
         flashSaved();
         notify(
@@ -1254,6 +1354,8 @@ export default function DocumentTracking() {
                   key={doc.id}
                   doc={doc}
                   selected={selectedId === doc.id}
+                  isNew={justCreatedId === doc.id}
+                  leaving={leavingIds.has(String(doc.id))}
                   onSelect={setSelectedId}
                 />
               ))}
