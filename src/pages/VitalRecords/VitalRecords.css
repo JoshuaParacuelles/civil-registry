@@ -2054,7 +2054,6 @@
 .neg-print-payment-label { min-width: 90pt; flex-shrink: 0; }
 .neg-print-payment-colon { min-width: 8pt; flex-shrink: 0; margin-right: 4pt; }
 .neg-print-payment-value { flex: 1; font-size: 12pt; color: #000; border-bottom: none; text-decoration: none; }
-.neg-print-payment-blank { flex: 1; min-width: 100pt; height: 14pt; display: inline-block; border-bottom: none; }
 
 @keyframes dotBlink {
   0%,100% { opacity: 1; transform: scale(1); }
