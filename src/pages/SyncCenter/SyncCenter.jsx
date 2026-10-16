@@ -3,7 +3,7 @@ import { useOffline } from '../../context/OfflineContext';
 import { usePermissions } from '../../context/PermissionContext';
 import { listAll, subscribeOutbox, requeueOne, removeOp } from '../../offline/outboxQueue';
 import { getAllowedEntities } from '../../offline/syncScope';
-import { useRegisterRefresh } from "../../context/RefreshContext";
+import { useRegisterRefresh } from '../../context/RefreshContext';
 import './SyncCenter.css';
 
 const TABS = [
@@ -12,6 +12,8 @@ const TABS = [
   { key: 'conflict', label: 'Conflicts',      match: (s) => s === 'conflict' },
   { key: 'synced',   label: 'Synced',         match: (s) => s === 'synced' },
 ];
+
+const MODULES = ['birth', 'marriage', 'death', 'tracking'];
 
 const ENTITY_LABEL = { birth: 'Birth', death: 'Death', marriage: 'Marriage', tracking: 'Document Tracking' };
 const STATUS_LABEL = {
@@ -26,6 +28,10 @@ const fmt = (ms) => (ms ? new Date(ms).toLocaleString() : '—');
 const currentUser = () => {
   try { return sessionStorage.getItem('username') || ''; } catch { return ''; }
 };
+
+// Adds a tone class only when the number needs attention (above zero).
+// Zero stays neutral so the eye goes straight to real problems.
+const numClass = (n, tone) => (n > 0 && tone ? `sc-num sc-num--${tone}` : 'sc-num');
 
 /* ─── Reusable confirm modal ─────────────────────────────────────────── */
 function ConfirmModal({
@@ -154,7 +160,7 @@ export default function SyncCenter() {
     [rows, allowed]
   );
 
-  // Counts come from the scoped rows, so the cards match what the user sees.
+  // Totals across the visible modules.
   const counts = useMemo(() => ({
     pending:  scopedRows.filter((r) => r.status === 'pending').length,
     waiting:  scopedRows.filter((r) => r.status === 'pending' && r.username && user && r.username !== user).length,
@@ -162,6 +168,28 @@ export default function SyncCenter() {
     failed:   scopedRows.filter((r) => r.status === 'failed').length,
     conflict: scopedRows.filter((r) => r.status === 'conflict').length,
   }), [scopedRows, user]);
+
+  // One status line per module, so each module's progress is visible on its own.
+  const moduleStatus = useMemo(
+    () => MODULES
+      .filter((m) => !allowed || allowed.has(m))
+      .map((m) => {
+        const rs = scopedRows.filter((r) => r.entity === m);
+        const pending = rs.filter((r) => r.status === 'pending');
+        return {
+          key: m,
+          label: ENTITY_LABEL[m],
+          waiting: pending.filter((r) => !r.username || r.username === user).length,
+          otherLogin: pending.filter((r) => r.username && r.username !== user).length,
+          syncing: rs.filter((r) => r.status === 'syncing').length,
+          failed: rs.filter((r) => r.status === 'failed').length,
+          conflict: rs.filter((r) => r.status === 'conflict').length,
+          synced: rs.filter((r) => r.status === 'synced').length,
+          lastSyncedAt: Math.max(0, ...rs.map((r) => r.syncedAt || 0)),
+        };
+      }),
+    [scopedRows, allowed, user]
+  );
 
   const activeTab = TABS.find((t) => t.key === tab);
   const visible = useMemo(
@@ -173,17 +201,27 @@ export default function SyncCenter() {
   const finish = (res, label) => {
     if (!res) {
       setNotice({ type: 'info', text: online ? 'Nothing to sync.' : 'You are offline. Changes will sync when the connection returns.' });
-    } else if (res.error) {
+      return;
+    }
+    if (res.error) {
       setNotice({
         type: 'error',
-        text: `${label} stopped before finishing: ${res.error}. The changes are still queued and will retry automatically.`,
+        text: `${label} stopped: ${res.error}. Changes stay queued and will retry automatically.`,
       });
-    } else {
-      setNotice({
-        type: res.failed ? 'warn' : 'ok',
-        text: `${label}: ${res.succeeded} synced, ${res.failed} failed.`,
-      });
+      return;
     }
+    const parts = [`${res.succeeded} synced`, `${res.failed} failed`];
+    if (res.paused) {
+      const first = res.pausedEntities[0];
+      parts.push(`${ENTITY_LABEL[first] || first} paused by a server error (retrying)`);
+    }
+    if (res.skippedOtherLogin) {
+      parts.push(`${res.skippedOtherLogin} waiting for their own login`);
+    }
+    setNotice({
+      type: res.failed || res.paused ? 'warn' : 'ok',
+      text: `${label}: ${parts.join(' · ')}.`,
+    });
   };
 
   const handleSyncNow = async () => {
@@ -286,82 +324,120 @@ export default function SyncCenter() {
       )}
       {notice && <div className={`sc-notice sc-notice--${notice.type}`}>{notice.text}</div>}
 
-      <div className="sc-tabs" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            role="tab"
-            aria-selected={tab === t.key}
-            className={`sc-tab${tab === t.key ? ' active' : ''}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label} <span className="sc-tab__count">{tabCount(t)}</span>
-          </button>
-        ))}
-      </div>
-
-      {visible.length === 0 ? (
-        <div className="sc-empty">Nothing in this list.</div>
-      ) : (
-        <div className="sc-table-wrap">
-          <table className="sc-table">
-            <thead>
-              <tr>
-                <th>Module</th>
-                <th>Action</th>
-                <th>Created</th>
-                <th>Status</th>
-                <th>Details</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((r) => {
-                const canAct = r.status === 'failed' || r.status === 'conflict';
-                return (
-                  <tr key={r.opId} className={`sc-row sc-row--${r.status}`}>
-                    <td>{ENTITY_LABEL[r.entity] || r.entity}</td>
-                    <td className="sc-label">{r.label}</td>
-                    <td>{fmt(r.createdAt)}</td>
-                    <td>
-                      {r.status === 'pending' && r.username && user && r.username !== user
-                        ? `Waiting for login as ${r.username}`
-                        : STATUS_LABEL[r.status] || r.status}
-                    </td>
-                    <td>
-                      {r.status === 'synced' && <>Synced {fmt(r.syncedAt)}</>}
-                      {r.lastError && <span className="sc-err">{r.lastError}</span>}
-                      {!r.lastError && r.status !== 'synced' && '—'}
-                    </td>
-                    <td>
-                      {canAct ? (
-                        <div className="sc-actions">
-                          <button
-                            className="sc-btn"
-                            disabled={busy || sync.syncing}
-                            onClick={() => handleRetryOne(r)}
-                          >
-                            Retry
-                          </button>
-                          <button
-                            className="sc-btn sc-btn--danger"
-                            disabled={busy || sync.syncing || discarding}
-                            onClick={() => requestDiscard(r)}
-                          >
-                            Discard
-                          </button>
-                        </div>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
+      {moduleStatus.length > 0 && (
+        <section className="sc-section" aria-labelledby="sc-modules-title">
+          <h3 id="sc-modules-title" className="sc-section__title">Status by module</h3>
+          <div className="sc-table-wrap">
+            <table className="sc-table sc-table--modules">
+              <thead>
+                <tr>
+                  <th>Module</th>
+                  <th className="sc-num-head">Waiting</th>
+                  <th className="sc-num-head">Other login</th>
+                  <th className="sc-num-head">Syncing</th>
+                  <th className="sc-num-head">Failed</th>
+                  <th className="sc-num-head">Conflicts</th>
+                  <th className="sc-num-head">Synced</th>
+                  <th>Last synced</th>
+                </tr>
+              </thead>
+              <tbody>
+                {moduleStatus.map((m) => (
+                  <tr key={m.key}>
+                    <td className="sc-module-name">{m.label}</td>
+                    <td className={numClass(m.waiting, 'info')}>{m.waiting}</td>
+                    <td className={numClass(m.otherLogin, 'info')}>{m.otherLogin}</td>
+                    <td className={numClass(m.syncing, 'info')}>{m.syncing}</td>
+                    <td className={numClass(m.failed, 'bad')}>{m.failed}</td>
+                    <td className={numClass(m.conflict, 'warn')}>{m.conflict}</td>
+                    <td className={numClass(m.synced, 'ok')}>{m.synced}</td>
+                    <td className="sc-muted">{m.lastSyncedAt ? fmt(m.lastSyncedAt) : '—'}</td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
+
+      <section className="sc-section">
+        <div className="sc-tabs" role="tablist" aria-label="Filter changes by status">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
+              className={`sc-tab${tab === t.key ? ' active' : ''}`}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label} <span className="sc-tab__count">{tabCount(t)}</span>
+            </button>
+          ))}
+        </div>
+
+        {visible.length === 0 ? (
+          <div className="sc-empty">Nothing in this list.</div>
+        ) : (
+          <div className="sc-table-wrap">
+            <table className="sc-table">
+              <thead>
+                <tr>
+                  <th>Module</th>
+                  <th>Action</th>
+                  <th>Created</th>
+                  <th>Status</th>
+                  <th>Details</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r) => {
+                  const canAct = r.status === 'failed' || r.status === 'conflict';
+                  return (
+                    <tr key={r.opId} className={`sc-row sc-row--${r.status}`}>
+                      <td>{ENTITY_LABEL[r.entity] || r.entity}</td>
+                      <td className="sc-label">{r.label}</td>
+                      <td>{fmt(r.createdAt)}</td>
+                      <td>
+                        {r.status === 'pending' && r.username && user && r.username !== user
+                          ? `Waiting for login as ${r.username}`
+                          : STATUS_LABEL[r.status] || r.status}
+                      </td>
+                      <td>
+                        {r.status === 'synced' && <>Synced {fmt(r.syncedAt)}</>}
+                        {r.lastError && <span className="sc-err">{r.lastError}</span>}
+                        {!r.lastError && r.status !== 'synced' && '—'}
+                      </td>
+                      <td>
+                        {canAct ? (
+                          <div className="sc-actions">
+                            <button
+                              className="sc-btn"
+                              disabled={busy || sync.syncing}
+                              onClick={() => handleRetryOne(r)}
+                            >
+                              Retry
+                            </button>
+                            <button
+                              className="sc-btn sc-btn--danger"
+                              disabled={busy || sync.syncing || discarding}
+                              onClick={() => requestDiscard(r)}
+                            >
+                              Discard
+                            </button>
+                          </div>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <ConfirmModal
         open={!!discardTarget}

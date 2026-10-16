@@ -81,6 +81,12 @@ function useViewport() {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
+  return {
+    width,
+    isMobile: width < 768,
+    isTablet: width >= 768 && width < 1024,
+  };
 }
 
 // ── Resilient JSON fetch ───────────────────────────────────────────────────
@@ -1412,7 +1418,6 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
   );
 };
 
-// Checkbox for bulk selection (selected / onToggle props).
 const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
   const father      = getFatherDisplayName(record);
@@ -1478,12 +1483,10 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     toBlob: createPdfBlobFromData, showNotif,
   });
 
-  // Top-level registration: the loader always runs the latest fetch functions.
   useRegisterRefresh(async () => {
     await Promise.all([fetchRecords(), fetchArchived()]);
   });
 
-  // Realtime: i-reload ang lists kung naay bag-ong death record o transaction (gikan sa bisan asang device).
   useDataChanged(() => {
     if (isOnline()) { fetchRecords(); fetchArchived(); }
   }, { tables: DEATH_LIVE_TABLES, debounceMs: 750 });

@@ -1,8 +1,7 @@
-.sc-page { 
+.sc-page {
   padding: 24px; color: #1e293b;
-   --sc-sticky-top: 75px;   /* taas ng topbar; ayusin kung iba sa iyo */
+  --sc-sticky-top: 75px;   /* taas ng topbar; ayusin kung iba sa iyo */
 }
- 
 
 .sc-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
 .sc-title { margin: 0; font-size: 20px; font-weight: 800; color: #1a3c6e; }
@@ -38,33 +37,60 @@
 .sc-notice--warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
 .sc-notice--error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 
+/* ─── SECTIONS (module table + list) ────────────────────────────────── */
+/* Gives every block its own space so nothing sits flush against the next. */
+.sc-section { margin-bottom: 20px; }
+.sc-section__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+}
+
+/* ─── TABS ──────────────────────────────────────────────────────────── */
 .sc-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .sc-tab { padding: 7px 12px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-size: 13px; color: #334155; }
 .sc-tab.active { background: #1a3c6e; border-color: #1a3c6e; color: #fff; }
 .sc-tab__count { font-weight: 700; margin-left: 4px; }
 
-.sc-table-wrap { overflow-x: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
+/* ─── TABLES ────────────────────────────────────────────────────────── */
+.sc-table-wrap {
+  overflow-x: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
 .sc-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
 .sc-table th, .sc-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+.sc-table tbody tr:last-child td { border-bottom: none; }
 .sc-table th { background: #f8fafc; font-size: 12px; color: #475569; }
+.sc-table tbody tr:hover { background: #f8fafc; }
 .sc-row--failed { background: #fef2f2; }
 .sc-row--conflict { background: #fffbeb; }
 .sc-label { max-width: 280px; word-break: break-word; }
 .sc-err { color: #b91c1c; font-size: 12px; display: block; }
 .sc-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* Module status table */
+.sc-module-name { font-weight: 600; color: #1e293b; }
+.sc-num-head { text-align: right; }
+.sc-table--modules td:not(:first-child):not(:last-child),
+.sc-table--modules th:not(:first-child):not(:last-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.sc-num { color: #94a3b8; font-weight: 500; }
+.sc-num--ok { color: #15803d; font-weight: 700; }
+.sc-num--bad { color: #b91c1c; font-weight: 700; }
+.sc-num--warn { color: #b45309; font-weight: 700; }
+.sc-num--info { color: #1e40af; font-weight: 700; }
+.sc-muted { color: #64748b; white-space: nowrap; }
+
 .sc-empty { padding: 28px; text-align: center; color: #64748b; background: #fff; border: 1px dashed #cbd5e1; border-radius: 12px; }
 
-@media (max-width: 640px) {
-  .sc-page { padding: 14px; }
-}
 /* ─── STICKY HEADER + STATS ─────────────────────────────────────────── */
 /* Stays pinned while the table scrolls. The negative margin and matching
    padding let the background run edge to edge across .sc-page's padding. */
-.sc-page {
-  --sc-sticky-top: 75px;   /* taas ng topbar; ayusin kung iba sa iyo */
-}
-
 .sc-sticky {
   position: sticky;
   top: var(--sc-sticky-top);
@@ -78,15 +104,6 @@
 .sc-sticky .sc-header { margin-bottom: 14px; }
 .sc-sticky .sc-cards { margin-bottom: 0; }
 
-@media (max-width: 640px) {
-  /* Pinned header would take too much of a phone screen, so scroll normally there. */
-  .sc-sticky {
-    position: static;
-    margin: -14px -14px 12px;
-    padding: 14px 14px 4px;
-    box-shadow: none;
-  }
-}
 /* ─── CONFIRM MODAL ─────────────────────────────────────────────────── */
 .sc-modal-overlay {
   position: fixed;
@@ -189,7 +206,18 @@
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
+/* ─── RESPONSIVE ────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
+  .sc-page { padding: 14px; }
+
+  /* Pinned header would take too much of a phone screen, so scroll normally there. */
+  .sc-sticky {
+    position: static;
+    margin: -14px -14px 12px;
+    padding: 14px 14px 4px;
+    box-shadow: none;
+  }
+
   .sc-modal {
     padding: 18px;
   }

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { usePermissions } from "../../context/PermissionContext";
 import { useRegisterRefresh } from "../../context/RefreshContext";
 import { pushToast } from "../../services/toastService";
+import { syncOfflineAccountsFromServer } from "../../offline/adapters/offlineLogin";
 import "./RoleManagement.css";
 
 // Use empty string to route via Vite proxy, avoiding CORS/Cookie domain mismatches
@@ -239,6 +240,8 @@ export default function Rolemanagement() {
         }));
 
       setUserRoles(normalise(r2));
+      // Keep this device's offline logins in step with Role Management.
+      syncOfflineAccountsFromServer().catch(() => {});
       return true;
     } catch (err) {
       console.error("[RoleManagement] fetchAll failed:", err);

@@ -1,8 +1,33 @@
 import React, { memo } from "react";
+import { useOffline } from "../context/OfflineContext";
 import "./Sidebar.css";
 
 // Badge shows up to 99; anything higher reads "99+". The exact count stays in the tooltip.
 const formatBadgeCount = (n) => (n > 99 ? "99+" : String(n));
+
+// Permissions that make each sync module visible. Mirrors ENTITY_PERMISSIONS in
+// src/offline/syncScope.js, so the badge only counts modules this user can use.
+const SYNC_MODULE_PERMISSIONS = {
+  birth: ["birth_verification", "birth_archive_uploader"],
+  marriage: ["marriage_verification", "marriage_archive_uploader"],
+  death: ["death_verification", "death_archive_uploader"],
+  tracking: [
+    "document_tracking",
+    "document_stage_registration",
+    "document_stage_civil_registrar",
+    "document_stage_posting_period",
+    "document_stage_records_division",
+    "document_stage_registry_number",
+    "document_stage_releasing",
+  ],
+};
+
+const SYNC_MODULE_LABEL = {
+  birth: "Birth",
+  marriage: "Marriage",
+  death: "Death",
+  tracking: "Document Tracking",
+};
 
 const Sidebar = ({
   activeSubMenu,
@@ -31,8 +56,9 @@ const Sidebar = ({
   accountIcon,
   logoutIcon,
   syncIcon,
-  offlinePendingCount = 0,
 }) => {
+  const { moduleCounts } = useOffline();
+
   const vitalIsActive = VITAL_CHILDREN ? VITAL_CHILDREN.includes(activeSubMenu) : false;
   const settingsIsActive = SETTINGS_CHILDREN ? SETTINGS_CHILDREN.includes(activeSubMenu) : false;
 
@@ -44,7 +70,20 @@ const Sidebar = ({
     viewport === "tablet" && !tabletExpanded ? "collapsed" : "",
   ].filter(Boolean).join(" ");
 
-  const pendingLabel = `${offlinePendingCount} not yet synced`;
+  // Per-module breakdown for only the modules this user can access.
+  const syncBreakdown = Object.entries(SYNC_MODULE_PERMISSIONS)
+    .filter(([, perms]) => perms.some((p) => canAccess(p)))
+    .map(([key]) => ({
+      key,
+      label: SYNC_MODULE_LABEL[key],
+      total: moduleCounts?.[key]?.total ?? 0,
+    }));
+
+  const syncTotal = syncBreakdown.reduce((sum, m) => sum + m.total, 0);
+  const syncTooltip = syncBreakdown.length
+    ? syncBreakdown.map((m) => `${m.label}: ${m.total}`).join(" · ")
+    : "Nothing to sync";
+  const pendingLabel = `${syncTotal} not yet synced (${syncTooltip})`;
 
   return (
     <aside id="main-sidebar" className={sidebarClasses} aria-label="Main navigation">
@@ -141,9 +180,9 @@ const Sidebar = ({
               >
                 <img src={syncIcon} alt="" className="menu-icon menu-icon--sync" width="18" height="18" />
                 {showLabels && <span>Offline Data &amp; Sync</span>}
-                {showLabels && offlinePendingCount > 0 && (
+                {showLabels && syncTotal > 0 && (
                   <span className="sync-badge" aria-label={pendingLabel}>
-                    {formatBadgeCount(offlinePendingCount)}
+                    {formatBadgeCount(syncTotal)}
                   </span>
                 )}
               </li>

@@ -1,8 +1,10 @@
-// src/context/OfflineContext.jsx
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { startConnectivityMonitor, isOnline, subscribeConnectivity } from '../offline/connectivityService';
-import { startSyncEngine, runSync, retryAllFailed, getSyncState, subscribeSyncState } from '../offline/syncEngine';
-import { subscribeOutbox, getCounts } from '../offline/outboxQueue';
+import {
+  startSyncEngine, runSync, retryAllFailed, getSyncState, subscribeSyncState, API_BASE,
+} from '../offline/syncEngine';
+import { subscribeOutbox, getCounts, listAll } from '../offline/outboxQueue';
+import { isScopeLoaded, subscribeSyncScope } from '../offline/syncScope';
 import { refreshAllOfflineCredentials } from '../offline/archivePassword';
 import { warmBirthCache } from '../offline/birthOffline';
 import { warmVitalCache } from '../offline/vitalOffline';
@@ -10,9 +12,10 @@ import { refreshTrackingPersonnel } from '../offline/adapters/documentTrackingOf
 import { pushToast } from '../services/toastService';
 
 const OfflineContext = createContext(null);
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
+const MODULES = ['birth', 'marriage', 'death', 'tracking'];
 const EMPTY_COUNTS = { pending: 0, syncing: 0, failed: 0, conflict: 0, synced: 0, waiting: 0, total: 0 };
+const EMPTY_MODULE = { pending: 0, waiting: 0, syncing: 0, failed: 0, conflict: 0, synced: 0, total: 0 };
 const WARMUP_INTERVAL_MS = 10 * 60 * 1000;
 const LOGIN_POLL_MS = 1000;
 
@@ -24,8 +27,7 @@ async function requestPersistence() {
   }
 }
 
-// True once the user has logged in on this tab. Reads sessionStorage only,
-// so it makes no network request. Login pages must not call protected APIs.
+// True once the user has logged in on this tab. sessionStorage read only.
 function hasLoginSession() {
   try {
     return Boolean((sessionStorage.getItem('username') || '').trim());
@@ -34,21 +36,49 @@ function hasLoginSession() {
   }
 }
 
+function currentUsername() {
+  try {
+    return sessionStorage.getItem('username') || '';
+  } catch {
+    return '';
+  }
+}
+
+function tallyModule(rows, entity, user) {
+  const rs = rows.filter((r) => r.entity === entity);
+  const pending = rs.filter((r) => r.status === 'pending');
+  return {
+    pending: pending.filter((r) => !r.username || r.username === user).length,
+    waiting: pending.filter((r) => r.username && r.username !== user).length,
+    syncing: rs.filter((r) => r.status === 'syncing').length,
+    failed: rs.filter((r) => r.status === 'failed').length,
+    conflict: rs.filter((r) => r.status === 'conflict').length,
+    synced: rs.filter((r) => r.status === 'synced').length,
+    total: rs.filter((r) => ['pending', 'syncing', 'failed', 'conflict'].includes(r.status)).length,
+  };
+}
+
 export function OfflineProvider({ children }) {
   const [online, setOnline] = useState(isOnline());
   const [sync, setSync] = useState(getSyncState());
   const [counts, setCounts] = useState(EMPTY_COUNTS);
+  const [moduleCounts, setModuleCounts] = useState(() =>
+    Object.fromEntries(MODULES.map((m) => [m, EMPTY_MODULE]))
+  );
   const lastNotified = useRef(null);
 
   const refreshCounts = useCallback(async () => {
     try {
-      setCounts(await getCounts());
+      const [total, rows] = await Promise.all([getCounts(), listAll()]);
+      const user = currentUsername();
+      setCounts(total);
+      setModuleCounts(Object.fromEntries(MODULES.map((m) => [m, tallyModule(rows, m, user)])));
     } catch (err) {
       console.warn('[OfflineContext] could not read outbox counts:', err);
     }
   }, []);
 
-     const notify = useCallback((nowOnline) => {
+  const notify = useCallback((nowOnline) => {
     if (lastNotified.current === nowOnline) return;
     const firstCheck = lastNotified.current === null;
     lastNotified.current = nowOnline;
@@ -74,11 +104,25 @@ export function OfflineProvider({ children }) {
     }
   }, []);
 
+  // PermissionContext owns the sync scope. The engine starts once a scope has
+  // been loaded, and every real scope change re-runs the sync.
   useEffect(() => {
     startConnectivityMonitor();
-    startSyncEngine();
     requestPersistence();
     refreshCounts();
+
+    let started = false;
+    const onScope = () => {
+      if (!isScopeLoaded()) return;
+      if (!started) {
+        started = true;
+        startSyncEngine();
+      } else if (isOnline()) {
+        runSync();
+      }
+    };
+    onScope();
+    const unsubScope = subscribeSyncScope(onScope);
 
     const unsubConnectivity = subscribeConnectivity((v) => {
       setOnline(v);
@@ -90,15 +134,14 @@ export function OfflineProvider({ children }) {
     notify(isOnline());
 
     return () => {
+      unsubScope();
       unsubConnectivity();
       unsubSync();
       unsubOutbox();
     };
   }, [refreshCounts, notify]);
 
-  // Keeps the offline copies fresh while online: Document Tracking personnel,
-  // archive credentials, and the birth / marriage / death caches.
-  // Waits for a login first, so the login page never calls protected endpoints.
+  // Keeps the offline copies fresh while online. Waits for a login first.
   useEffect(() => {
     if (!online) return undefined;
 
@@ -116,7 +159,7 @@ export function OfflineProvider({ children }) {
       if (!alive || !hasLoginSession()) return;
       stopDownloads();
 
-      await refreshTrackingPersonnel(); // saves personnel + stage holders to localStorage
+      await refreshTrackingPersonnel();
       if (!alive) return;
 
       await refreshAllOfflineCredentials();
@@ -137,22 +180,16 @@ export function OfflineProvider({ children }) {
       run().catch((err) => console.warn('[OfflineContext] warm-up failed:', err));
     };
 
-    const startPeriodic = () => {
-      timer = setInterval(safeRun, WARMUP_INTERVAL_MS);
-    };
-
     if (hasLoginSession()) {
       safeRun();
-      startPeriodic();
+      timer = setInterval(safeRun, WARMUP_INTERVAL_MS);
     } else {
-      // Not logged in yet: check the local login marker until it appears.
-      // This is a sessionStorage read only, with no network request.
       loginPoll = setInterval(() => {
         if (!hasLoginSession()) return;
         clearInterval(loginPoll);
         loginPoll = null;
         safeRun();
-        startPeriodic();
+        timer = setInterval(safeRun, WARMUP_INTERVAL_MS);
       }, LOGIN_POLL_MS);
     }
 
@@ -170,6 +207,7 @@ export function OfflineProvider({ children }) {
         online,
         sync,
         counts,
+        moduleCounts,
         syncNow: runSync,
         retryFailed: retryAllFailed,
         refreshCounts,

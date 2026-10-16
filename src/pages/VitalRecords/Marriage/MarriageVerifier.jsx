@@ -71,6 +71,12 @@ function useViewport() {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
+  return {
+    width,
+    isMobile: width < 768,
+    isTablet: width >= 768 && width < 1024,
+  };
 }
 
 // ── Resilient JSON fetch ───────────────────────────────────────────────────
@@ -1514,7 +1520,6 @@ const InlinePdfViewer = ({ pdfData, pdfError, record, onPrint, loadingPdf, showN
   );
 };
 
-// Checkbox for bulk selection (selected / onToggle props).
 const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
   const groom = getGroomDisplayName(record);
@@ -1581,12 +1586,10 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     toBlob: createPdfBlobFromData, showNotif,
   });
 
-  // Top-level registration: the loader always runs the latest fetch functions.
   useRegisterRefresh(async () => {
     await Promise.all([fetchRecords(), fetchArchived()]);
   });
 
-  // Realtime: i-reload ang lists kung naay bag-ong marriage record o transaction (gikan sa bisan asang device).
   useDataChanged(() => {
     if (isOnline()) { fetchRecords(); fetchArchived(); }
   }, { tables: MARRIAGE_LIVE_TABLES, debounceMs: 750 });
@@ -1594,7 +1597,6 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   const [archiveSearch, setArchiveSearch] = useState("");
   const [archiveUnlocked, setArchiveUnlocked] = useState(false);
 
-  // Bulk selection (Archive tab)
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -1643,8 +1645,6 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     return (aFNs[0] || "").localeCompare(bFNs[0] || "");
   });
 
-  // Selecting a record is a purely local UI action: it chooses the record
-  // for this transaction without mutating the archived status in the database.
   const handleSelectFromSearch = (record) => {
     const displayName = getMatchedSpouseName(record, srchLastName);
 
@@ -1818,7 +1818,6 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
     ? allArchivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
     : allArchivedRecords;
 
-  // ── Bulk selection (Archive) ─────────────────────────────────────────────
   const filteredIds = filteredArchived.map((r) => r.id);
   const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
   const someSelected = !allSelected && filteredIds.some((id) => selectedIds.has(id));
@@ -1830,7 +1829,6 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
       return next;
     });
 
-  // Select All only affects the rows currently visible (respects the search box).
   const toggleSelectAll = () =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -1841,7 +1839,6 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  // Drop selections whose records no longer exist (after delete / refetch).
   useEffect(() => {
     setSelectedIds((prev) => {
       if (prev.size === 0) return prev;
@@ -2162,7 +2159,6 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
                       >
                         ← Back
                       </button>
-                      {/* Only reset on confirmed backend success. */}
                       <button
                         className="btn btn-primary btn-primary--wide btn-thick"
                         onClick={async () => {

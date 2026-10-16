@@ -117,10 +117,12 @@ export function PermissionProvider({ children }) {
     const c = readSessionCache();
     if (!c) return false;
     const cachedPerms = Array.isArray(c.permissions) ? c.permissions : [];
+    const cachedAdmin = Boolean(c.isAdmin);
     setRole(c.role);
     setPermissions(cachedPerms);
-    setIsAdmin(Boolean(c.isAdmin));
-    setSyncScope(getAllowedEntities(cachedPerms, Boolean(c.isAdmin)));
+    setIsAdmin(cachedAdmin);
+    // Scope first, so the sync engine knows this login's modules before any UI.
+    setSyncScope(getAllowedEntities(cachedPerms, cachedAdmin));
     setAuthenticated(true);
     if (c.username) sessionStorage.setItem("username", c.username);
     sessionStorage.setItem("isAuthenticated", "true");
@@ -188,6 +190,8 @@ export function PermissionProvider({ children }) {
 
           // Scope the offline sync to this login's permissions BEFORE the
           // UI renders, so nothing outside the user's modules is ever sent.
+          // setSyncScope ignores unchanged values, so repeated refreshes
+          // (e.g. coming back online) do not restart the sync.
           setSyncScope(getAllowedEntities(perms, userAdmin));
 
           setRole(resolvedRole);

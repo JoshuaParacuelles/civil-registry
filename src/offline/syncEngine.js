@@ -9,7 +9,7 @@ import { isEntityAllowed } from './syncScope';
 
 // ---------- Backend base URL ----------
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://civil-registry.onrender.com')
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://civil-registry.onrender.com')
   .replace(/\/+$/, '');
 
 // Queued items can carry a host from the build that created them (a placeholder,
@@ -90,30 +90,42 @@ async function replay(op) {
   return fetch(url, { method: op.method, headers, body, credentials: 'include' });
 }
 
-// Returns { succeeded, failed } for the run, or null if it could not run.
-// If the run stops because of a network or server error, the result also
-// includes an `error` message so the UI can show it.
+// Returns a summary for the run, or null if it could not run.
+//   succeeded / failed      : items that finished this run
+//   paused / pausedEntities : modules that hit a server error and wait for retry
+//   skippedOtherLogin       : items queued by a different login (left untouched)
+// A network loss stops the whole run and returns { error }.
 export async function runSync() {
   if (running || !isDbAvailable()) return null;
   running = true;
   clearTimeout(retryTimer);
-  const summary = { succeeded: 0, failed: 0 };
+  const summary = {
+    succeeded: 0, failed: 0,
+    paused: 0, pausedEntities: [],
+    skippedOtherLogin: 0,
+  };
+  const paused = new Set(); // modules paused by a server error in this run
+  let serverError = null;
+
   try {
     await recoverInterrupted();
     const me = currentUser();
 
-    // Only send work that (a) belongs to this login and (b) this user's
-    // permissions allow for its entity. Anything else stays in the queue,
-    // untouched, for a user who is allowed to send it.
-    const queue = (await listByStatus('pending')).filter(
-      (o) => (!o.username || !me || o.username === me) && isEntityAllowed(o.entity)
-    );
+    // Work this login may send (its own items, within its permissions).
+    // Everything else stays queued, untouched.
+    const scoped = (await listByStatus('pending')).filter((o) => isEntityAllowed(o.entity));
+    const queue = scoped.filter((o) => !o.username || !me || o.username === me);
+    summary.skippedOtherLogin = scoped.length - queue.length;
     if (!queue.length) return summary;
 
-    setState({ syncing: true, done: 0, total: queue.length, succeeded: 0, failedRun: 0, lastError: null, authRequired: false });
+    setState({
+      syncing: true, done: 0, total: queue.length,
+      succeeded: 0, failedRun: 0, lastError: null, authRequired: false,
+    });
 
     let done = 0;
     for (const op of queue) {
+      if (paused.has(op.entity)) continue; // this module waits; others continue
       if (!isDbAvailable()) throw new Error('Connection lost');
       await updateOp(op.opId, { status: 'syncing' });
 
@@ -129,7 +141,7 @@ export async function runSync() {
           continue;
         }
         await updateOp(op.opId, { status: 'pending' });
-        throw err; // network error: stop here so the order is kept
+        throw err; // network is gone: stop everything
       }
 
       const s = res.status;
@@ -138,7 +150,7 @@ export async function runSync() {
 
       if ((s >= 200 && s < 300) || (op.method === 'DELETE' && s === 404)) {
         // A document created offline: remember its real id so later queued
-        // changes for the temporary id can be sent to the right document.
+        // changes for the temporary id reach the right document.
         if (op.method === 'POST' && /\/api\/documents$/.test(op.url) && body?.id != null) {
           await setMeta(`docmap:${op.opId}`, body.id);
         }
@@ -159,7 +171,8 @@ export async function runSync() {
           attempts,
           lastError: msg || `Server error (${s})`,
         });
-        throw new Error(`Server error (${s})`);
+        paused.add(op.entity);
+        serverError = serverError || `${op.entity}: server error (${s})`;
       } else if (s === 409) {
         await markConflict(op, msg);
         summary.failed += 1;
@@ -173,7 +186,17 @@ export async function runSync() {
       if (done % PAUSE_EVERY === 0) await sleep(PAUSE_MS);
     }
 
-    failStreak = 0;
+    summary.paused = paused.size;
+    summary.pausedEntities = [...paused];
+
+    if (paused.size) {
+      failStreak += 1;
+      setState({ lastError: serverError });
+      retryTimer = setTimeout(runSync, Math.min(BASE_BACKOFF_MS * 2 ** failStreak, 5 * 60 * 1000));
+    } else {
+      failStreak = 0;
+    }
+
     const now = Date.now();
     await setMeta('lastSyncAt', now);
     await trimSynced();
