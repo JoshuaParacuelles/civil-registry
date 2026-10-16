@@ -7,6 +7,20 @@ import { getDB, getMeta, setMeta } from './db';
 import { decryptJSON } from './secureStore';
 import { isEntityAllowed } from './syncScope';
 
+// ---------- Backend base URL ----------
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://civil-registry.onrender.com')
+  .replace(/\/+$/, '');
+
+// Ang offline records nga na-save nga naay placeholder host ipunting sa tinuod nga backend.
+const PLACEHOLDER_HOST = /^https:\/\/your-render-url\.onrender\.com/;
+
+function normalizeUrl(url) {
+  return url.replace(PLACEHOLDER_HOST, API_BASE);
+}
+
+// ---------- Sync settings ----------
+
 const PAUSE_EVERY = 10;
 const PAUSE_MS = 500;
 const MAX_ATTEMPTS = 8;
@@ -46,7 +60,7 @@ async function resolveUrl(url) {
 }
 
 async function replay(op) {
-  const url = await resolveUrl(op.url);
+  const url = normalizeUrl(await resolveUrl(op.url));
   const headers = { 'X-Offline-Op-Id': op.opId, 'X-Offline-Created-At': String(op.createdAt) };
   let body;
   if (op.fileId) {

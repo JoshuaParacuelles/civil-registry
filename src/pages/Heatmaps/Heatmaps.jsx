@@ -26,6 +26,9 @@
   } from "../../utils/demographics";
   import "./Heatmaps.css";
 
+/* ════════════════════════════════════
+   DATA & CONSTANTS
+════════════════════════════════════ */
 
   const RAW_BARANGAY_DATA = [
     { name: "Barangay I (Poblacion)", birth: 240, marriage: 95, death: 55 },
@@ -87,6 +90,7 @@
     { label: "Tañon Strait", lat: 10.49, lng: 123.52, kind: "water" },
   ];
 
+<<<<<<< HEAD
   const CITY_BOUNDS = (() => {
     const lats = Object.values(BARANGAY_COORDS).map((c) => c.lat);
     const lngs = Object.values(BARANGAY_COORDS).map((c) => c.lng);
@@ -98,6 +102,21 @@
     );
   })();
   const CITY_CENTER = CITY_BOUNDS.getCenter();
+=======
+const BOUNDARY_URL = "/data/san-carlos-barangays.geojson";
+
+const CITY_BOUNDS = (() => {
+  const lats = Object.values(BARANGAY_COORDS).map((c) => c.lat);
+  const lngs = Object.values(BARANGAY_COORDS).map((c) => c.lng);
+  const latPad = (Math.max(...lats) - Math.min(...lats)) * 0.35;
+  const lngPad = (Math.max(...lngs) - Math.min(...lngs)) * 0.35;
+  return L.latLngBounds(
+    [Math.min(...lats) - latPad, Math.min(...lngs) - lngPad],
+    [Math.max(...lats) + latPad, Math.max(...lngs) + lngPad]
+  );
+})();
+const CITY_CENTER = CITY_BOUNDS.getCenter();
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
 
   const YEAR_MULTIPLIERS = { "2024": 0.82, "2025": 0.91, "2026": 1 };
 
@@ -109,6 +128,7 @@
     { label: "May", birth: 620, death: 101 },
   ];
 
+<<<<<<< HEAD
   const HEAT_SCALE = [
     { max: 150, label: "0 - 150 (Very Low)", color: "#bcd0fb", text: "#1c2233" },
     { max: 250, label: "151 - 250 (Low)", color: "#8fb0f7", text: "#1c2233" },
@@ -116,6 +136,16 @@
     { max: 450, label: "351 - 450 (High)", color: "#2e5fe8", text: "#ffffff" },
     { max: Infinity, label: "450 and above (Very High)", color: "#1a3a9c", text: "#ffffff" },
   ];
+=======
+/* Low = red, High = blue. Warm colors cover the lower-middle range, cool colors the upper range. */
+const HEAT_SCALE = [
+  { max: 150, label: "0 - 150 (Very Low)", color: "#dc2626", text: "#ffffff" },
+  { max: 250, label: "151 - 250 (Low)", color: "#f97316", text: "#1c2233" },
+  { max: 350, label: "251 - 350 (Moderate)", color: "#facc15", text: "#1c2233" },
+  { max: 450, label: "351 - 450 (High)", color: "#3b82f6", text: "#ffffff" },
+  { max: Infinity, label: "450 and above (Very High)", color: "#1e3a8a", text: "#ffffff" },
+];
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
 
   const NO_DATA_COLOR = "#9aa2b5";
   const ALL_BARANGAYS = "All Barangays";
@@ -125,11 +155,19 @@
   const CERT_TYPES = ["All Certificates", "Live Birth", "Marriage", "Death"];
   const YEARS = ["2024", "2025", "2026"];
 
+<<<<<<< HEAD
   /* Skeleton tuning: how many placeholder table rows / ranking rows to draw,
     and how long the map waits for tiles before giving up on the overlay. */
   const SKELETON_TABLE_ROWS = 8;
   const SKELETON_TOP5_ROWS = 5;
   const MAP_TILE_TIMEOUT_MS = 8000;
+=======
+/* Skeleton tuning: how many placeholder rows to draw, and how long the map
+   waits for tiles before giving up on the overlay. */
+const SKELETON_TABLE_ROWS = 8;
+const SKELETON_TOP5_ROWS = 5;
+const MAP_TILE_TIMEOUT_MS = 8000;
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
 
   const CBMS_RECORDS = [
     { id: "CR-0001", name: "Juan Dela Cruz", barangay: "Barangay I (Poblacion)", recordType: "Live Birth", age: 34, philSysId: true, philSysNo: "6304-XXXX-XXXX", seniorCitizen: false, pwd: false, fourPs: true },
@@ -156,9 +194,19 @@
     { value: "without", label: "No PhilSys ID" },
   ];
 
+<<<<<<< HEAD
   function heatColor(value) {
     return HEAT_SCALE.find((b) => value <= b.max).color;
   }
+=======
+/* ════════════════════════════════════
+   HELPERS
+════════════════════════════════════ */
+
+function heatColor(value) {
+  return HEAT_SCALE.find((b) => value <= b.max).color;
+}
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
 
   function heatTextColor(value) {
     return HEAT_SCALE.find((b) => value <= b.max).text;
@@ -220,6 +268,7 @@
     return `<div class="hm-popup"><div class="hm-popup__title">${title}</div>${body}</div>`;
   }
 
+<<<<<<< HEAD
   /* ════════════════════════════════════
     SKELETON PRIMITIVES
   ════════════════════════════════════ */
@@ -235,6 +284,47 @@
       />
     );
   }
+=======
+function shortLabel(name) {
+  const idx = POBLACION_ORDER.indexOf(name);
+  return idx >= 0 ? `Brgy ${POBLACION_SHORT[idx]}` : name;
+}
+
+/* Darkens a hex color by mixing it with black. Used for the selected outline so it stands out from its fill. */
+function darkenHex(hex, amount = 0.3) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * (1 - amount));
+  const g = Math.round(((n >> 8) & 255) * (1 - amount));
+  const b = Math.round((n & 255) * (1 - amount));
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+}
+
+function heatPinIcon(color, label, active) {
+  return L.divIcon({
+    className: "hm-pin-wrap",
+    html: `<div class="hm-pin-stack">
+             <div class="hm-pin${active ? " hm-pin--active" : ""}" style="--pin:${color}"><span></span></div>
+             <div class="hm-pin__label">${label}</div>
+           </div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+}
+
+/* ════════════════════════════════════
+   SKELETON PRIMITIVES
+════════════════════════════════════ */
+
+function Skeleton({ width = "100%", height = 12, radius, className = "", style }) {
+  return (
+    <span
+      className={`skeleton${className ? ` ${className}` : ""}`}
+      style={{ width, height, borderRadius: radius, ...style }}
+      aria-hidden="true"
+    />
+  );
+}
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
 
   function StatCardSkeleton() {
     return (
@@ -259,6 +349,7 @@
     );
   }
 
+<<<<<<< HEAD
   /* Keeps the real column headers on screen so the table does not jump when data arrives. */
   function DemoTableSkeleton({ columns, rows = SKELETON_TABLE_ROWS }) {
     return (
@@ -268,12 +359,39 @@
             <tr>
               <th>No</th>
               <th>Barangay</th>
+=======
+function DemoTableSkeleton({ columns, rows = SKELETON_TABLE_ROWS }) {
+  return (
+    <div className="table-scroll" role="status" aria-live="polite" aria-label="Loading demographics table">
+      <table className="demo-table table--skeleton">
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Barangay</th>
+            {columns.map((s) => (
+              <th key={s.key} className="num">
+                {s.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }, (_, r) => (
+            <tr key={r}>
+              <td>
+                <Skeleton width={16} height={12} />
+              </td>
+              <td>
+                <Skeleton width={110 + ((r * 23) % 50)} height={12} />
+              </td>
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
               {columns.map((s) => (
                 <th key={s.key} className="num">
                   {s.label}
                 </th>
               ))}
             </tr>
+<<<<<<< HEAD
           </thead>
           <tbody>
             {Array.from({ length: rows }, (_, r) => (
@@ -293,6 +411,51 @@
             ))}
           </tbody>
         </table>
+=======
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Top5Skeleton({ rows = SKELETON_TOP5_ROWS }) {
+  return (
+    <div className="top5" role="status" aria-live="polite" aria-label="Loading top barangays">
+      {Array.from({ length: rows }, (_, i) => (
+        <div className="top5__row" key={i}>
+          <Skeleton width={10} height={11} />
+          <Skeleton className="top5__name" width={`${70 - i * 8}%`} height={12} />
+          <div className="top5__bar-track">
+            <Skeleton height="100%" radius={999} />
+          </div>
+          <Skeleton className="top5__value" width={26} height={12} style={{ marginLeft: "auto" }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════
+   SMALL COMPONENTS
+════════════════════════════════════ */
+
+function StatCard({ icon, label, value, sub, tone, active, dim }) {
+  return (
+    <div
+      className={
+        "stat-card stat-card--" +
+        tone +
+        (active ? " stat-card--active" : "") +
+        (dim ? " stat-card--dim" : "")
+      }
+    >
+      <div className="stat-card__icon">{icon}</div>
+      <div className="stat-card__body">
+        <span className="stat-card__value">{value.toLocaleString()}</span>
+        <span className="stat-card__label">{label}</span>
+        {sub && <span className="stat-card__sub">{sub}</span>}
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
       </div>
     );
   }
@@ -375,6 +538,7 @@
     );
   }
 
+<<<<<<< HEAD
   function CoverageRing({ pct, size = 46, stroke = 6 }) {
     const radius = (size - stroke) / 2;
     const circumference = 2 * Math.PI * radius;
@@ -389,6 +553,175 @@
         viewBox={`0 0 ${size} ${size}`}
         role="img"
         aria-label={`${pct}% of barangays reporting`}
+=======
+/* ════════════════════════════════════
+   MAP (Leaflet + barangay polygons)
+════════════════════════════════════ */
+
+const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onSelect, loading = false }, ref) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const polyLayerRef = useRef(null);
+  const pinLayerRef = useRef(null);
+  const geoRef = useRef(null);
+  const [tilesLoading, setTilesLoading] = useState(true);
+  const [boundaryReady, setBoundaryReady] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    zoomIn: () => mapRef.current && mapRef.current.zoomIn(),
+    zoomOut: () => mapRef.current && mapRef.current.zoomOut(),
+    reset: () => mapRef.current && mapRef.current.fitBounds(CITY_BOUNDS, { animate: true }),
+  }));
+
+  // Create the map once.
+  useEffect(() => {
+    if (mapRef.current || !containerRef.current) return undefined;
+
+    const map = L.map(containerRef.current, {
+      center: CITY_CENTER,
+      zoom: 12,
+      minZoom: 11,
+      maxZoom: 17,
+      maxBounds: CITY_BOUNDS.pad(0.15),
+      maxBoundsViscosity: 1.0,
+      zoomControl: false,
+      scrollWheelZoom: true,
+      attributionControl: true,
+    });
+
+    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      subdomains: ["a", "b", "c"],
+    });
+    const finishTiles = () => setTilesLoading(false);
+    tiles.once("load", finishTiles);
+    const tileTimeout = window.setTimeout(finishTiles, MAP_TILE_TIMEOUT_MS);
+    tiles.addTo(map);
+
+    map.fitBounds(CITY_BOUNDS, { animate: false });
+    L.control.scale({ position: "bottomleft", imperial: false }).addTo(map);
+
+    REFERENCE_POINTS.forEach((p) => {
+      const icon = L.divIcon({
+        className: "ref-point-icon",
+        html: `<span class="ref-point-icon__label ref-point-icon__label--${p.kind}">${p.label}</span>`,
+        iconSize: [0, 0],
+      });
+      L.marker([p.lat, p.lng], { icon, interactive: false }).addTo(map);
+    });
+
+    polyLayerRef.current = L.layerGroup().addTo(map);
+    pinLayerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+
+    return () => {
+      window.clearTimeout(tileTimeout);
+      tiles.off("load", finishTiles);
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  // Load barangay boundaries once. If the file is missing, the map still works with pins only.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(BOUNDARY_URL)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (!cancelled) {
+          geoRef.current = data;
+          setBoundaryReady(true);
+        }
+      })
+      .catch((err) => console.warn("Barangay boundaries unavailable, showing pins only:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Redraw polygons and pins whenever data or selection changes.
+  useEffect(() => {
+    const map = mapRef.current;
+    const polyLayer = polyLayerRef.current;
+    const pinLayer = pinLayerRef.current;
+    if (!map || !polyLayer || !pinLayer) return;
+
+    polyLayer.clearLayers();
+    pinLayer.clearLayers();
+
+    const byName = Object.fromEntries(items.map((i) => [i.name, i]));
+
+    if (geoRef.current) {
+      // White casing under every boundary, so colored lines stay readable on the map tiles.
+      L.geoJSON(geoRef.current, {
+        interactive: false,
+        style: () => ({
+          color: "#ffffff",
+          weight: 6,
+          opacity: 0.85,
+          fill: false,
+        }),
+      }).addTo(polyLayer);
+
+      // Main layer: every barangay outlined in its own heat color, clickable.
+      L.geoJSON(geoRef.current, {
+        className: "hm-boundary",
+        style: (feature) => {
+          const item = byName[feature.properties.name];
+          const color = item ? item.color : NO_DATA_COLOR;
+          const active = !!item && activeBarangay === item.name;
+          return {
+            color: active ? darkenHex(color) : color,
+            weight: active ? 5 : 3,
+            opacity: 1,
+            fillColor: color,
+            fillOpacity: item && item.hasData ? 0.55 : 0.3,
+          };
+        },
+        onEachFeature: (feature, layer) => {
+          const item = byName[feature.properties.name];
+          if (!item) return;
+          layer.bindTooltip(`<b>${shortLabel(item.name)}</b><br/>${item.tooltip}`, {
+            sticky: true,
+            opacity: 0.95,
+            className: "hm-tooltip",
+          });
+          layer.bindPopup(item.popup);
+          layer.on("click", () => onSelect(item.name));
+          layer.on("mouseover", () => layer.setStyle({ weight: 5 }));
+          layer.on("mouseout", () =>
+            layer.setStyle({ weight: activeBarangay === item.name ? 5 : 3 })
+          );
+        },
+      }).addTo(polyLayer);
+    }
+
+    // Pins are visual only. Clicks go through the polygon, so one click never selects twice.
+    items.forEach((item) => {
+      const c = BARANGAY_COORDS[item.name];
+      if (!c) return;
+      L.marker([c.lat, c.lng], {
+        icon: heatPinIcon(item.color, shortLabel(item.name), activeBarangay === item.name),
+        interactive: false,
+        keyboard: false,
+      }).addTo(pinLayer);
+    });
+  }, [items, activeBarangay, onSelect, boundaryReady]);
+
+  const showSkeleton = tilesLoading || loading;
+
+  return (
+    <div className="leaflet-map-wrap" aria-busy={showSkeleton}>
+      <div ref={containerRef} className="leaflet-map-surface" role="img" aria-label="Map of San Carlos City barangays" />
+      <div
+        className={`map-skeleton${showSkeleton ? "" : " map-skeleton--hidden"}`}
+        role="status"
+        aria-live="polite"
+        aria-hidden={!showSkeleton}
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
       >
         <circle className="coverage__ring-track" cx={c} cy={c} r={radius} strokeWidth={stroke} />
         <circle
@@ -408,6 +741,7 @@
     );
   }
 
+<<<<<<< HEAD
   function TrendChart({ data, height = 190 }) {
     const wrapRef = useRef(null);
     const [width, setWidth] = useState(420);
@@ -418,6 +752,186 @@
       const update = () => {
         const w = Math.round(el.getBoundingClientRect().width);
         if (w > 0) setWidth(w);
+=======
+/* ════════════════════════════════════
+   PAGE
+════════════════════════════════════ */
+
+export default function Heatmaps() {
+  const [viewMode, setViewMode] = useState(VIEW_CIVIL);
+  const [certType, setCertType] = useState("All Certificates");
+  const [year, setYear] = useState("2026");
+  const [activeBarangay, setActiveBarangay] = useState(null);
+  const [showLateReg, setShowLateReg] = useState(false);
+  const mapControlRef = useRef(null);
+
+  const [demoType, setDemoType] = useState("total");
+  const [ageGroup, setAgeGroup] = useState("all");
+  const [employment, setEmployment] = useState("all");
+  const [voting, setVoting] = useState("all");
+  const [residentRows, setResidentRows] = useState([]);
+  const [residentStatus, setResidentStatus] = useState("idle");
+
+  const [cbmsBarangayFilter, setCbmsBarangayFilter] = useState("Follow Map Selection");
+  const [cbmsIdFilter, setCbmsIdFilter] = useState("all");
+  const [cbmsSeniorOnly, setCbmsSeniorOnly] = useState(false);
+  const [cbmsPwdOnly, setCbmsPwdOnly] = useState(false);
+  const [cbmsFourPsOnly, setCbmsFourPsOnly] = useState(false);
+
+  const isDemo = viewMode === VIEW_DEMOGRAPHICS;
+  // "idle" counts as loading: the fetch starts in an effect right after the first demographics render.
+  const isDemoLoading = isDemo && (residentStatus === "loading" || residentStatus === "idle");
+
+  const loadResidents = useCallback(async () => {
+    setResidentStatus("loading");
+    try {
+      const rows = await fetchResidents();
+      setResidentRows(rows);
+      setResidentStatus("ready");
+    } catch (err) {
+      console.error("Resident load failed:", err);
+      setResidentStatus("error");
+      pushToast({
+        title: "Could not load residents",
+        message: "Resident profiling records could not be retrieved. Please try again.",
+        success: false,
+      });
+    }
+  }, []);
+
+  const refreshHeatmap = useCallback(() => {
+    return isDemo ? loadResidents() : Promise.resolve();
+  }, [isDemo, loadResidents]);
+
+  useRegisterRefresh(refreshHeatmap);
+
+  useEffect(() => {
+    if (isDemo && residentStatus === "idle") {
+      loadResidents();
+    }
+  }, [isDemo, residentStatus, loadResidents]);
+
+  const barangayData = useMemo(() => {
+    const mult = YEAR_MULTIPLIERS[year] ?? 1;
+    return RAW_BARANGAY_DATA.map((b) => {
+      const birth = Math.round(b.birth * mult);
+      const marriage = Math.round(b.marriage * mult);
+      const death = Math.round(b.death * mult);
+      const total = birth + marriage + death;
+      return { ...b, birth, marriage, death, total, hasRecords: total > 0 };
+    });
+  }, [year]);
+
+  const sorted = useMemo(
+    () => [...barangayData].sort((a, b) => metricValue(b, certType) - metricValue(a, certType)),
+    [barangayData, certType]
+  );
+
+  const totals = useMemo(() => {
+    const birth = barangayData.reduce((s, b) => s + b.birth, 0);
+    const marriage = barangayData.reduce((s, b) => s + b.marriage, 0);
+    const death = barangayData.reduce((s, b) => s + b.death, 0);
+    return { birth, marriage, death, all: birth + marriage + death };
+  }, [barangayData]);
+
+  const lateReg = useMemo(
+    () => ({
+      birth: Math.round(totals.birth * 0.07),
+      marriage: Math.round(totals.marriage * 0.03),
+      death: Math.round(totals.death * 0.055),
+    }),
+    [totals]
+  );
+
+  const trendMonths = useMemo(() => {
+    const mult = YEAR_MULTIPLIERS[year] ?? 1;
+    return TREND_MONTHS_BASE.map((m) => ({
+      label: m.label,
+      birth: Math.round(m.birth * mult),
+      death: Math.round(m.death * mult),
+    }));
+  }, [year]);
+
+  const classified = useMemo(() => prepareResidents(residentRows, BARANGAY_NAMES), [residentRows]);
+
+  const allStatsByBarangay = useMemo(
+    () => aggregateByBarangay(classified.records, BARANGAY_NAMES),
+    [classified]
+  );
+
+  const filteredStatsByBarangay = useMemo(
+    () =>
+      aggregateByBarangay(
+        filterRecords(classified.records, { ageGroup, employment, voting }),
+        BARANGAY_NAMES
+      ),
+    [classified, ageGroup, employment, voting]
+  );
+
+  const demoTypeLabel = DEMOGRAPHIC_TYPES.find((t) => t.value === demoType).label;
+
+  const demoRows = useMemo(
+    () =>
+      BARANGAY_NAMES.map((name) => {
+        const stats = filteredStatsByBarangay[name];
+        return {
+          name,
+          stats,
+          value: stats[demoType],
+          hasData: allStatsByBarangay[name].total > 0,
+        };
+      }).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name)),
+    [filteredStatsByBarangay, allStatsByBarangay, demoType]
+  );
+
+  const demoTotals = useMemo(
+    () => sumStats(Object.values(filteredStatsByBarangay)),
+    [filteredStatsByBarangay]
+  );
+
+  const demoScale = useMemo(
+    () => buildDemoScale(Math.max(...demoRows.map((r) => r.value), 0)),
+    [demoRows]
+  );
+
+  const demoScope = activeBarangay ? filteredStatsByBarangay[activeBarangay] : demoTotals;
+  const demoSelected = activeBarangay ? demoRows.find((r) => r.name === activeBarangay) : null;
+
+  const mapItems = useMemo(() => {
+    if (isDemo) {
+      return demoRows.map((r) => ({
+        name: r.name,
+        value: r.value,
+        hasData: r.hasData,
+        color: r.hasData ? colorForScale(demoScale, r.value) : NO_DATA_COLOR,
+        tooltip: r.hasData
+          ? `${r.value.toLocaleString()} ${demoTypeLabel.toLowerCase()}`
+          : "No resident records yet",
+        popup: buildPopup(r.name, [
+          ...DEMO_STATS.filter((s) => s.key !== "total").map((s) => ({
+            label: s.label,
+            value: r.stats[s.key],
+          })),
+          { label: "Total Population", value: r.stats.total, total: true },
+        ]),
+      }));
+    }
+
+    return sorted.map((b) => {
+      const val = metricValue(b, certType);
+      return {
+        name: b.name,
+        value: val,
+        hasData: b.hasRecords,
+        color: b.hasRecords ? heatColor(val) : NO_DATA_COLOR,
+        tooltip: b.hasRecords ? `${val} ${metricLabel(certType).toLowerCase()}` : "No records yet",
+        popup: buildPopup(b.name, [
+          { label: "Live Birth", value: b.birth },
+          { label: "Marriage", value: b.marriage },
+          { label: "Death", value: b.death },
+          { label: "Total", value: b.total, total: true },
+        ]),
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
       };
       update();
       if (typeof ResizeObserver === "undefined") return undefined;
@@ -486,6 +1000,7 @@
     );
   }
 
+<<<<<<< HEAD
   function DemographicDetail({ name, stats, onClose }) {
     return (
       <div className="demo-detail">
@@ -495,6 +1010,230 @@
             <span className="coverage__sub">
               All residents · {stats.total.toLocaleString()} total population
             </span>
+=======
+  function handleExport() {
+    try {
+      const header = ["No", "Barangay", "Birth", "Marriage", "Death", "Total Records", "% of Total"];
+      const rows = sorted.map((b, i) => [
+        i + 1,
+        `"${b.name}"`,
+        b.birth,
+        b.marriage,
+        b.death,
+        b.total,
+        `${((b.total / totals.all) * 100).toFixed(2)}%`,
+      ]);
+      const meta = [`Certificate Type,${certType}`, `Year,${year}`, `Generated,${new Date().toLocaleString()}`, ""];
+      const csv = [...meta, header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+
+      const filename = `heatmaps-report-${year}-${certType.replace(/\s+/g, "_")}.csv`;
+      downloadCsv(csv, filename);
+
+      pushToast({
+        title: "Report downloaded!",
+        message: `${filename} · ${certType}, ${year}`,
+        success: true,
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error("Export failed:", err);
+      pushToast({
+        title: "Export failed",
+        message: "Something went wrong while generating the report. Please try again.",
+        success: false,
+      });
+    }
+  }
+
+  function handleExportDemographics() {
+    try {
+      if (residentStatus !== "ready" || classified.records.length === 0) {
+        pushToast({
+          title: "Nothing to export",
+          message: "No resident records are available to export.",
+          success: false,
+        });
+        return;
+      }
+
+      const header = ["No", "Barangay", ...DEMO_STATS.map((s) => s.label)];
+      const rows = demoRows.map((r, i) => [
+        i + 1,
+        `"${r.name}"`,
+        ...DEMO_STATS.map((s) => r.stats[s.key]),
+      ]);
+      const meta = [
+        `Demographic Type,${demoTypeLabel}`,
+        `Age Group,${AGE_GROUPS.find((f) => f.value === ageGroup).label}`,
+        `Employment,${EMPLOYMENT_FILTERS.find((f) => f.value === employment).label}`,
+        `Voting,${VOTING_FILTERS.find((f) => f.value === voting).label}`,
+        `Generated,"${new Date().toLocaleString()}"`,
+        "",
+      ];
+      const csv = [...meta, header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      const filename = `heatmaps-demographics-${demoType}.csv`;
+      downloadCsv(csv, filename);
+
+      pushToast({
+        title: "Report downloaded!",
+        message: `${filename} · ${demoTypeLabel}`,
+        success: true,
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error("Demographics export failed:", err);
+      pushToast({
+        title: "Export failed",
+        message: "Something went wrong while generating the report. Please try again.",
+        success: false,
+      });
+    }
+  }
+
+  function handleExportCbms() {
+    try {
+      if (filteredCbms.length === 0) {
+        pushToast({
+          title: "Nothing to export",
+          message: "No CBMS × PSA records match the current filters.",
+          success: false,
+        });
+        return;
+      }
+      const header = [
+        "ID",
+        "Name",
+        "Barangay",
+        "Record Type",
+        "Age",
+        "PhilSys ID",
+        "PhilSys No.",
+        "Senior Citizen",
+        "PWD",
+        "4Ps Beneficiary",
+      ];
+      const rows = filteredCbms.map((r) => [
+        r.id,
+        `"${r.name}"`,
+        `"${r.barangay}"`,
+        r.recordType,
+        r.age,
+        r.philSysId ? "Yes" : "No",
+        r.philSysNo || "—",
+        r.seniorCitizen ? "Yes" : "No",
+        r.pwd ? "Yes" : "No",
+        r.fourPs ? "Yes" : "No",
+      ]);
+      const meta = [
+        `Barangay Filter,${effectiveCbmsBarangay || ALL_BARANGAYS}`,
+        `PhilSys Filter,${ID_FILTERS.find((f) => f.value === cbmsIdFilter)?.label}`,
+        `Generated,${new Date().toLocaleString()}`,
+        "",
+      ];
+      const csv = [...meta, header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      const filename = `cbms-psa-crossref-${(effectiveCbmsBarangay || "all-barangays").replace(/\s+/g, "_")}.csv`;
+      downloadCsv(csv, filename);
+
+      pushToast({
+        title: "CBMS list downloaded!",
+        message: `${filename} · ${filteredCbms.length} record(s)`,
+        success: true,
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error("CBMS export failed:", err);
+      pushToast({
+        title: "Export failed",
+        message: "Something went wrong while generating the CBMS list. Please try again.",
+        success: false,
+      });
+    }
+  }
+
+  function handleToggleLateReg() {
+    setShowLateReg((v) => {
+      const next = !v;
+      if (next) {
+        pushToast({
+          title: "Late registration loaded",
+          message: `Showing late-registered records for ${year}.`,
+          success: true,
+          duration: 2500,
+        });
+      }
+      return next;
+    });
+  }
+
+  function clearCbmsFilters() {
+    setCbmsBarangayFilter(ALL_BARANGAYS);
+    setCbmsIdFilter("all");
+    setCbmsSeniorOnly(false);
+    setCbmsPwdOnly(false);
+    setCbmsFourPsOnly(false);
+  }
+
+  const mapTitle = isDemo ? demoTypeLabel : metricLabel(certType);
+  const legendScale = isDemo ? demoScale : HEAT_SCALE;
+
+  let legendHint;
+  if (isDemo) {
+    if (isDemoLoading) {
+      legendHint = "Loading resident records…";
+    } else {
+      legendHint = demoSelected
+        ? `${demoSelected.name}: ${demoSelected.value.toLocaleString()} ${demoTypeLabel.toLowerCase()} (${formatPercent(
+            demoSelected.value,
+            demoTotals[demoType]
+          )}% of citywide). Click again to clear.`
+        : "Click a barangay on the map to highlight it in the table and see its full demographic breakdown below.";
+    }
+  } else {
+    legendHint = selectedBarangay
+      ? `${selectedBarangay.name}: ${selectedBarangay.birth} birth, ${selectedBarangay.marriage} marriage, ${selectedBarangay.death} death, ${selectedBarangay.total} total (${((selectedBarangay.total / totals.all) * 100).toFixed(1)}% of citywide). Click again to clear.`
+      : "Click a barangay on the map to highlight it in the table and see its breakdown here.";
+  }
+
+  // The skeleton already communicates "loading", so the banner only shows for errors and the empty state.
+  let demoNotice = null;
+  if (isDemo && !isDemoLoading) {
+    if (residentStatus === "error") {
+      demoNotice = { tone: "error", text: "Resident records could not be loaded.", retry: true };
+    } else if (classified.records.length === 0) {
+      demoNotice = { tone: "info", text: "No resident records are available for the Heatmap yet." };
+    }
+  }
+
+  return (
+    <div className="heatmaps">
+      <header className={`heatmaps__header${isDemo ? " heatmaps__header--demo" : ""}`}>
+        <div>
+          <h1>Heatmaps</h1>
+          <p>
+            {isDemo
+              ? "Demographic distribution of residents per barangay"
+              : "Geographic distribution of civil registry records per barangay"}
+          </p>
+        </div>
+
+        <div className="heatmaps__filters">
+          <div className="filter">
+            <span>View</span>
+            <div className="toggle-row">
+              <button
+                className={`toggle-chip${!isDemo ? " toggle-chip--active" : ""}`}
+                onClick={() => setViewMode(VIEW_CIVIL)}
+              >
+                Civil Registry
+              </button>
+              <button
+                className={`toggle-chip${isDemo ? " toggle-chip--active" : ""}`}
+                onClick={() => setViewMode(VIEW_DEMOGRAPHICS)}
+              >
+                Demographics
+              </button>
+            </div>
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
           </div>
           <button className="link-btn" onClick={onClose}>
             Close
@@ -1165,6 +1904,39 @@
                 >
                   Demographics
                 </button>
+<<<<<<< HEAD
+=======
+              )}
+            </div>
+          )}
+
+          <div className="heat-grid-wrap">
+            <BarangayMap
+              ref={mapControlRef}
+              items={mapItems}
+              activeBarangay={activeBarangay}
+              onSelect={handleSelectBarangay}
+              loading={isDemoLoading}
+            />
+          </div>
+          <p className="heat-map-note">
+            OpenStreetMap basemap, panning and zoom restricted to San Carlos City, Negros Occidental. Each barangay
+            outline uses its heat color. Click a barangay to select it, or click it again to clear.
+          </p>
+
+          <div className="legend">
+            <span className="legend__title">Legend ({mapTitle})</span>
+            <div className="legend__items">
+              {legendScale.map((s) => (
+                <div className="legend__item" key={s.label}>
+                  <i style={{ background: s.color }} />
+                  {s.label}
+                </div>
+              ))}
+              <div className="legend__item">
+                <i style={{ background: NO_DATA_COLOR }} />
+                {isDemo ? "No Resident Records" : "No Records Yet"}
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
               </div>
             </div>
 
@@ -1800,6 +2572,20 @@
               </div>
             )}
           </div>
+<<<<<<< HEAD
+=======
+          <p>
+            The Heatmaps tool shows the total number of civil registry records (Live Birth, Marriage, and Death)
+            per barangay on a single view. Click a barangay to see its detailed breakdown and analytics.
+          </p>
+          <div className="about-card__note">
+            <NoteIcon />
+            Note: Late registration is shown separately from on-time records.
+          </div>
+          <button className="link-btn" onClick={handleToggleLateReg}>
+            {showLateReg ? "Hide late registration" : "View late registration"}
+          </button>
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f
 
           <div className="card">
             <div className="card__header">
@@ -1816,6 +2602,7 @@
             <TrendChart data={trendMonths} />
           </div>
 
+<<<<<<< HEAD
           <div className="card about-card">
             <div className="about-card__title">
               <InfoIcon /> About Heatmaps
@@ -1946,3 +2733,88 @@
       </svg>
     );
   }
+=======
+/* ════════════════════════════════════
+   ICONS
+════════════════════════════════════ */
+
+function ExportIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 3v12m0-12 4 4m-4-4-4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function UsersIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M11 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function VoteIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2" />
+      <path d="m8 12 3 3 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function BirthIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="2" />
+      <path d="M6 21c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function MarriageIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <circle cx="8" cy="14" r="5" stroke="currentColor" strokeWidth="2" />
+      <circle cx="16" cy="14" r="5" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+function DeathIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path d="M9 12h6M12 9v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function InfoIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 11v6M12 7v.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function NoteIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+>>>>>>> 66bbefad0e5c9b8a67e4bf2d0230d448c387125f

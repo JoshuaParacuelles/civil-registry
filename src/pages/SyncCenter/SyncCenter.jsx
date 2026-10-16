@@ -146,7 +146,7 @@ export default function SyncCenter() {
     return subscribeOutbox(load);
   }, [load]);
 
-useRegisterRefresh(load);
+  useRegisterRefresh(load);
 
   // Only the rows this user is allowed to see.
   const scopedRows = useMemo(

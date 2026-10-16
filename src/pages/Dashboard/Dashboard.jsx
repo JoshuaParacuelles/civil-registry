@@ -1096,7 +1096,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       {tab === "overview" && (
         <div className="an-tab-content">
           <div className="an-two-col">
-            <Panel title="Record type distribution" sub="Total active civil registry records">
+            <Panel title="Record type distribution" sub="Total civil registry records">
               <MemoDonutChart slices={donutSlices} size={130} />
             </Panel>
             <Panel title="Seasonal patterns" sub="Record & request volume by month of year">

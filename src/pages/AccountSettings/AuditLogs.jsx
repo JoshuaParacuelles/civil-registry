@@ -16,13 +16,12 @@ const API_URL = `${import.meta.env.VITE_API_BASE_URL || ""}/api`;
 //   warning  – changes that alter existing data
 //   info     – read / transfer activity
 //   neutral  – session and navigation noise
+const ACRONYMS = new Set(["PDF", "ID"]);
+
 const ACTION_CONFIG = {
+  // Legacy codes (rows written before the catalog update)
   LOGIN:          { label: "Login",           tone: "success" },
-  LOGIN_SUCCESS:  { label: "Login",           tone: "success" },
-  LOGIN_FAILED:   { label: "Login Failed",    tone: "danger"  },
-  ACCOUNT_LOCKED: { label: "Account Locked",  tone: "danger"  },
   LOGIN_LOCKED:   { label: "Account Locked",  tone: "danger"  },
-  LOGOUT:         { label: "Logout",          tone: "neutral" },
   VIEW:           { label: "Viewed",          tone: "info"    },
   SEARCH:         { label: "Searched",        tone: "info"    },
   UPLOAD:         { label: "Uploaded",        tone: "info"    },
@@ -31,18 +30,93 @@ const ACTION_CONFIG = {
   RESTORE:        { label: "Restored",        tone: "success" },
   DELETE:         { label: "Deleted",         tone: "danger"  },
   TRANSACTION:    { label: "Transaction",     tone: "success" },
+  TRANSACTION_COMPLETE: { label: "Transaction Completed", tone: "success" },
+  PAYMENT:        { label: "Payment",         tone: "success" },
   ACCOUNT_UPDATE: { label: "Account Updated", tone: "warning" },
   NAVIGATE:       { label: "Navigated",       tone: "neutral" },
+
+  // Authentication
+  LOGIN_SUCCESS:   { label: "Login",             tone: "success" },
+  LOGIN_FAILED:    { label: "Login Failed",      tone: "danger"  },
+  ACCOUNT_LOCKED:  { label: "Account Locked",    tone: "danger"  },
+  ACCOUNT_UNLOCKED:{ label: "Account Unlocked",  tone: "success" },
+  LOGOUT:          { label: "Logout",            tone: "neutral" },
+  SESSION_EXPIRED: { label: "Session Expired",   tone: "neutral" },
+
+  // Documents (vital records)
+  BIRTH_RECORD_VIEWED:    { label: "Birth Record Viewed",    tone: "info" },
+  MARRIAGE_RECORD_VIEWED: { label: "Marriage Record Viewed", tone: "info" },
+  DEATH_RECORD_VIEWED:    { label: "Death Record Viewed",    tone: "info" },
+  BIRTH_PDF_UPLOADED:     { label: "Birth PDF Uploaded",     tone: "info" },
+  MARRIAGE_PDF_UPLOADED:  { label: "Marriage PDF Uploaded",  tone: "info" },
+  DEATH_PDF_UPLOADED:     { label: "Death PDF Uploaded",     tone: "info" },
+  PDF_VIEWED:             { label: "PDF Viewed",             tone: "info" },
+  PDF_DOWNLOADED:         { label: "PDF Downloaded",         tone: "info" },
+  RECORD_SEARCHED:        { label: "Record Searched",        tone: "info" },
+  RECORD_ARCHIVED:        { label: "Record Archived",        tone: "warning" },
+  RECORD_RESTORED:        { label: "Record Restored",        tone: "success" },
+  RECORD_DELETED_PERMANENTLY: { label: "Record Deleted",     tone: "danger" },
+  RELATIVES_UPDATED:      { label: "Relatives Updated",      tone: "warning" },
+  SPOUSES_UPDATED:        { label: "Spouses Updated",        tone: "warning" },
+
+  // Transactions
+  TRANSACTION_COMPLETED:  { label: "Transaction Completed",  tone: "success" },
+  PAYMENT_RECORDED:       { label: "Payment Recorded",       tone: "success" },
+
+  // Document Tracking
+  DOCUMENT_CREATED:          { label: "Document Created",          tone: "success" },
+  DOCUMENT_ASSIGNED:         { label: "Document Assigned",         tone: "warning" },
+  DOCUMENT_ARCHIVED:         { label: "Document Archived",         tone: "warning" },
+  DOCUMENT_RESTORED:         { label: "Document Restored",         tone: "success" },
+  DOCUMENT_REJECTED:         { label: "Document Rejected",         tone: "danger"  },
+  DOCUMENT_COMMENT_ADDED:    { label: "Comment Added",             tone: "info"    },
+  DOCUMENT_DELETED_PERMANENTLY: { label: "Document Deleted",       tone: "danger"  },
+
+  // Registration Workflow
+  DOCUMENT_STEP_UPDATED:     { label: "Step Updated",              tone: "warning" },
+  DOCUMENT_STEP_ASSIGNED:    { label: "Step Assigned",             tone: "warning" },
+  REGISTRY_NUMBER_ASSIGNED:  { label: "Registry Number Assigned",  tone: "success" },
+  DOCUMENT_RELEASED:         { label: "Document Released",         tone: "success" },
+
+  // Personnel
+  PERSONNEL_ADDED:           { label: "Personnel Added",           tone: "success" },
+  PERSONNEL_REMOVED:         { label: "Personnel Removed",         tone: "danger"  },
+  PERSONNEL_VIEWED:          { label: "Personnel Viewed",          tone: "info"    },
+
+  // Roles
+  ROLES_VIEWED:              { label: "Roles Viewed",              tone: "info"    },
+  ROLE_CREATED:              { label: "Role Created",              tone: "success" },
+  ROLE_UPDATED:              { label: "Role Updated",              tone: "warning" },
+  ROLE_DELETED:              { label: "Role Deleted",              tone: "danger"  },
+  ADMINISTRATORS_UPDATED:    { label: "Administrators Updated",    tone: "warning" },
+
+  // Accounts
+  ACCOUNT_CREATED:           { label: "Account Created",           tone: "success" },
+  ACCOUNT_UPDATED:           { label: "Account Updated",           tone: "warning" },
+  PASSWORD_CHANGED:          { label: "Password Changed",          tone: "warning" },
+  PASSWORD_RESET:            { label: "Password Reset",            tone: "warning" },
+
+  // Maintenance
+  ORPHAN_FILES_REMOVED:      { label: "Orphan Files Removed",      tone: "warning" },
+
+  // Audit
+  AUDIT_LOG_VIEWED:          { label: "Audit Log Viewed",          tone: "info"    },
+  AUDIT_LOG_EXPORTED:        { label: "Audit Log Exported",        tone: "info"    },
+  AUDIT_ACCESS_DENIED:       { label: "Audit Access Denied",       tone: "danger"  },
+  ACCESS_DENIED:             { label: "Access Denied",             tone: "danger"  },
 };
 
-// Actions that aren't in ACTION_CONFIG are normalized into readable labels.
+// Unknown codes are turned into readable labels, keeping acronyms like PDF in capitals.
 const humanizeAction = (action) => {
   const text = (action || "Unknown")
     .toString()
     .toLowerCase()
     .split("_")
     .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) => {
+      const upper = word.toUpperCase();
+      return ACRONYMS.has(upper) ? upper : word.charAt(0).toUpperCase() + word.slice(1);
+    })
     .join(" ");
   return text || "Unknown";
 };
@@ -95,6 +169,14 @@ const parseMeta = (meta) => {
     try { return JSON.parse(meta.replace(/'/g, '"')); }
     catch { return meta; }
   }
+};
+
+// Objects (e.g. export filters, old/new value snapshots) become JSON text
+// instead of "[object Object]".
+const formatMetaValue = (value) => {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 };
 
 const describeLoadError = (error) => {
@@ -620,11 +702,11 @@ const AuditLogs = () => {
                                 Object.entries(parsedMeta).map(([key, value]) => (
                                   <div className="audit-meta-item" key={key}>
                                     <span className="audit-meta-key">{key}</span>
-                                    <span className="audit-meta-val">{String(value)}</span>
+                                    <span className="audit-meta-val">{formatMetaValue(value)}</span>
                                   </div>
                                 ))
                               ) : (
-                                <span className="audit-meta-val">{String(parsedMeta)}</span>
+                                <span className="audit-meta-val">{formatMetaValue(parsedMeta)}</span>
                               )}
                             </div>
                           </td>

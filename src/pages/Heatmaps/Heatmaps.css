@@ -274,6 +274,67 @@
 .hm-popup__row--total { border-top: 1px dashed var(--border); margin-top: 4px; padding-top: 6px; }
 
 /* ════════════════════════════════════
+   BARANGAY BOUNDARIES
+   Each outline takes its heat color (set in JS). Only the hover
+   transition lives here; the color is never set in CSS.
+════════════════════════════════════ */
+.hm-boundary {
+  transition: stroke-width 0.15s ease, opacity 0.15s ease;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.hm-boundary:hover { opacity: 1; }
+
+/* ════════════════════════════════════
+   BARANGAY PINS
+════════════════════════════════════ */
+.hm-pin-wrap { background: none; border: none; }
+.hm-pin-stack {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.hm-pin {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  background: var(--pin);
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: var(--shadow-pop);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.hm-pin span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  background: #fff;
+  border-radius: 50%;
+}
+.hm-pin--active {
+  transform: rotate(-45deg) scale(1.15);
+  box-shadow: 0 0 0 4px rgba(46, 95, 232, 0.35), var(--shadow-pop);
+}
+.hm-pin__label {
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+  color: #1c2233;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(28, 34, 51, 0.12);
+}
+
+/* ════════════════════════════════════
    LEGEND
 ════════════════════════════════════ */
 .legend { margin-top: 14px; }

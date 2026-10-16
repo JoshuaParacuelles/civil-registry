@@ -16,7 +16,7 @@ const MODULE_LABELS = {
   marriage_verification:     "Marriage Verification",
   marriage_archive_uploader: "Marriage Archive",
   document_tracking:         "Document Tracking",
-  // ─── DOCUMENT TRACKING STAGE MODULES (NEW) ──────────────────────────────
+  // ─── DOCUMENT TRACKING STAGE MODULES ────────────────────────────────────
   // One label per pipeline stage, so a user scoped to a single stage shows
   // a readable chip (e.g. "Posting Period") instead of the raw module key.
   document_stage_registration:     "Registration",
@@ -54,13 +54,11 @@ const CATEGORY_MODULES = {
   ],
   document: [
     "document_tracking",
-    // ─── DOCUMENT TRACKING STAGE MODULES (NEW) ────────────────────────────
+    // ─── DOCUMENT TRACKING STAGE MODULES ──────────────────────────────────
     // Adding these here is what makes the Registration / Civil Registrar /
     // Posting Period / Records Division / Assign Registry Number /
     // Releasing roles show up (and get filtered/scoped correctly) under the
-    // "Document Tracking Credentials" tab — same mechanism that already
-    // scopes Birth/Death/Marriage Verifier under "Vital Record Management
-    // Credentials".
+    // "Document Tracking Credentials" tab.
     "document_stage_registration",
     "document_stage_civil_registrar",
     "document_stage_posting_period",
@@ -70,21 +68,14 @@ const CATEGORY_MODULES = {
   ],
 };
 
-// ─── CATEGORY RESOLUTION (NEW) ─────────────────────────────────────────────
-// Every user_roles row now carries an explicit `category` from the backend
+// ─── CATEGORY RESOLUTION ───────────────────────────────────────────────────
+// Every user_roles row carries an explicit `category` from the backend
 // ("vital" | "document" | "admin" | "other"). Each assignment belongs to
-// EXACTLY ONE category, which is what keeps a username's Vital Record
-// Management credentials and its Document Tracking credentials as two
-// separate, independent rows that never overwrite one another.
+// EXACTLY ONE category, which keeps a username's Vital Record Management
+// credentials and its Document Tracking credentials as two separate rows.
 //
 // The permission-based branch below is only a fallback for rows created
-// before the category column existed, so the page still renders correctly
-// on a database where the migration hasn't been run yet.
-//
-// FIX: `permissions` is now coerced to an array before `.some()` is called.
-// A row whose permissions came back null/undefined (e.g. a user_roles row
-// whose joined role failed to resolve) used to throw
-// "Cannot read properties of undefined (reading 'some')" and blank the page.
+// before the category column existed.
 function resolveCategory(entity) {
   if (!entity) return "other";
   if (entity.category) return entity.category;
@@ -160,10 +151,8 @@ export default function Rolemanagement() {
   const [activeCategory, setActiveCategory] = useState(CATEGORIES[0].key);
 
   // Guards against a single transient 401 forcing a real logout. A 401 can
-  // occasionally be a brief race (e.g. a poll landing a beat before a
-  // freshly-issued session cookie is fully committed) rather than a truly
-  // dead session, so we require it to be seen twice in a row before we
-  // treat it as a genuine session expiry.
+  // occasionally be a brief race rather than a truly dead session, so it must
+  // be seen twice in a row before we treat it as a genuine session expiry.
   const consecutive401Ref = useRef(0);
 
   const showToast = useCallback((msg, type = "success", detail = "") => {
@@ -200,16 +189,8 @@ export default function Rolemanagement() {
         }
       };
 
-      // A 401 here means the browser's sessionStorage still says
-      // "isAuthenticated" (so the app rendered this page at all) but the
-      // actual Flask session is gone — most commonly because the backend
-      // restarted and regenerated its secret key, silently invalidating
-      // every existing session cookie. However, a single 401 can also be a
-      // brief timing race (a poll landing just before a freshly-issued
-      // session cookie is fully committed), not a truly dead session. So
-      // instead of forcing a logout on the first 401, we confirm it once
-      // more shortly after — only a second consecutive 401 is treated as a
-      // real, dead session and sent back to log in for a fresh cookie.
+      // A 401 means the browser still thinks it is logged in but the Flask
+      // session is gone. Confirm once more before treating it as expired.
       if (rolesRes.status === 401 || userRolesRes.status === 401) {
         consecutive401Ref.current += 1;
 
@@ -250,10 +231,7 @@ export default function Rolemanagement() {
       await rolesRes.json();
       const r2 = await userRolesRes.json();
 
-      // FIX: normalise every row so `permissions` is always an array. Any
-      // row that arrives without one (a user_roles row whose joined role
-      // didn't resolve, for instance) would otherwise blow up later with
-      // "Cannot read properties of undefined (reading 'some')".
+      // Normalise every row so `permissions` is always an array.
       const normalise = (list) =>
         (Array.isArray(list) ? list : []).map(item => ({
           ...item,
@@ -290,7 +268,6 @@ export default function Rolemanagement() {
   // Manual refresh from the page-level Refresh button (RefreshContext).
   // fetchAll reports failure by returning false, so this wrapper turns that
   // into a thrown error, which lets the caller's button show a failed state.
-  // The table keeps its last good data either way.
   const refreshRoles = useCallback(async () => {
     const ok = await fetchAll(false);
     if (!ok) throw new Error("Role data could not be refreshed.");
@@ -310,11 +287,7 @@ export default function Rolemanagement() {
       if (!isSubscribed) return;
       consecutiveFails = ok ? 0 : consecutiveFails + 1;
 
-      // Only give up on periodic refresh after several consecutive
-      // failures — a single transient hiccup (a brief 501/503 from the
-      // backend, or the 401-confirmation retry above) shouldn't
-      // permanently freeze this screen; it should just try again on the
-      // next tick.
+      // Only give up on periodic refresh after several consecutive failures.
       if (consecutiveFails >= 3 && intervalId) {
         clearInterval(intervalId);
         intervalId = null;
@@ -329,9 +302,7 @@ export default function Rolemanagement() {
 
     const onFocus = () => {
       fetchAll(true).then((ok) => {
-        // If polling had previously given up after repeated failures, a
-        // successful manual refresh (e.g. tabbing back into the page)
-        // resumes periodic polling instead of leaving the page frozen.
+        // A successful manual refresh resumes periodic polling if it had stopped.
         if (ok && isSubscribed && !intervalId) {
           consecutiveFails = 0;
           intervalId = setInterval(poll, 5000);
@@ -372,16 +343,10 @@ export default function Rolemanagement() {
 
   const openAssign = () => { setAssignForm(EMPTY_ASSIGN); setModal("assign"); };
 
-  // ─── PER-CATEGORY PASSWORDS (FIX) ─────────────────────────────────────────
-  // "New credential" now means "no account for THIS username in THIS
-  // category yet" — not "this username has never been seen anywhere".
-  // Each credential category has its own separate password, so the same
-  // username can need a BRAND NEW password here even though it already has
-  // a completely different password in another category (e.g. "joshua"
-  // already exists under Vital Record Management, but has no Document
-  // Tracking credential yet — that still requires a new password, sent as
-  // its own separate account below). Only when this exact category already
-  // has a credential for this username do we skip asking for a password.
+  // ─── PER-CATEGORY PASSWORDS ───────────────────────────────────────────────
+  // "New credential" means "no account for THIS username in THIS category
+  // yet", not "this username has never been seen anywhere". Each category
+  // has its own separate password.
   const isNewUser = !userRoles.some(
     u => u.username === assignForm.username.trim() && resolveCategory(u) === activeCategory
   ) && assignForm.username.trim() !== "";
@@ -390,8 +355,8 @@ export default function Rolemanagement() {
     const { username, password, confirmPassword, role_id } = assignForm;
     if (!username.trim() || !role_id) return showToast("Username and role are required", "error");
     if (isNewUser) {
-      if (!password)               return showToast("Password required for new accounts", "error");
-      if (password.length < 6)         return showToast("Password must be at least 6 characters", "error");
+      if (!password)                    return showToast("Password required for new accounts", "error");
+      if (password.length < 6)          return showToast("Password must be at least 6 characters", "error");
       if (password !== confirmPassword) return showToast("Passwords do not match", "error");
     }
     setSaving(true);
@@ -408,9 +373,8 @@ export default function Rolemanagement() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return showToast(data.error || "Failed", "error", `HTTP ${res.status}`);
-      // NEW: the backend may succeed but report that it had to fall back to
-      // a single shared password for this username (users.category missing).
-      // Surface that instead of silently implying separate passwords exist.
+      // The backend may succeed but report it had to fall back to a single
+      // shared password for this username (users.category missing).
       showToast(
         data.account_created ? "Account created & role assigned!" : "Role assigned!",
         "success",
@@ -460,17 +424,13 @@ export default function Rolemanagement() {
 
   const saveReset = async () => {
     const { password, confirmPassword } = resetPass;
-    if (!password)               return showToast("New password required", "error");
-    if (password.length < 6)         return showToast("Min 6 characters", "error");
+    if (!password)                    return showToast("New password required", "error");
+    if (password.length < 6)          return showToast("Min 6 characters", "error");
     if (password !== confirmPassword) return showToast("Passwords do not match", "error");
     setSaving(true);
     try {
-      // ─── PER-CATEGORY PASSWORDS (FIX) ────────────────────────────────
       // Each category is its own account with its own password, so the
-      // backend needs to know WHICH credential to reset. Without this the
-      // request is rejected ("A valid category is required to reset this
-      // credential's password") once the users.category migration is in
-      // place. Taken from the exact row the admin opened Reset on.
+      // backend needs to know WHICH credential to reset.
       const category = resolveCategory(resetTarget) || activeCategory;
       const res  = await fetch(`${API}/api/user-roles/${resetTarget.username}/reset-password`, {
         method: "PUT",
@@ -489,10 +449,9 @@ export default function Rolemanagement() {
     finally   { setSaving(false); }
   };
 
-  // ─── PER-CATEGORY PASSWORDS (FIX) ───────────────────────────────────────
-  // Takes the whole row rather than just the username, so the credential's
-  // category can be sent along — lock state belongs to one (username,
-  // category) account, not to the username as a whole.
+  // ─── PER-CATEGORY PASSWORDS ───────────────────────────────────────────────
+  // Takes the whole row so the credential's category can be sent along. Lock
+  // state belongs to one (username, category) account.
   const unlockUser = async (u) => {
     try {
       const category = resolveCategory(u) || activeCategory;
@@ -518,14 +477,9 @@ export default function Rolemanagement() {
   // Modules that belong to the currently selected credential category.
   const activeCategoryModules = CATEGORY_MODULES[activeCategory] || [];
 
-  // Administrator accounts are managed separately and are intentionally
-  // excluded from this list — this screen is for managing regular,
-  // non-admin user role assignments only.
-  // NEW: also scoped to the currently selected credential category. Each
-  // assignment row now declares its own category, so a username holding
-  // one role in Vital Record Management and another in Document Tracking
-  // appears under BOTH tabs — as two separate rows with separate role_ids
-  // — instead of one row jumping between tabs.
+  // Administrator accounts are managed separately and are excluded from this
+  // list. Also scoped to the selected credential category, so a username with
+  // one role in each category appears under BOTH tabs as two separate rows.
   const filteredUsers = userRoles
     .filter(u => !u.is_admin)
     .filter(u => resolveCategory(u) === activeCategory)
@@ -536,7 +490,6 @@ export default function Rolemanagement() {
 
   return (
     <div className="rm-wrap">
-
 
       {/* Credential category selector — lets the admin switch between
           managing Vital Record Management credentials and Document
@@ -631,11 +584,12 @@ export default function Rolemanagement() {
 }
 
 // ─── USERS TABLE ──────────────────────────────────────────────────────────────
-// NOTE: every <td> below carries a data-label attribute. On desktop this is
-// ignored, but the mobile media query in RoleManagement.css uses
-// `content: attr(data-label)` to turn each row into a labeled stacked card,
-// so every column stays visible on narrow screens instead of being clipped
-// or requiring horizontal scrolling to find.
+// Every <td> carries a data-label attribute. The mobile media query in
+// RoleManagement.css uses `content: attr(data-label)` to turn each row into a
+// labeled stacked card.
+//
+// The <colgroup> fixes the column widths so every row lines up. The Actions
+// column is a fixed pixel width so its four buttons always fit on one line.
 function UsersTable({ users, onRemove, onReset, onUnlock, onView }) {
   if (!users.length)
     return <div className="rm-empty">No users assigned yet. Add one to get started.</div>;
@@ -643,6 +597,14 @@ function UsersTable({ users, onRemove, onReset, onUnlock, onView }) {
   return (
     <div className="rm-table-wrap">
       <table className="rm-table">
+        <colgroup>
+          <col style={{ width: "19%" }} />   {/* User */}
+          <col style={{ width: "15%" }} />   {/* Role */}
+          <col style={{ width: "28%" }} />   {/* Access */}
+          <col style={{ width: "10%" }} />   {/* Status */}
+          <col style={{ width: "11%" }} />   {/* Assigned */}
+          <col style={{ width: "340px" }} /> {/* Actions */}
+        </colgroup>
         <thead>
           <tr>
             <th>User</th>
@@ -692,10 +654,8 @@ function UsersTable({ users, onRemove, onReset, onUnlock, onView }) {
                   </div>
                 </td>
                 <td data-label="Status">
-                  {/* "Not Active" just means offline right now — it's a neutral
-                      state, not an error, so it no longer reuses the red
-                      "locked" styling (which stays reserved for the separate
-                      Locked badge next to the username above). */}
+                  {/* "Not Active" means offline right now. It is a neutral state,
+                      not an error, so it does not reuse the red locked styling. */}
                   <span className={`rm-status-badge ${isOnline ? "rm-status-badge--active" : "rm-status-badge--inactive"}`}>
                     {isOnline ? "Active" : "Not Active"}
                   </span>
@@ -745,10 +705,6 @@ function UsersTable({ users, onRemove, onReset, onUnlock, onView }) {
 }
 
 // ─── ASSIGN MODAL ─────────────────────────────────────────────────────────────
-// FIX: `userRoles` and `categoryModules` now default to empty arrays. If this
-// modal ever renders before those props are ready, `.some()` / `.includes()`
-// on an undefined value is what produced
-// "Cannot read properties of undefined (reading 'some')".
 function AssignModal({
   userRoles = [],
   form,
@@ -777,7 +733,7 @@ function AssignModal({
       })
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
-          // Normalise so every role is guaranteed a permissions array.
+          // Guarantee every role has a permissions array.
           setRoles(data.map(r => ({
             ...r,
             permissions: Array.isArray(r?.permissions) ? r.permissions : [],
@@ -797,15 +753,13 @@ function AssignModal({
 
   const typedName = form.username.trim();
 
-  // ─── CREDENTIAL CATEGORY SEPARATION ────────────────────────────────────
-  // Three distinct situations, so the admin can see exactly what a save
-  // will do BEFORE doing it:
-  //   1. brand new username           → new account+password, this category only
+  // ─── CREDENTIAL CATEGORY SEPARATION ───────────────────────────────────────
+  // Three situations, so the admin can see what a save will do before doing it:
+  //   1. brand new username → new account + password, this category only
   //   2. username exists in the OTHER category → a SEPARATE credential row
-  //      (own password) is added for this category; the other category's
-  //      row and password are untouched
+  //      (own password) is added for this category
   //   3. username already has a row in THIS category → only that row's role
-  //      changes; nothing outside this category is affected, no new password
+  //      changes, no new password
   const assignmentInThisCategory = userRoles.find(
     u => u.username === typedName && resolveCategory(u) === activeCategory
   );
@@ -814,8 +768,7 @@ function AssignModal({
   );
 
   // Roles already held by someone ELSE in this category. The user being
-  // edited keeps their own current role selectable (they're excluded from
-  // the taken set), so reassigning them doesn't hide their own role.
+  // edited keeps their own current role selectable.
   const takenRoleIds = new Set(
     userRoles
       .filter(u =>
@@ -826,41 +779,22 @@ function AssignModal({
       .map(u => String(u.role_id))
   );
 
-  // ─── PER-CATEGORY PASSWORDS (FIX) ─────────────────────────────────────────
-  // "New credential" is decided per CATEGORY, not per username. Password
-  // fields must appear (and a password must be required) whenever THIS
-  // category has no existing credential yet — including when the username
-  // already exists under a different category with its own, separate
-  // password. Previously this checked "does the username exist ANYWHERE",
-  // which is exactly what hid the password fields and made it impossible
-  // to give "joshua" a Document Tracking password distinct from their
-  // existing Vital Record Management one.
+  // ─── PER-CATEGORY PASSWORDS ───────────────────────────────────────────────
+  // Password fields appear whenever THIS category has no existing credential
+  // for the username, even if the username exists under another category.
   const isNewUser = !assignmentInThisCategory && typedName !== "";
 
   // ── Single-admin enforcement ─────────────────────────────────────────────
-  // The Administrator role may only ever be held by one account at a time.
-  // If some other user already has it, it's removed from the pickable list
-  // entirely — the only way to hand it off is to first remove it from the
-  // current holder. If the user currently being assigned already IS the
-  // admin, the Administrator option remains (so their assignment isn't
-  // accidentally downgraded), but once "Administrator" is the selected
-  // role, every other option is hidden — you can't pick anything else
-  // without clearing the selection first (which requires reopening/closing
-  // the modal, since the role field is then locked).
-  const existingAdmin   = userRoles.find(u => u.is_admin);
+  // The Administrator role may only be held by one account at a time.
+  const existingAdmin    = userRoles.find(u => u.is_admin);
   const adminHeldByOther = !!existingAdmin && existingAdmin.username !== typedName;
 
   const selectableRoles = roles.filter(r => {
     if (r.is_admin) {
-      // NEW: Administrator is not a Document Tracking credential. It lives in
-      // its own "admin" category (see get_role_category in Rolemanagement.py),
-      // so an Administrator assignment made from this tab would be filed under
-      // "admin" and then vanish from the Document Tracking table entirely.
-      // Hiding it here keeps this tab strictly about Document Tracking roles;
-      // administrators are still assigned exactly as before from the
-      // Vital Record Management tab / Administrator selection panel.
+      // Administrator lives in its own "admin" category, so assigning it from
+      // this tab would make it vanish from the Document Tracking table.
       if (activeCategory === "document") return false;
-      return !adminHeldByOther;   // admin role only selectable if free (or held by this same user)
+      return !adminHeldByOther;
     }
 
     // Non-admin roles: hide any role already assigned to another user in
@@ -874,8 +808,7 @@ function AssignModal({
     !!form.role_id &&
     roles.find(r => String(r.id) === String(form.role_id))?.is_admin === true;
 
-  // Once Administrator is the chosen role, collapse the list down to just
-  // that option so there is no way to pick a different role afterward.
+  // Once Administrator is chosen, collapse the list down to just that option.
   const visibleRoles = roleIsLockedToAdmin
     ? selectableRoles.filter(r => r.is_admin)
     : selectableRoles;
@@ -1046,7 +979,7 @@ function AssignModal({
   );
 }
 
-// ─── RESET PASSWORD MODAL ────────────────────────────────────────────────     
+// ─── RESET PASSWORD MODAL ─────────────────────────────────────────────────────
 function ResetPasswordModal({ username, form, setForm, saving, onSave, onClose }) {
   return (
     <Overlay onClose={onClose}>
@@ -1116,8 +1049,6 @@ function DeleteModal({ user, saving, onConfirm, onClose }) {
             {categoryLabel ? <> under <strong>{categoryLabel}</strong></> : null}?
           </p>
 
-          {/* NEW: makes the category scoping of this delete explicit — only
-              this one credential row goes away. */}
           <div className="rm-warn-box">
             The user account will remain, and any role this user holds in the other
             credential category will not be affected.
@@ -1214,8 +1145,6 @@ function ViewCredentialsModal({ user, onClose }) {
               </div>
             </div>
 
-            {/* NEW: which independent credential category this assignment
-                belongs to, so it's obvious that it stands on its own. */}
             {categoryLabel && (
               <div className="rm-cred-row">
                 <span className="rm-cred-row__label">CATEGORY</span>

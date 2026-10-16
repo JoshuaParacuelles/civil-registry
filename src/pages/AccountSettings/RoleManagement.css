@@ -18,12 +18,9 @@
   --rm-shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
   --rm-shadow-lg: 0 10px 25px rgba(0,0,0,.12), 0 4px 10px rgba(0,0,0,.06);
 
-  /* Segmented-control tokens for the credential-category switcher. Kept
-     separate from the generic surface/border tokens above so the control
-     reads as one cohesive group rather than a row of individually
-     colored buttons. */
-  --rm-tab-track:  #ebedf1;
-  --rm-tab-text:   #6b7280;
+  /* Segmented-control tokens for the credential-category switcher. */
+  --rm-tab-track:       #ebedf1;
+  --rm-tab-text:        #6b7280;
   --rm-tab-active-bg:   var(--rm-surface);
   --rm-tab-active-text: var(--rm-text-1);
 }
@@ -47,12 +44,7 @@
   box-sizing: border-box;
 }
 
-/* ── Credential category selector ──
-   A segmented control (one neutral track, one elevated active segment)
-   rather than a row of separately-bordered, solid-blue-filled buttons.
-   This keeps the two categories reading as a single grouped choice and
-   removes the heavy, same-weight-as-a-primary-action look the filled
-   tab previously had. */
+/* ── Credential category selector ── */
 .rm-category-tabs {
   display: inline-flex;
   align-items: center;
@@ -179,10 +171,8 @@
   border: 1px solid var(--rm-border);
   border-radius: var(--rm-radius);
   box-shadow: var(--rm-shadow);
-  /* Scrolls horizontally as a last-resort fallback on any viewport too narrow
-     for the full table, instead of silently clipping columns. On tablet and
-     phone widths the table is converted to stacked cards (see the responsive
-     section at the bottom), so this scroll is only ever a safety net. */
+  /* Horizontal scroll is a last-resort fallback. Below 900px the table is
+     converted to stacked cards (see the responsive section). */
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
@@ -191,7 +181,8 @@
 
 .rm-table {
   width: 100%;
-  min-width: 720px; /* keeps columns readable; wrapper scrolls below this */
+  min-width: 720px;            /* keeps columns readable; wrapper scrolls below this */
+  table-layout: fixed;         /* columns use the <colgroup> widths, so every row lines up */
   border-collapse: collapse;
   font-size: 0.875rem;
 }
@@ -210,12 +201,14 @@
   letter-spacing: .05em;
   color: var(--rm-text-3);
   white-space: nowrap;
+  overflow: hidden;
 }
 
 .rm-table td {
   padding: 14px 16px;
   border-bottom: 1px solid var(--rm-border);
   vertical-align: middle;
+  overflow: hidden;
 }
 
 .rm-table tbody tr:last-child td { border-bottom: none; }
@@ -248,6 +241,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.rm-user-cell > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ── Role pill ── */
@@ -276,7 +275,8 @@
   gap: 4px;
 }
 
-.rm-chips--inline { flex-wrap: nowrap; }
+/* Access chips wrap inside their column rather than stretching it */
+.rm-chips--inline { flex-wrap: wrap; }
 
 .rm-chip {
   display: inline-block;
@@ -296,11 +296,13 @@
 .rm-chip--none  { color: var(--rm-text-3); font-style: italic; }
 
 /* ── Action buttons ── */
+/* Kept on one line. The Actions column is sized to fit four buttons. */
 .rm-action-btns {
   display: flex;
   gap: 6px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
 }
 
 .rm-pill-btn {
@@ -311,16 +313,13 @@
   cursor: pointer;
   transition: background .15s, border-color .15s, color .15s;
   white-space: nowrap;
+  flex: 0 0 auto;
+  min-width: 68px;
+  text-align: center;
 }
 
-/* ── Action buttons: tiered by consequence, not decorated by arbitrary
-   color. Every row can carry up to four actions, so they're ranked from
-   lowest to highest stakes — View and Reset are outlined/low-emphasis
-   (reversible, routine), Unlock is outlined in the warn color because it's
-   the direct fix for the red "Locked" state, and Delete is the only solid
-   fill in the group, reserved for the one destructive, irreversible
-   action. This keeps the row scannable instead of every button competing
-   at the same visual weight. ── */
+/* Tiered by consequence. View and Reset are low-emphasis, Unlock is the warn
+   color, and Delete is the only solid fill, reserved for the destructive action. */
 .rm-pill-btn--view {
   background: var(--rm-surface);
   color: var(--rm-text-2);
@@ -361,6 +360,7 @@
   background: var(--rm-danger-h);
   border-color: var(--rm-danger-h);
 }
+
 /* ── Locked badge ── */
 .rm-locked-badge {
   display: inline-block;
@@ -437,7 +437,7 @@
   flex-direction: column;
   width: 100%;
   max-height: 90vh;
-  max-height: 90dvh; /* mobile browsers: excludes the collapsing URL bar so the footer is never cut off */
+  max-height: 90dvh;
   overflow: hidden;
   animation: rm-modal-in .18s ease;
 }
@@ -463,7 +463,7 @@
 
 .rm-modal__head h2 {
   margin: 0;
-  min-width: 0;                 /* lets a long username wrap instead of pushing the ✕ off-screen */
+  min-width: 0;
   overflow-wrap: anywhere;
   font-size: 1rem;
   font-weight: 600;
@@ -768,9 +768,7 @@
 .rm-cred-status--active   { background: #f0fdf4; color: var(--rm-success); border: 1px solid #bbf7d0; }
 /* "Locked" (account genuinely locked out) stays red/danger. */
 .rm-cred-status--locked   { background: #fef2f2; color: var(--rm-danger);  border: 1px solid #fecaca; }
-/* "Inactive" (simply not currently online) is a neutral state, not an
-   error — it no longer borrows the danger-red styling that "locked" uses,
-   so the two states can't be confused for one another at a glance. */
+/* "Inactive" (simply not currently online) is neutral, not an error. */
 .rm-cred-status--inactive { background: #f3f4f6; color: var(--rm-text-3); border: 1px solid var(--rm-border); }
 .rm-cred-status--admin    { background: #fffbeb; color: #92400e;           border: 1px solid #fde68a; }
 .rm-cred-status--no       { background: #f3f4f6; color: var(--rm-text-3);  border: 1px solid var(--rm-border); }
@@ -922,7 +920,8 @@
   from { width: 100%; }
   to   { width: 0%; }
 }
-/* ── Status badge (Active / Inactive) ── */
+
+/* ── Status badge (Active / Not Active) ── */
 .rm-status-badge {
   display: inline-flex;
   align-items: center;
@@ -939,12 +938,7 @@
   border: 1px solid #bbf7d0;
 }
 
-/* "Not Active" simply means the user isn't currently online right now —
-   it is not an error state, so it gets a neutral gray badge instead of
-   the red used for a genuinely locked account (see .rm-locked-badge /
-   .rm-row--locked, which are unaffected and still red). Keeping the old
-   red "--locked" modifier available too, for anywhere that badge is
-   actually reporting a lock rather than online/offline status. */
+/* "Not Active" means offline right now, not an error, so it is neutral gray. */
 .rm-status-badge--inactive {
   background: #f3f4f6;
   color: var(--rm-text-3);
@@ -960,33 +954,21 @@
 /* ══════════════════════════════════════════════════════════════════════════
    RESPONSIVE
    Breakpoints (each block only overrides what the wider one left behind):
-     ≤ 1100px  compact table       — tighter cells, chips/buttons may wrap
+     ≤ 1100px  compact table       — tighter cells
      ≤  900px  tablet              — table becomes a grid of labeled cards
      ≤  640px  phone               — single-column cards, bottom-sheet modals
      ≤  400px  small phone         — slightly tighter spacing
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Narrow desktop: keep the table, but let it compress cleanly ──
-   Chips and action buttons are allowed to wrap onto a second line inside their
-   own cell (instead of forcing the whole table wider than its container), and
-   cell padding is trimmed so all six columns fit in more widths. */
+/* ── Narrow desktop: keep the table, compress cell padding ── */
 @media (max-width: 1100px) {
   .rm-table th,
   .rm-table td { padding-left: 12px; padding-right: 12px; }
-
-  .rm-chips--inline { flex-wrap: wrap; }
 }
 
-/* ── Tablet: table → grid of stacked cards ──
-   Each row becomes a card; each cell becomes a labeled row using the
-   data-label attribute set in Rolemanagement.jsx. Cards are laid out in an
-   auto-fill grid, so wider tablets get 2+ columns instead of one stretched
-   card, and no column is ever hidden behind a horizontal scroll. */
+/* ── Tablet: table → grid of stacked cards ── */
 @media (max-width: 900px) {
   .rm-wrap { padding: 16px; }
-
-  /* Search keeps its desktop max-width here so it stays a compact box
-     beside the Add User button; only the phone breakpoint changes that. */
 
   .rm-table-wrap {
     overflow: visible;
@@ -994,6 +976,16 @@
     border: none;
     box-shadow: none;
     border-radius: 0;
+  }
+
+  /* Undo the fixed desktop layout so the card grid can size itself. */
+  .rm-table {
+    table-layout: auto;
+    min-width: 0;
+  }
+
+  .rm-table colgroup {
+    display: none;
   }
 
   .rm-table,
@@ -1034,13 +1026,10 @@
     padding: 10px 0;
     min-height: 44px;
     text-align: right;
+    overflow: visible;
   }
 
-  /* Divider between rows. These three selectors deliberately match the
-     specificity of the desktop ".tbody tr:last-child td { border-bottom: none }"
-     rule — otherwise the LAST card in the list would lose its dividers and
-     look different from every other card. Order matters: the final
-     td:last-child rule must come last. */
+  /* Divider between rows. Order matters: the final td:last-child rule must come last. */
   .rm-table tbody tr td                  { border-bottom: 1px solid #f3f4f6; }
   .rm-table tbody tr:last-child td       { border-bottom: 1px solid #f3f4f6; }
   .rm-table tbody tr td:last-child       { border-bottom: none; }
@@ -1056,7 +1045,7 @@
     flex-shrink: 0;
   }
 
-  /* USER — avatar + name pushed to the right, long names wrap. */
+  /* USER: avatar + name pushed to the right, long names wrap. */
   .rm-user-cell {
     min-width: 0;
     max-width: 100%;
@@ -1070,16 +1059,14 @@
     word-break: break-word;
   }
 
-  /* ROLE — a very long role name wraps inside its pill instead of overflowing. */
+  /* ROLE: long role names wrap inside the pill. */
   .rm-table td .rm-role-pill {
     max-width: 100%;
     white-space: normal;
     text-align: center;
   }
 
-  /* ACCESS — label on its own line, chips fill the full card width and wrap
-     into clean rows. This is the row that was previously clipped
-     (chips forced to a single non-wrapping line). */
+  /* ACCESS: label on its own line, chips fill the card width. */
   .rm-table td[data-label="Access"] {
     flex-direction: column;
     flex-wrap: nowrap;
@@ -1102,8 +1089,7 @@
     text-overflow: ellipsis;
   }
 
-  /* ACTIONS — natural-sized pills (never stretched), right-aligned; if they
-     don't fit beside the label they drop to the next line, still right-aligned. */
+  /* ACTIONS: natural-sized pills, right-aligned, allowed to wrap in the card. */
   .rm-action-btns {
     width: auto;
     max-width: 100%;
@@ -1126,8 +1112,7 @@
 @media (max-width: 640px) {
   .rm-wrap { padding: 12px; }
 
-  /* Category selector spans the full width and its segments share the row
-     equally, even when one label wraps onto more lines than the other. */
+  /* Category selector spans the full width, segments share the row equally. */
   .rm-category-tabs {
     display: flex;
     width: 100%;
@@ -1171,10 +1156,7 @@
 
   .rm-toast-item { max-width: none; }
 
-  /* Modals become bottom sheets. They size to their content (a small delete
-     confirmation is no longer stretched to full screen height) and are capped
-     using dvh, so the footer buttons are never hidden behind the mobile
-     browser's URL bar. */
+  /* Modals become bottom sheets, sized to content and capped with dvh. */
   .rm-overlay { padding: 0; align-items: flex-end; }
 
   .rm-modal {
@@ -1188,8 +1170,6 @@
   .rm-modal__head { padding: 16px; }
   .rm-modal__body { padding: 16px; }
 
-  /* Footer buttons share the row; if a label is too long for that, each button
-     takes its own full-width row instead of overflowing. */
   .rm-modal__foot {
     padding: 12px 16px;
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
