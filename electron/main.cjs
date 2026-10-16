@@ -100,7 +100,7 @@ function initApp() {
   function createSplash() {
     splash = new BrowserWindow({
       width: 420, height: 260, frame: false, resizable: false, center: true,
-      alwaysOnTop: true, backgroundColor: '#ffffff', show: true,
+      backgroundColor: '#ffffff', show: true,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
     });
 

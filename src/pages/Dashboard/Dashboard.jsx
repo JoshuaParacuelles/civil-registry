@@ -3,7 +3,6 @@ import useAnalyticsData from "../../hooks/useAnalyticsData";
 import useOnlineStatus from "../../hooks/useOnlineStatus";
 import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 import { useRegisterRefresh } from "../../context/RefreshContext";
-import LiveIndicator from "../../components/LiveIndicator";
 import { Skeleton, SkeletonGrid } from "../../components/Skeleton";
 import "./Dashboard.css";
 
@@ -889,7 +888,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
   // I-register ang refresh handler sa RefreshContext (naglinis una sa cache, dayon nagre-fetch).
   useRegisterRefresh(handleRealtimeRefresh);
 
-  const { status: liveStatus, lastUpdated } = useRealtimeRefresh({
+ useRealtimeRefresh({
     tables: DASHBOARD_TABLES,
     onRefresh: handleRealtimeRefresh,
     channelName: "dashboard-live",
@@ -1024,10 +1023,6 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
   return (
     <div className="an-wrapper">
-      <div className="an-live-row">
-        <LiveIndicator status={liveStatus} lastUpdated={lastUpdated} />
-      </div>
-
       {showOfflineBanner && (
         <div className="an-error-banner" style={OFFLINE_BANNER_STYLE}>
           Offline mode: showing data saved on this device
