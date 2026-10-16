@@ -173,6 +173,11 @@ export default function SyncCenter() {
   const finish = (res, label) => {
     if (!res) {
       setNotice({ type: 'info', text: online ? 'Nothing to sync.' : 'You are offline. Changes will sync when the connection returns.' });
+    } else if (res.error) {
+      setNotice({
+        type: 'error',
+        text: `${label} stopped before finishing: ${res.error}. The changes are still queued and will retry automatically.`,
+      });
     } else {
       setNotice({
         type: res.failed ? 'warn' : 'ok',

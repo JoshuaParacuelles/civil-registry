@@ -12,11 +12,16 @@ import { isEntityAllowed } from './syncScope';
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://civil-registry.onrender.com')
   .replace(/\/+$/, '');
 
-// Ang offline records nga na-save nga naay placeholder host ipunting sa tinuod nga backend.
-const PLACEHOLDER_HOST = /^https:\/\/your-render-url\.onrender\.com/;
-
+// Queued items can carry a host from the build that created them (a placeholder,
+// an old Render URL, or 127.0.0.1). Keep only the path and query, and always send
+// to the API_BASE of the build that is running now.
 function normalizeUrl(url) {
-  return url.replace(PLACEHOLDER_HOST, API_BASE);
+  try {
+    const u = new URL(url, API_BASE);
+    return `${API_BASE}${u.pathname}${u.search}`;
+  } catch {
+    return url;
+  }
 }
 
 // ---------- Sync settings ----------
@@ -86,6 +91,8 @@ async function replay(op) {
 }
 
 // Returns { succeeded, failed } for the run, or null if it could not run.
+// If the run stops because of a network or server error, the result also
+// includes an `error` message so the UI can show it.
 export async function runSync() {
   if (running || !isDbAvailable()) return null;
   running = true;
@@ -176,7 +183,7 @@ export async function runSync() {
     failStreak += 1;
     setState({ lastError: err.message });
     retryTimer = setTimeout(runSync, Math.min(BASE_BACKOFF_MS * 2 ** failStreak, 5 * 60 * 1000));
-    return summary;
+    return { ...summary, error: err.message || 'Could not reach the server.' };
   } finally {
     setState({ syncing: false });
     running = false;
