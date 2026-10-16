@@ -4,7 +4,7 @@
   "description": "Civil Registry System",
   "author": "Civil Registry Team",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "type": "module",
   "main": "electron/main.cjs",
   "allowScripts": {
@@ -33,14 +33,15 @@
       "build/icon.ico",
       "package.json"
     ],
-"publish": [
-  {
-    "provider": "github",
-    "owner": "JoshuaParacuelles",
-    "repo": "civil-registry",
-    "releaseType": "release"
-  }
-],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "JoshuaParacuelles",
+        "repo": "civil-registry",
+        "releaseType": "release",
+        "vPrefixedTagName": true
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
