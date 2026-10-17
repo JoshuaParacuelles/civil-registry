@@ -135,7 +135,7 @@ const YEARS = ["2024", "2025", "2026"];
    waits for tiles before giving up on the overlay. */
 const SKELETON_TABLE_ROWS = 8;
 const SKELETON_TOP5_ROWS = 5;
-const MAP_TILE_TIMEOUT_MS = 8000;
+const MAP_TILE_TIMEOUT_MS = 1500;
 
 const CBMS_RECORDS = [
   { id: "CR-0001", name: "Juan Dela Cruz", barangay: "Barangay I (Poblacion)", recordType: "Live Birth", age: 34, philSysId: true, philSysNo: "6304-XXXX-XXXX", seniorCitizen: false, pwd: false, fourPs: true },
@@ -596,9 +596,12 @@ const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onS
 
   // Create the map once.
   useEffect(() => {
-    if (mapRef.current || !containerRef.current) return undefined;
+    const container = containerRef.current;
+    if (mapRef.current || !container) return undefined;
 
-    const map = L.map(containerRef.current, {
+    let alive = true;
+
+    const map = L.map(container, {
       center: CITY_CENTER,
       zoom: 12,
       minZoom: 11,
@@ -614,10 +617,14 @@ const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onS
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       subdomains: ["a", "b", "c"],
     });
-    // "load" fires once every visible tile has loaded or failed, so the overlay cannot get stuck.
-    const finishTiles = () => setTilesLoading(false);
-    tiles.once("load", finishTiles);
-    const tileTimeout = window.setTimeout(finishTiles, MAP_TILE_TIMEOUT_MS);
+
+    // Hide the overlay on the first tile load, or after a short timeout. Tiles can be slow
+    // or blocked (for example, offline), and the loader must never keep covering the map.
+    const hideOverlay = () => {
+      if (alive) setTilesLoading(false);
+    };
+    tiles.once("load", hideOverlay);
+    const overlayTimer = window.setTimeout(hideOverlay, MAP_TILE_TIMEOUT_MS);
     tiles.addTo(map);
 
     map.fitBounds(CITY_BOUNDS, { animate: false });
@@ -636,11 +643,32 @@ const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onS
     pinLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
+    // Leaflet reads the container size once, when the map is created. If the page is still
+    // laying out at that moment, the map is sized wrong and the tiles stay blank. Re-measure
+    // after layout, and again whenever the box changes size.
+    const frame = window.requestAnimationFrame(() => {
+      if (!alive) return;
+      map.invalidateSize();
+      map.fitBounds(CITY_BOUNDS, { animate: false });
+    });
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            if (alive) map.invalidateSize();
+          })
+        : null;
+    observer?.observe(container);
+
     return () => {
-      window.clearTimeout(tileTimeout);
-      tiles.off("load", finishTiles);
+      alive = false;
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(overlayTimer);
+      observer?.disconnect();
+      tiles.off("load", hideOverlay);
       map.remove();
       mapRef.current = null;
+      polyLayerRef.current = null;
+      pinLayerRef.current = null;
     };
   }, []);
 
@@ -737,7 +765,14 @@ const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onS
 
   return (
     <div className="leaflet-map-wrap" aria-busy={showSkeleton}>
-      <div ref={containerRef} className="leaflet-map-surface" role="img" aria-label="Map of San Carlos City barangays" />
+      <div
+        ref={containerRef}
+        className="leaflet-map-surface"
+        role="img"
+        aria-label="Map of San Carlos City barangays"
+        // Shows as a soft gray instead of white if tiles are slow or unavailable.
+        style={{ background: "#e8edf3" }}
+      />
       {/* Always mounted so it can fade out instead of popping away. */}
       <div
         className={`map-skeleton${showSkeleton ? "" : " map-skeleton--hidden"}`}

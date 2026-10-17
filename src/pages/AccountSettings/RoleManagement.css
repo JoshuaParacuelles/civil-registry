@@ -250,16 +250,24 @@
 }
 
 /* ── Role pill ── */
+/* Long role names (e.g. "Assign Registry Number") wrap onto a second line
+   instead of being clipped by the fixed Role column width. */
 .rm-role-pill {
   display: inline-block;
+  max-width: 100%;
   padding: 3px 12px;
-  border-radius: 999px;
+  border-radius: 14px;          /* rounded rectangle, so a two-line label stays neat */
   font-size: 0.75rem;
   font-weight: 500;
+  line-height: 1.3;
   background: #eff6ff;
   color: var(--rm-primary);
   border: 1px solid #bfdbfe;
-  white-space: nowrap;
+  white-space: normal;          /* allow wrapping (was nowrap, which caused the clipping) */
+  overflow-wrap: anywhere;      /* break very long single words if needed */
+  word-break: normal;
+  text-align: center;
+  vertical-align: middle;
 }
 
 .rm-role-pill--admin {
@@ -1059,7 +1067,7 @@
     word-break: break-word;
   }
 
-  /* ROLE: long role names wrap inside the pill. */
+  /* ROLE: pill sits at the right and wraps inside the card. */
   .rm-table td .rm-role-pill {
     max-width: 100%;
     white-space: normal;

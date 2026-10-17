@@ -13,7 +13,7 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 // ---------- Backend settings ----------
 
 // Render backend URL. Kinahanglan parehas ang URL sa VITE_API_BASE_URL sa package.json.
-const REMOTE_API_BASE = 'https://civil-registry.onrender.com';
+const REMOTE_API_BASE = 'http://127.0.0.1:5000';
 
 // Para sa development: i-set ang API_BASE_URL=http://127.0.0.1:5000 aron mogamit sa local app.py
 const API_BASE = (process.env.API_BASE_URL || REMOTE_API_BASE).replace(/\/+$/, '');
@@ -53,6 +53,22 @@ const ALLOWED_REQUEST_HEADERS = [
   'X-Offline-Created-At',
 ].join(', ');
 
+// Splash screen messages (user-facing). Kept short and plain.
+const MSG = {
+  starting:       'Opening Local Civil Register…',
+  preparing:      'Getting things ready…',
+  waking:         'Waking up the server…',
+  startingLocal:  'Starting local services…',
+  checkingLocal:  'Checking local services…',
+  localReady:     'Local services are ready',
+  serverReady:    'Server is ready',
+  skipping:       'Skipping server check',
+  loadingUi:      'Loading your workspace…',
+  dashboard:      'Setting up the dashboard…',
+  almostThere:    'Almost there…',
+  ready:          'Ready',
+};
+
 protocol.registerSchemesAsPrivileged([{
   scheme: 'app',
   privileges: { standard: true, secure: true, supportFetchAPI: true,
@@ -81,7 +97,7 @@ function initApp() {
 
   let splashReady = false;
   let splashFinishing = false;
-  let splashState = { pct: 0, text: 'Starting up…' };
+  let splashState = { pct: 0, text: MSG.starting };
 
   function pushSplash() {
     if (!splash || splash.isDestroyed() || !splashReady) return;
@@ -105,7 +121,7 @@ function initApp() {
     splashFinishing = true;
 
     splashState.pct = 100;
-    splashState.text = 'Ready';
+    splashState.text = MSG.ready;
     pushSplash();
 
     // Hatagi og gamay nga oras aron makita sa user ang 100%
@@ -119,9 +135,25 @@ function initApp() {
   function createSplash() {
     splash = new BrowserWindow({
       width: 420, height: 260, frame: false, resizable: false, center: true,
-      backgroundColor: '#ffffff', show: true,
+      backgroundColor: '#ffffff',
+      // Hidden until the first frame is painted. Showing it right away is what
+      // exposed the empty (black) window before the splash content appeared.
+      show: false,
+      paintWhenInitiallyHidden: true,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
     });
+
+    let splashShown = false;
+    const showSplash = () => {
+      if (splashShown || !splash || splash.isDestroyed()) return;
+      splashShown = true;
+      splash.show();
+    };
+
+    // Show as soon as the page has painted. The timer is a fallback so the splash
+    // never stays hidden if that event does not fire.
+    splash.once('ready-to-show', showSplash);
+    setTimeout(showSplash, 1500);
 
     splashReady = false;
     splash.webContents.once('did-finish-load', () => {
@@ -197,18 +229,19 @@ function initApp() {
   async function waitForBackend() {
     const started = Date.now();
     const deadline = started + BACKEND_TIMEOUT_MS;
+    const waitingText = USE_LOCAL_BACKEND ? MSG.startingLocal : MSG.waking;
 
     while (Date.now() < deadline) {
       if (backendFailed) return false;
 
       if (await isBackendUp()) {
-        setProgress(70, 'Backend connected');
+        setProgress(70, USE_LOCAL_BACKEND ? MSG.localReady : MSG.serverReady);
         return true;
       }
 
       // Estimated progress: mabagal sa dulo, pero dili gihapon mo-stuck
       const elapsed = Date.now() - started;
-      setProgress(15 + 55 * (1 - Math.exp(-elapsed / 9000)), 'Connecting to server…');
+      setProgress(15 + 55 * (1 - Math.exp(-elapsed / 9000)), waitingText);
 
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -217,20 +250,20 @@ function initApp() {
 
   async function ensureBackend() {
     if (SKIP_BACKEND) {
-      setProgress(70, 'Skipping backend check');
+      setProgress(70, MSG.skipping);
       return true;
     }
 
     // Remote (Render): ayaw i-start ang local backend
     if (!USE_LOCAL_BACKEND) {
-      setProgress(10, 'Connecting to server…');
+      setProgress(10, MSG.waking);
       return waitForBackend();
     }
 
     // Local: gamita ang backend nga naa na nga nagdagan, o i-start ang backend.exe / app.py
-    setProgress(10, 'Checking backend…');
+    setProgress(10, MSG.checkingLocal);
     if (await isBackendUp()) {
-      setProgress(70, 'Backend already running');
+      setProgress(70, MSG.localReady);
       return true;
     }
 
@@ -348,13 +381,13 @@ function initApp() {
     });
 
     // ---------- Progress hooks (window loading) ----------
-    win.webContents.on('did-start-loading', () => setProgress(74, 'Loading interface…'));
-    win.webContents.on('dom-ready', () => setProgress(86, 'Preparing dashboard…'));
+    win.webContents.on('did-start-loading', () => setProgress(74, MSG.loadingUi));
+    win.webContents.on('dom-ready', () => setProgress(86, MSG.dashboard));
 
     // ---------- Diagnostics ----------
     win.webContents.on('did-finish-load', () => {
       console.log('[window] did-finish-load');
-      setProgress(94, 'Almost there…');
+      setProgress(94, MSG.almostThere);
     });
 
     win.webContents.on('did-fail-load', (_e, code, desc, url) => {
@@ -436,14 +469,14 @@ function initApp() {
 
     // Ipakita dayon ang loading screen
     createSplash();
-    setProgress(5, 'Starting up…');
+    setProgress(5, MSG.starting);
 
     // Burahin ang service worker at cache na naiwan ng mga naunang run.
     // IndexedDB (offline data) ug localStorage HINDI apektado.
     await session.defaultSession.clearStorageData({
       storages: ['serviceworkers', 'cachestorage'],
     });
-    setProgress(8, 'Preparing session…');
+    setProgress(8, MSG.preparing);
 
     allowBackendRequests();
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));

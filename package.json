@@ -15,9 +15,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && cross-env ELECTRON_START_URL=http://localhost:5173 electron .\"",
-    "electron:build": "cross-env ELECTRON=1 VITE_API_BASE_URL=https://civil-registry.onrender.com vite build && electron-builder --win nsis --publish never",
-    "electron:release": "cross-env ELECTRON=1 VITE_API_BASE_URL=https://civil-registry.onrender.com vite build && electron-builder --win nsis --publish always",
+    "electron:build": "cross-env ELECTRON=1 VITE_API_BASE_URL=http://127.0.0.1:5000 vite build && electron-builder --win nsis --publish never",
+    "electron:release": "cross-env ELECTRON=1 VITE_API_BASE_URL=http://127.0.0.1:5000 vite build && electron-builder --win nsis --publish always",
     "electron:start": "electron ."
   },
   "build": {

@@ -9,7 +9,7 @@ import { isEntityAllowed } from './syncScope';
 
 // ---------- Backend base URL ----------
 
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://civil-registry.onrender.com')
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000')
   .replace(/\/+$/, '');
 
 // Queued items can carry a host from the build that created them (a placeholder,
