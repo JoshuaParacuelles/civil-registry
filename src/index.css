@@ -65,6 +65,80 @@
   --sidebar-badge-text: #111111;
 }
 
+/* ── Dark theme (Settings > Display > Theme) ──
+   Remaps the variables above, so every page using them follows the theme.
+   The sidebar is already dark, so its variables are left alone. */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-base: #0f1115;
+  --bg-surface: #1a1d23;
+  --bg-surface-soft: #161920;
+  --bg-raised: #22262e;
+  --bg-hover: #2a2f38;
+
+  --border: #2f343d;
+  --border-strong: #41474f;
+
+  --text-primary: #f5f5f5;
+  --text-soft: #d4d4d4;
+  --text-muted: #a3a3a3;
+
+  --gold: #a3a3a3;
+  --gold-soft: rgba(255, 255, 255, 0.08);
+
+  --status-success: #34d399;
+  --status-success-soft: rgba(52, 211, 153, 0.15);
+  --status-warning: #fbbf24;
+  --status-warning-soft: rgba(251, 191, 36, 0.15);
+  --status-danger: #f87171;
+  --status-danger-soft: rgba(248, 113, 113, 0.15);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+html[data-theme="dark"] .st-root {
+  --st-surface: #1a1d23;
+  --st-soft: #161920;
+  --st-raised: #22262e;
+  --st-border: #2f343d;
+  --st-text-1: #f5f5f5;
+  --st-text-2: #d4d4d4;
+  --st-text-3: #a3a3a3;
+  --st-accent: #e5e5e5;
+  --st-accent-h: #ffffff;
+  --st-accent-bg: rgba(255, 255, 255, 0.08);
+  --st-accent-bd: rgba(255, 255, 255, 0.25);
+  --st-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme="dark"] .st-btn--primary {
+  color: #111111;
+}
+
+html[data-theme="dark"] .st-badge--pass {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+}
+
+html[data-theme="dark"] .st-badge--warn {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+html[data-theme="dark"] .st-switch {
+  background: #4b5563;
+}
+
+html[data-theme="dark"] .st-switch.on {
+  background: var(--st-accent);
+}
+
+html[data-theme="dark"] .st-switch.on .st-switch-knob {
+  background: #111111;
+}
+
 html,
 body {
   margin: 0;
@@ -86,4 +160,17 @@ textarea {
 
 @keyframes app-loading-spin {
   to { transform: rotate(360deg); }
+}
+
+/* High contrast mode (toggled from Settings > Display) */
+html.lcr-high-contrast body {
+  color: #000000;
+}
+
+html.lcr-high-contrast * {
+  border-color: #1f2937 !important;
+}
+
+html.lcr-high-contrast a {
+  text-decoration: underline;
 }

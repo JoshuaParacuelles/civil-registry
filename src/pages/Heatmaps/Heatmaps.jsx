@@ -765,13 +765,13 @@ const BarangayMap = forwardRef(function BarangayMap({ items, activeBarangay, onS
 
   return (
     <div className="leaflet-map-wrap" aria-busy={showSkeleton}>
+      {/* Background comes from .leaflet-map-surface in Heatmaps.css and darkTheme.css,
+          so it follows the active theme. */}
       <div
         ref={containerRef}
         className="leaflet-map-surface"
         role="img"
         aria-label="Map of San Carlos City barangays"
-        // Shows as a soft gray instead of white if tiles are slow or unavailable.
-        style={{ background: "#e8edf3" }}
       />
       {/* Always mounted so it can fade out instead of popping away. */}
       <div

@@ -13,9 +13,11 @@ import HomePreloader from "./routes/HomePreloader";
 import LoadingScreen from "./routes/LoadingScreen";
 import ToastContainer from "./components/ToastContainer";
 import GlobalRealtime from "./components/GlobalRealtime";
+import { applyStoredDisplayPrefs } from "./utils/displayPrefs";
+import "./styles/darkTheme.css"; 
 
-// Home is the shell for every dashboard page (charts, maps, tables). Loading it
-// lazily keeps all of that out of the initial bundle the login page downloads.
+applyStoredDisplayPrefs();
+
 const loadHome = () => import("./pages/Home/Home");
 const Home = lazy(loadHome);
 

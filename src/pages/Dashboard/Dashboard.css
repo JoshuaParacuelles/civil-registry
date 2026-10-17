@@ -604,6 +604,10 @@
   padding-bottom: 4px;
   scrollbar-width: thin;
 }
+.an-heatmap-empty {
+  color: var(--an-text-dim);
+  font-size: 9px;
+}
 
 .an-heatmap-row {
   display: grid;
@@ -952,4 +956,15 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}/* Offline banner: theme-aware instead of hardcoded light colors */
+.an-offline-banner {
+  background: var(--an-surface-raised);
+  color: var(--an-text-soft);
+  border-color: var(--an-border-strong);
+}
+
+.an-offline-retry {
+  margin-left: 12px;
+  color: var(--an-text-soft);
+  border-color: var(--an-text-muted);
 }

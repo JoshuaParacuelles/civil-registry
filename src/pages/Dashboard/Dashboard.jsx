@@ -35,19 +35,6 @@ const TYPE_COLORS = {
 
 const MONTH_SHORT = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-/* Offline banner colors: neutral gray, not warning amber. */
-const OFFLINE_BANNER_STYLE = {
-  background: "#f1f5f9",
-  color: "#475569",
-  borderColor: "#cbd5e1",
-};
-
-const OFFLINE_RETRY_STYLE = {
-  marginLeft: 12,
-  color: "#334155",
-  borderColor: "#94a3b8",
-};
-
 /* ══ HELPERS ═════════════════════════════════════════════════════════════════ */
 const numFmt = new Intl.NumberFormat("en-PH");
 const phpFmt = new Intl.NumberFormat("en-PH", { maximumFractionDigits: 0 });
@@ -696,7 +683,7 @@ const MonthHeatmap = ({ byMonth = [], reqByMonth = [] }) => {
         if (!Object.values(map).some((v) => v > 0)) {
           return (
             <div key={m} className="an-heatmap-cell" title={`${m}: no data`}>
-              <span style={{ color: "var(--an-text-dim, #b0bec5)", fontSize: "9px" }}>—</span>
+              <span className="an-heatmap-empty">—</span>
             </div>
           );
         }
@@ -888,7 +875,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
   // I-register ang refresh handler sa RefreshContext (naglinis una sa cache, dayon nagre-fetch).
   useRegisterRefresh(handleRealtimeRefresh);
 
- useRealtimeRefresh({
+  useRealtimeRefresh({
     tables: DASHBOARD_TABLES,
     onRefresh: handleRealtimeRefresh,
     channelName: "dashboard-live",
@@ -1009,7 +996,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     { id: "today",      label: "Today"       },
   ];
 
-    if (loading) {
+  if (loading) {
     return (
       <div className="an-wrapper">
         <Skeleton h={140} />
@@ -1024,10 +1011,10 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
   return (
     <div className="an-wrapper">
       {showOfflineBanner && (
-        <div className="an-error-banner" style={OFFLINE_BANNER_STYLE}>
+        <div className="an-error-banner an-offline-banner">
           Offline mode: showing data saved on this device
           {savedAt ? ` (${new Date(savedAt).toLocaleString("en-PH")})` : ""}.
-          <button className="an-error-retry" onClick={() => refetch()} style={OFFLINE_RETRY_STYLE}>Retry</button>
+          <button className="an-error-retry an-offline-retry" onClick={() => refetch()}>Retry</button>
         </div>
       )}
 

@@ -6,11 +6,13 @@ import lcrLogo from "../../../assets/images/lcr.jpg";
 import { pushToast } from "../../../services/toastService";
 import AccuracyBadge from "../../../components/AccuracyBadge";
 import { Skeleton, SkeletonTable } from "../../../components/Skeleton";
+import UploadRecordsModal from "../../../components/UploadRecordsModal";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
 import { isOnline, checkNow } from "../../../offline/connectivityService";
 import { newOpId } from "../../../offline/outboxQueue";
 import { apiFetch } from "../../../services/apiFetch";
 import { useRegisterRefresh } from "../../../context/RefreshContext";
+import { runBulkDelete } from "../../../utils/bulkDelete";
 import {
   useVitalData, loadPdfForRecord, deleteRecordSmart, queueUpload, queueTransaction,
 } from "../../../offline/vitalOffline";
@@ -20,7 +22,6 @@ import { useDataChanged } from "../../../hooks/useDataChanged";
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/death`;
 const ENTITY = "death";
 const FEE = 75;
-const MAX_UPLOAD = 5;
 
 // Realtime: tables nga mo-trigger og reload sa Death Verifier.
 const DEATH_LIVE_TABLES = ["death_records", "death_transactions"];
@@ -158,16 +159,6 @@ function normalizeDisplayName(filename) {
     .replace(/-+/g, " ").replace(/\s+/g, " ").trim()
     .split(" ").filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
-}
-
-function normalizeFileKey(name) {
-  return (name || "").toString().trim().replace(/\.pdf$/i, "")
-    .replace(/[_]+/g, " ").replace(/-+/g, " ").replace(/\s+/g, " ").toLowerCase();
-}
-
-function ensurePdfName(name) {
-  if (!name) return "";
-  return /\.pdf$/i.test(name) ? name : `${name}.pdf`;
 }
 
 function getRecordDisplayName(record) {
@@ -548,12 +539,6 @@ const IconInfo = ({ className = "" }) => (
   </svg>
 );
 
-const IconCheck = ({ className = "" }) => (
-  <svg className={`icon-svg icon-svg--md ${className}`} viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="20 6 9 17 4 12"/>
-  </svg>
-);
-
 const IconEye = ({ className = "" }) => (
   <svg className={`icon-svg icon-svg--lg ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -577,13 +562,6 @@ const IconFolder = ({ className = "" }) => (
 
 const IconDocumentLg = ({ className = "" }) => (
   <svg className={`icon-svg icon-svg--xxl ${className}`} viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-    <polyline points="14 2 14 8 20 8"/>
-  </svg>
-);
-
-const FileIconSm = () => (
-  <svg className="icon-svg icon-svg--sm" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
     <polyline points="14 2 14 8 20 8"/>
   </svg>
@@ -1031,393 +1009,6 @@ const NegativeCertPreview = ({
   );
 };
 
-const UploadProgressBar = ({ value = 0, width = "100%", height = 10, showLabel = true }) => {
-  const pct = Math.max(0, Math.min(100, Math.round(value)));
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, width }}>
-      <div
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={pct}
-        style={{ flex: 1, height, background: "#e5e7eb", borderRadius: 999, overflow: "hidden" }}
-      >
-        <div
-          style={{
-            width: `${pct}%`, height: "100%", background: "#10b981",
-            borderRadius: 999, transition: "width 0.2s ease",
-          }}
-        />
-      </div>
-      {showLabel && (
-        <span style={{ minWidth: 34, textAlign: "right", fontSize: 12, fontWeight: 700, color: "#059669" }}>
-          {pct}%
-        </span>
-      )}
-    </div>
-  );
-};
-
-// Upload with real progress (fetch can't report upload progress, XHR can).
-function uploadWithProgress(url, formData, onProgress) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
-    xhr.withCredentials = true;
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.min(99, (e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => {
-      let data = {};
-      try { data = JSON.parse(xhr.responseText || "{}"); } catch { /* non-JSON body */ }
-      if (xhr.status >= 200 && xhr.status < 300) { onProgress(100); resolve(data); }
-      else { const e = new Error(data.error || "Upload failed"); e.status = xhr.status; reject(e); }
-    };
-    xhr.onerror = () => reject(new Error("Cannot reach server."));
-    xhr.send(formData);
-  });
-}
-
-const MATCH_LIST_STYLE  = { maxHeight: 260, overflowY: "auto" };
-const MATCH_ROW_STYLE   = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "nowrap", gap: 12 };
-const MATCH_LEFT_STYLE  = { display: "flex", alignItems: "center", flexWrap: "nowrap", gap: 8, flex: "1 1 auto", minWidth: 0 };
-const MATCH_ICON_STYLE  = { flexShrink: 0, display: "inline-flex" };
-const MATCH_NAME_STYLE  = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
-const MATCH_BADGE_STYLE = { flexShrink: 0, whiteSpace: "nowrap" };
-const MATCH_DATE_STYLE  = { flexShrink: 0, whiteSpace: "nowrap" };
-
-const UploadModal = ({ onClose, onUploadSuccess, allRecords, showNotif }) => {
-  const [stage, setStage] = useState("upload");
-  const [queue, setQueue] = useState([]);
-  const [uploadedRecords, setUploadedRecords] = useState([]);
-  const [matches, setMatches] = useState([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileRef = useRef(null);
-
-  const slotsLeft = MAX_UPLOAD - queue.length;
-  const limitReached = queue.length >= MAX_UPLOAD;
-
-  const overallProgress = queue.length
-    ? queue.reduce((sum, q) => sum + (q.status === "done" || q.status === "queued" ? 100 : q.status === "uploading" ? (q.progress || 0) : 0), 0) / queue.length
-    : 0;
-
-  const getLimitClass = () => {
-    if (limitReached) return "upl-limit-badge--reached";
-    if (queue.length >= MAX_UPLOAD - 1) return "upl-limit-badge--warn";
-    return "upl-limit-badge--ok";
-  };
-
-  const existingFileKeys = new Set(
-    (allRecords || []).map((r) => normalizeFileKey(r.file_name || getRecordDisplayName(r))),
-  );
-
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = "";
-    const newFiles = [];
-    const tempQueued = new Set(queue.map((q) => normalizeFileKey(q.file.name)));
-    for (const file of files) {
-      if (queue.length + newFiles.length >= MAX_UPLOAD) { showNotif(`Maximum ${MAX_UPLOAD} files allowed.`, "error"); break; }
-      if (file.type !== "application/pdf") { showNotif(`"${file.name}" is not a PDF.`, "error"); continue; }
-      const key = normalizeFileKey(file.name);
-      if (existingFileKeys.has(key)) { showNotif(`"${ensurePdfName(file.name)}" already exists.`, "error"); continue; }
-      if (tempQueued.has(key)) { showNotif(`"${ensurePdfName(file.name)}" is already in queue.`, "error"); continue; }
-      tempQueued.add(key);
-      newFiles.push({ file, status: "pending", error: null, id: Date.now() + Math.random() });
-    }
-    if (newFiles.length > 0) setQueue((q) => [...q, ...newFiles]);
-  };
-
-  const removeFromQueue = (id) => setQueue((q) => q.filter((item) => item.id !== id));
-
-  const handleUploadAll = async () => {
-    if (queue.length === 0) { showNotif("Please add at least one file.", "error"); return; }
-    setIsUploading(true);
-    const uploaded = [];
-    for (const item of queue) {
-      if (item.status === "done" || item.status === "queued") continue;
-      setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "uploading", progress: 0 } : qi));
-
-      const saveOffline = async () => {
-        const op = await queueUpload(ENTITY, `${API}/records`, item.file);
-        uploaded.push({
-          id: `offline-${op.opId}`, file_name: item.file.name,
-          uploaded_at: new Date(op.createdAt).toISOString(), _pending: true,
-        });
-        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "queued", progress: 100 } : qi));
-      };
-
-      try {
-        if (!isOnline()) { await saveOffline(); continue; }
-        const fd = new FormData();
-        fd.append("file", item.file);
-        const data = await uploadWithProgress(`${API}/records`, fd, (pct) =>
-          setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, progress: pct } : qi)),
-        );
-        uploaded.push(data);
-        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "done", progress: 100 } : qi));
-      } catch (err) {
-        let failure = err;
-        if (err.message === "Cannot reach server." || (err.status >= 500 && !(await checkNow()))) {
-          try { await saveOffline(); continue; } catch (e2) { failure = e2; }
-        }
-        setQueue((q) => q.map((qi) => qi.id === item.id ? { ...qi, status: "error", error: failure.message } : qi));
-        showNotif(`Failed to upload "${item.file.name}": ${failure.message}`, "error");
-      }
-    }
-    setIsUploading(false);
-    if (uploaded.length > 0) {
-      setUploadedRecords(uploaded);
-      setTimeout(() => onUploadSuccess(), 400);
-      setMatches(uploaded.map((r) => ({ ...r, uploaded_at: r.uploaded_at || new Date().toISOString() })));
-      setStage("results");
-      const queuedCount = uploaded.filter((u) => u._pending).length;
-      showNotif(queuedCount
-        ? `${queuedCount} file${queuedCount > 1 ? "s" : ""} saved on this device. They will upload automatically when you're back online.`
-        : `${uploaded.length} file${uploaded.length > 1 ? "s" : ""} uploaded!`, "success");
-    }
-  };
-
-  return (
-    <div className="overlay" onClick={onClose}>
-      <div className="upl-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="upl-hdr">
-          <div className="upl-hdr__icon"><IconUpload /></div>
-          <div className="upl-hdr__text">
-            <div className="upl-hdr__title">Upload Death Record PDFs</div>
-            <div className="upl-hdr__sub">
-              {stage === "upload"
-                ? `Select up to ${MAX_UPLOAD} PDF files to upload`
-                : `${uploadedRecords.length} file${uploadedRecords.length > 1 ? "s" : ""} uploaded successfully`}
-            </div>
-          </div>
-          <button className="upl-close" onClick={onClose} aria-label="Close upload dialog">✕</button>
-        </div>
-
-        {stage === "upload" && (
-          <div className="upl-body">
-            <div className="upl-limit-row">
-              <span className={`upl-limit-badge ${getLimitClass()}`}>
-                {queue.length} / {MAX_UPLOAD} files
-              </span>
-              {limitReached && <span className="upl-limit-reached-msg">Maximum limit reached</span>}
-            </div>
-            <div
-              className={`dropzone${limitReached ? " dropzone--disabled" : ""}`}
-              onClick={() => !isUploading && !limitReached && fileRef.current?.click()}
-            >
-              <label style={VISUALLY_HIDDEN_STYLE} htmlFor="death-record-pdf-upload">
-                Select PDF files to upload
-              </label>
-              <input
-                id="death-record-pdf-upload"
-                name="pdfFiles"
-                ref={fileRef}
-                type="file"
-                accept="application/pdf"
-                multiple
-                onChange={handleFileChange}
-                style={{ display: "none" }}
-              />
-              {isUploading ? (
-                <div className="dropzone__uploading" style={{ flexDirection: "column", width: "80%", gap: 8 }}>
-                  <span className="dropzone__uploading-text">Uploading…</span>
-                  <UploadProgressBar value={overallProgress} height={12} />
-                </div>
-              ) : limitReached ? (
-                <>
-                  <div className="dropzone__icon-wrap dropzone__icon-wrap--blocked">&#128683;</div>
-                  <div className="dropzone__title">Upload limit reached</div>
-                  <div className="dropzone__sub">Remove a file to add another</div>
-                </>
-              ) : (
-                <>
-                  <div className="dropzone__icon-wrap"><IconDocumentLg /></div>
-                  <div className="dropzone__title">Click to select PDF files</div>
-                  <div className="dropzone__sub">
-                    PDF only · Max {MAX_UPLOAD} files · Max 20 MB each
-                    {slotsLeft < MAX_UPLOAD ? ` · ${slotsLeft} slot${slotsLeft !== 1 ? "s" : ""} remaining` : ""}
-                  </div>
-                </>
-              )}
-            </div>
-            {queue.length > 0 && (
-              <div className="upl-queue">
-                <div className="upl-queue__hdr">
-                  <span>Upload Queue ({queue.length})</span>
-                  {!isUploading && (
-                    <button className="upl-queue__clear-btn" onClick={() => setQueue([])}>Clear All</button>
-                  )}
-                </div>
-                {queue.map((item) => (
-                  <div key={item.id} className="upl-queue__item">
-                    <span className="upl-queue__item-icon"><FileIconSm /></span>
-                    <span className="upl-queue__name" title={item.file.name}>{ensurePdfName(item.file.name)}</span>
-                    <span className={`upl-queue__status upl-queue__status--${item.status}`}>
-                      {item.status === "pending"   && "Pending"}
-                      {item.status === "uploading" && (
-                        <UploadProgressBar value={item.progress || 0} width={140} height={8} />
-                      )}
-                      {item.status === "done"      && "Done"}
-                      {item.status === "queued"    && "Saved offline"}
-                      {item.status === "error"     && `Error: ${item.error || "Unknown"}`}
-                    </span>
-                    {!isUploading && item.status !== "done" && item.status !== "queued" && (
-                      <button className="upl-queue__remove" onClick={() => removeFromQueue(item.id)} title="Remove" aria-label={`Remove ${ensurePdfName(item.file.name)} from queue`}>
-                        &#10005;
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="upl-foot">
-              <button className="btn btn-secondary" onClick={onClose} disabled={isUploading}>Cancel</button>
-              <button
-                className="btn btn-primary"
-                onClick={handleUploadAll}
-                disabled={isUploading || queue.length === 0 || queue.every((q) => q.status === "done" || q.status === "queued")}
-              >
-                {isUploading
-                  ? `Uploading… ${Math.round(overallProgress)}%`
-                  : `Upload ${queue.filter((q) => q.status === "pending").length} File${queue.filter((q) => q.status === "pending").length !== 1 ? "s" : ""}`}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {stage === "results" && (
-          <div className="upl-body">
-            <div
-              style={{
-                display: "flex", flexDirection: "column", gap: 10,
-                padding: "14px 16px", background: "#f0fdf4",
-                border: "1px solid #bbf7d0", borderRadius: 12,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div
-                  style={{
-                    width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
-                    background: "#dcfce7", color: "#059669",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                >
-                  <IconCheck />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#065f46" }}>Upload complete</div>
-                  <div style={{ fontSize: 12, color: "#047857" }}>
-                    {uploadedRecords.length} of {uploadedRecords.length} file{uploadedRecords.length !== 1 ? "s" : ""} added to the archive
-                  </div>
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#059669" }}>100%</span>
-              </div>
-              <UploadProgressBar value={100} height={6} showLabel={false} />
-            </div>
-            <div>
-              <div className="upl-matches-hdr">
-                <span className="upl-matches-hdr__text">Uploaded records: {matches.length}</span>
-              </div>
-              {matches.length === 0 ? (
-                <div className="upl-matches-empty">No records were uploaded.</div>
-              ) : (
-                <div style={MATCH_LIST_STYLE}>
-                  {matches.map((r, i) => (
-                    <div
-                      key={r.id || i}
-                      className="upl-match-row upl-match-row--new"
-                      style={MATCH_ROW_STYLE}
-                    >
-                      <div className="upl-match-row__left" style={MATCH_LEFT_STYLE}>
-                        <span className="upl-match-row__left-icon" style={MATCH_ICON_STYLE}><FileIconSm /></span>
-                        <span
-                          className="upl-match-row__name"
-                          style={MATCH_NAME_STYLE}
-                          title={getRecordDisplayName(r)}
-                        >
-                          {getRecordDisplayName(r)}
-                        </span>
-                        <span className="upl-match-row__badge" style={MATCH_BADGE_STYLE}>Just Uploaded</span>
-                      </div>
-                      <span className="upl-match-row__date" style={MATCH_DATE_STYLE}>
-                        {formatDate(r.uploaded_at || new Date())}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="upl-foot">
-              <button className="btn btn-primary" onClick={onClose}>Done</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) => {
-  const displayName = record ? getRecordDisplayName(record) : "";
-  const [pdfUrl, setPdfUrl] = useState("");
-  const [printing, setPrinting] = useState(false);
-
-  useEffect(() => {
-    if (!pdfData) { setPdfUrl(""); return; }
-    const url = getPdfBlobUrl(pdfData);
-    setPdfUrl(url);
-    return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
-  }, [pdfData]);
-
-  const handlePrint = async () => {
-    if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }
-    try {
-      setPrinting(true);
-      await printPdfFromData(pdfData);
-      onPrint && onPrint();
-      showNotif?.("Printing selected PDF…", "success");
-    } catch (error) {
-      console.error(error);
-      showNotif?.("Failed to print PDF.", "error");
-    } finally { setPrinting(false); }
-  };
-
-  if (loadingPdf) return (
-    <div className="ui-skeleton-surface">
-      <Skeleton h={34} />
-      <Skeleton h="46vh" style={{ marginTop: 12 }} />
-    </div>
-  );
-
-  if (!pdfUrl) return (
-    <div className="pdf-inline-empty">
-      <span className="pdf-inline-empty__icon"><IconDocumentLg /></span>
-      <div className="pdf-inline-empty__title">No document to display</div>
-      <div className="pdf-inline-empty__sub">Select a record to preview it here.</div>
-    </div>
-  );
-
-  return (
-    <div className="pdf-inline-wrap">
-      <div className="pdf-inline-toolbar">
-        <div className="pdf-inline-toolbar__left">
-          <span className="pdf-inline-toolbar__icon"><IconDocument /></span>
-          <span className="pdf-inline-toolbar__name">{displayName}</span>
-          <span className="pdf-inline-toolbar__badge">Death Certificate</span>
-        </div>
-        <button className="pdf-inline-print-btn" onClick={handlePrint} disabled={printing}>
-          <span className="pdf-inline-print-btn__icon"><IconPrint /></span>
-          {printing ? "Printing…" : "Print"}
-        </button>
-      </div>
-      <div className="pdf-inline-viewer">
-        <iframe key={pdfUrl} src={`${pdfUrl}#toolbar=1&navpanes=0`} title={displayName} className="pdf-inline-iframe" />
-      </div>
-    </div>
-  );
-};
-
 const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
   const father      = getFatherDisplayName(record);
@@ -1744,32 +1335,52 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     });
   }, [allArchivedRecords]);
 
-  const handleBulkDelete = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    const byId = new Map(allArchivedRecords.map((r) => [r.id, r]));
-    setConfirmModal({
-      title: "Permanently Delete Selected",
-      message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
-      confirmLabel: `Delete ${ids.length}`,
-      confirmColor: "#dc2626",
-      onConfirm: async () => {
-        setConfirmModal(null);
-        setBulkDeleting(true);
-        const results = await Promise.allSettled(
-          ids.map((id) => deleteRecordSmart(ENTITY, API, id, byId.get(id), getRecordDisplayName(byId.get(id)))),
+ const handleBulkDelete = () => {
+  const ids = [...selectedIds];
+  if (ids.length === 0) return;
+  const byId = new Map(archivedRecords.map((r) => [r.id, r]));
+
+  setConfirmModal({
+    title: "Permanently Delete Selected",
+    message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
+    confirmLabel: `Delete ${ids.length}`,
+    confirmColor: "#dc2626",
+    onConfirm: async () => {
+      setConfirmModal(null);
+      setBulkDeleting(true);
+
+      const result = await runBulkDelete({
+        api: API,
+        ids,
+        byId,
+        // Birth:
+        deleteOne: (id, record) => deleteRecordSmart(id, record),
+        // Marriage and Death use this instead:
+        // deleteOne: (id, record) =>
+        //   deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record)),
+      });
+
+      if (result.deleted > 0) {
+        showNotif(`${result.deleted} record${result.deleted !== 1 ? "s" : ""} deleted.`, "success");
+      }
+      if (result.queued > 0) {
+        showNotif(`${result.queued} will be removed when you're back online.`, "success");
+      }
+      if (result.failedIds.length > 0) {
+        showNotif(
+          `${result.failedIds.length} record${result.failedIds.length !== 1 ? "s" : ""} could not be deleted. They are still selected, so you can try again.`,
+          "error",
         );
-        const failed = results.filter((r) => r.status === "rejected").length;
-        const queued = results.filter((r) => r.status === "fulfilled" && r.value === "queued").length;
-        const deleted = ids.length - failed;
-        if (deleted > 0) showNotif(`${deleted} record${deleted !== 1 ? "s" : ""} deleted` + (queued ? ` (${queued} will finish syncing when you're back online).` : "."), "success");
-        if (failed > 0) showNotif(`${failed} record${failed !== 1 ? "s" : ""} could not be deleted.`, "error");
+        setSelectedIds(new Set(result.failedIds));
+      } else {
         clearSelection();
-        if (isOnline()) await fetchArchived();
-        setBulkDeleting(false);
-      },
-    });
-  };
+      }
+
+      await fetchArchived();
+      setBulkDeleting(false);
+    },
+  });
+};
 
   return (
     <div className="ubr-root">
@@ -1788,11 +1399,15 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
       {pdfModal && <PdfModal {...pdfModal} onClose={() => setPdfModal(null)} showNotif={showNotif} />}
 
       {showUploadModal && (
-        <UploadModal
-          onClose={() => setShowUploadModal(false)}
-          onUploadSuccess={() => { fetchRecords(); fetchArchived(); }}
+        <UploadRecordsModal
+          section="death"
+          api={API}
+          getRecordDisplayName={getRecordDisplayName}
+          queueOffline={(file) => queueUpload(ENTITY, `${API}/records`, file)}
           allRecords={[...allRecords, ...allArchivedRecords]}
           showNotif={showNotif}
+          onUploadSuccess={() => { fetchRecords(); fetchArchived(); }}
+          onClose={() => setShowUploadModal(false)}
         />
       )}
 
