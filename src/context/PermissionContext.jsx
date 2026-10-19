@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { lock } from "../offline/offlineAuth";
 import { cacheClear } from "../offline/cache";
 import { getAllowedEntities, setSyncScope } from "../offline/syncScope";
 
@@ -104,7 +103,6 @@ export function PermissionProvider({ children }) {
     } catch (e) {
       console.warn("[Permissions] logout request failed:", e);
     } finally {
-      lock();
       cacheClear().catch(() => {});
       clearPerms();
       sessionStorage.clear();

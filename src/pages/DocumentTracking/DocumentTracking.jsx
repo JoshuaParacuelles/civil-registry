@@ -1,7 +1,6 @@
 import { useState, useMemo, memo, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { usePermissions } from "../../context/PermissionContext";
 import { useRegisterRefresh } from "../../context/RefreshContext";
-import { supabase } from "../../services/supabaseClient";
 import { pushToast } from "../../services/toastService";
 import { isDbAvailable, subscribeDb } from "../../offline/connectivityService";
 import { subscribeSyncState } from "../../offline/syncEngine";
@@ -411,11 +410,6 @@ export default function DocumentTracking() {
   }, []);
   useEffect(() => () => clearTimeout(saveTimerRef.current), []);
 
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
-    return () => clearInterval(id);
-  }, []);
-
   // Puts rows on screen for the current view. Keeps the selection when it
   // still exists, otherwise selects the first row.
   //
@@ -637,6 +631,29 @@ export default function DocumentTracking() {
   // ── Effects: load, selection, realtime, sync ─────────────────────────
   useEffect(() => { loadList(); }, [loadList]);
 
+  // Refresh when GlobalRealtime reports a change, and when the database
+  // comes back online.
+  useEffect(() => {
+    const onChanged = () => {
+      loadList({ silent: true });
+      if (selectedIdRef.current != null) {
+        loadDetail(selectedIdRef.current, { silent: true });
+      }
+    };
+
+    window.addEventListener("documents-changed", onChanged);
+    const unsubDb = subscribeDb((ok) => {
+      if (ok) onChanged();
+    });
+
+    return () => {
+      window.removeEventListener("documents-changed", onChanged);
+      unsubDb();
+      clearTimeout(listRefreshTimerRef.current);
+      clearTimeout(detailRefreshTimerRef.current);
+    };
+  }, [loadList, loadDetail]);
+
   useEffect(() => {
     setOpenStage(null);
     setDraftComment("");
@@ -645,88 +662,6 @@ export default function DocumentTracking() {
     setActionError(null);
     loadDetail(selectedId);
   }, [selectedId, loadDetail]);
-
-  // Realtime: only open the channel while the database is reachable.
-  useEffect(() => {
-    let alive = true;
-    let channel = null;
-
-    const scheduleList = () => {
-      clearTimeout(listRefreshTimerRef.current);
-      listRefreshTimerRef.current = setTimeout(
-        () => loadList({ silent: true }),
-        REALTIME_DEBOUNCE_MS
-      );
-    };
-    const scheduleDetail = () => {
-      clearTimeout(detailRefreshTimerRef.current);
-      detailRefreshTimerRef.current = setTimeout(() => {
-        if (selectedIdRef.current != null) loadDetail(selectedIdRef.current, { silent: true });
-      }, REALTIME_DEBOUNCE_MS);
-    };
-    const idOf = (payload, key) => payload.new?.[key] ?? payload.old?.[key] ?? null;
-    const isSelected = (id) => id == null || String(id) === String(selectedIdRef.current);
-
-    const connect = () => {
-      if (!alive || channel || !isDbAvailable()) return;
-
-      const ch = supabase
-        .channel("document-tracking-realtime")
-        .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, (payload) => {
-          scheduleList();
-          if (isSelected(idOf(payload, "id"))) scheduleDetail();
-        })
-        .on("postgres_changes", { event: "*", schema: "public", table: "document_stages" }, (payload) => {
-          scheduleList();
-          if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
-        })
-        .on("postgres_changes", { event: "*", schema: "public", table: "document_comments" }, (payload) => {
-          if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
-        })
-        .on("postgres_changes", { event: "*", schema: "public", table: "document_assignments" }, (payload) => {
-          scheduleList();
-          if (isSelected(idOf(payload, "document_id"))) scheduleDetail();
-        })
-        .subscribe((status, err) => {
-          if (channel !== ch) return; // ignore events from a closed channel
-          if (status === "SUBSCRIBED") {
-            console.info("[DocumentTracking] Realtime connected.");
-          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || err) {
-            console.error("[DocumentTracking] Realtime subscription failed:", status, err);
-          }
-        });
-
-      channel = ch;
-    };
-
-    const disconnect = () => {
-      if (!channel) return;
-      const ch = channel;
-      channel = null;
-      supabase.removeChannel(ch);
-    };
-
-    // Reconnect and refresh once the database is back.
-    const unsubDb = subscribeDb((ok) => {
-      if (ok) {
-        connect();
-        loadList({ silent: true });
-        if (selectedIdRef.current != null) loadDetail(selectedIdRef.current, { silent: true });
-      } else {
-        disconnect();
-      }
-    });
-
-    connect();
-
-    return () => {
-      alive = false;
-      unsubDb();
-      clearTimeout(listRefreshTimerRef.current);
-      clearTimeout(detailRefreshTimerRef.current);
-      disconnect();
-    };
-  }, [loadList, loadDetail]);
 
   // When the sync queue finishes, reload so queued changes show their real state.
   useEffect(() => {

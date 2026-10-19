@@ -19,7 +19,6 @@ export default function GlobalRealtime() {
 
     ALL_TABLES.forEach((table) => {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
-        console.log("[TEST] DB event:", table, payload.eventType); // TEMPORARY
         emitDataChanged(table);
       });
     });

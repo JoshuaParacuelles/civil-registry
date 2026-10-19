@@ -1530,7 +1530,7 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
   const handleBulkDelete = () => {
   const ids = [...selectedIds];
   if (ids.length === 0) return;
-  const byId = new Map(archivedRecords.map((r) => [r.id, r]));
+  const byId = new Map(allArchivedRecords.map((r) => [r.id, r]));
 
   setConfirmModal({
     title: "Permanently Delete Selected",
@@ -1545,11 +1545,8 @@ export default function UnifiedMarriageRegistry({ initialView = null }) {
         api: API,
         ids,
         byId,
-        // Birth:
-        deleteOne: (id, record) => deleteRecordSmart(id, record),
-        // Marriage and Death use this instead:
-        // deleteOne: (id, record) =>
-        //   deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record)),
+        deleteOne: (id, record) =>
+          deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record)),
       });
 
       if (result.deleted > 0) {

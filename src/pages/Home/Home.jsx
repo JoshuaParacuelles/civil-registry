@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import AccessDenied from "../AccountSettings/AccessDenied";
+import AccessDenied from "../Auth/AccessDenied";
 import LoadingScreen from "../../routes/LoadingScreen";
 const ChangePassword = lazy(() => import("../AccountSettings/ChangePassword"));
 const AuditLogs = lazy(() => import("../AccountSettings/AuditLogs"));

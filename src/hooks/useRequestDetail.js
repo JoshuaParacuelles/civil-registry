@@ -71,12 +71,6 @@ export function prefetchRequestSnapshot(notification, fetcher) {
   loadSnapshot(notification, fetcher).catch(() => {});
 }
 
-/** Put a known-good snapshot straight into the cache. */
-export function primeRequestSnapshot(notification, data) {
-  const key = requestKey(notification);
-  if (key) cache.set(key, { data: applyOverride(key, data), ts: Date.now() });
-}
-
 /**
  * Record a status the server just confirmed. Every later read of this request
  * (cache, live fetch, stored snapshot fallback) shows this status until the
@@ -91,11 +85,6 @@ export function recordSavedStatus(notification, status, updatedAt) {
   });
   const hit = cache.get(key);
   if (hit) cache.set(key, { data: applyOverride(key, hit.data), ts: hit.ts });
-}
-
-export function invalidateRequestSnapshot(notification) {
-  const key = requestKey(notification);
-  if (key) cache.delete(key);
 }
 
 /**

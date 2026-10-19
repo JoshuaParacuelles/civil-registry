@@ -1,0 +1,65 @@
+/* src/pages/Auth/AccessDenied.css */
+
+.ad-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 100%;
+  padding: 24px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.ad-card {
+  width: 100%;
+  max-width: 440px;
+  padding: 36px 32px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.ad-icon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 14px;
+}
+
+.ad-title {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ad-msg {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #334155;
+}
+
+.ad-msg strong {
+  color: #0f172a;
+}
+
+.ad-sub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+@media (max-width: 480px) {
+  .ad-card {
+    padding: 28px 20px;
+  }
+
+  .ad-title {
+    font-size: 19px;
+  }
+}

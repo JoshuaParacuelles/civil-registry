@@ -8,16 +8,14 @@ import { OfflineProvider } from "./context/OfflineContext";
 import { RefreshProvider } from "./context/RefreshContext";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import Login from "./pages/Auth/Login";
-import AccessDenied from "./pages/AccountSettings/AccessDenied";
+import AccessDenied from "./pages/Auth/AccessDenied";
 import HomePreloader from "./routes/HomePreloader";
 import LoadingScreen from "./routes/LoadingScreen";
 import ToastContainer from "./components/ToastContainer";
 import GlobalRealtime from "./components/GlobalRealtime";
-import { applyStoredDisplayPrefs } from "./utils/displayPrefs";
-import "./styles/darkTheme.css"; 
 
-applyStoredDisplayPrefs();
-
+// Home is the shell for every dashboard page (charts, maps, tables). Loading it
+// lazily keeps all of that out of the initial bundle the login page downloads.
 const loadHome = () => import("./pages/Home/Home");
 const Home = lazy(loadHome);
 

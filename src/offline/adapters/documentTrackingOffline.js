@@ -149,20 +149,6 @@ function saveLocalPersonnel(personnel, holders) {
   return lsWrite(PERSONNEL_LS_KEY, { savedAt: Date.now(), personnel, holders });
 }
 
-// Removes saved personnel and the saved document copies. Pending offline
-// documents and queued changes are kept, since they have not reached the server.
-export function clearTrackingPersonnel() {
-  try {
-    localStorage.removeItem(PERSONNEL_LS_KEY);
-    const store = readStore();
-    store.lists = {};
-    store.archived = {};
-    store.details = {};
-    store.savedAt = 0;
-    writeStore(store);
-  } catch { /* ignore */ }
-}
-
 // Fills each stage's handler name. Role holder first, then the assigned person.
 function fillStageNames(doc) {
   if (!doc || !Array.isArray(doc.stages)) return doc;
