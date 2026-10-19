@@ -306,6 +306,16 @@ function initApp() {
   ipcMain.handle('window:is-fullscreen', () => !!(win && !win.isDestroyed() && win.isFullScreen()));
   ipcMain.handle('window:set-fullscreen', (_e, value) => setFullscreen(value));
   ipcMain.handle('window:toggle-fullscreen', () => toggleFullscreen());
+
+  // Native page zoom. Unlike CSS zoom, it resizes the viewport, so 100vh layouts
+  // fill the window at every text size.
+  ipcMain.handle('window:set-zoom', (_e, factor) => {
+    if (!win || win.isDestroyed()) return false;
+    const f = Math.min(3, Math.max(0.5, Number(factor) || 1));
+    win.webContents.setZoomFactor(f);
+    return true;
+  });
+
   ipcMain.handle('app:version', () => app.getVersion());
 
   // ---------- Windows ----------

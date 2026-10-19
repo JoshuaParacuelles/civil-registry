@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import AccessDenied from "../Auth/AccessDenied";
-import LoadingScreen from "../../routes/LoadingScreen";
 const ChangePassword = lazy(() => import("../AccountSettings/ChangePassword"));
 const AuditLogs = lazy(() => import("../AccountSettings/AuditLogs"));
 const RoleManagement = lazy(() => import("../AccountSettings/RoleManagement"));
@@ -404,7 +403,6 @@ const Home = () => {
     // prefetch), so this does NOT cause a second network call.
     loadSnapshot(notif, fetchSnapshot)
       .then((data) => {
-        // The admin may have closed this popup or opened another one meanwhile.
         if (activeNotifIdRef.current !== notif.id) return;
 
         setRequestDetail({ notifId: notif.id, data });
@@ -729,7 +727,7 @@ const Home = () => {
         </Topbar>
 
         <main className="main-content">
-          <Suspense fallback={<LoadingScreen />}>
+         <Suspense fallback={null}>
             {renderContent()}
           </Suspense>
         </main>

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { isOnline } from "../offline/connectivityService";
 
 const MAX_UPLOAD = 1000;
@@ -23,17 +23,11 @@ const SUCCESS_BOX_STYLE = {
   padding: "14px 16px", background: "#f0fdf4",
   border: "1px solid #bbf7d0", borderRadius: 12,
 };
-const WARNING_BOX_STYLE = {
-  display: "flex", flexDirection: "column", gap: 6,
-  padding: "12px 14px", background: "#fffbeb",
-  border: "1px solid #fcd34d", borderRadius: 12, color: "#78350f",
-};
 const FAILURE_BOX_STYLE = {
   display: "flex", flexDirection: "column", gap: 6,
   padding: "12px 14px", background: "#fef2f2",
   border: "1px solid #fecaca", borderRadius: 12, color: "#7f1d1d",
 };
-const MISFILED_BADGE_STYLE = { flexShrink: 0, whiteSpace: "nowrap", background: "#fef3c7", color: "#92400e" };
 const MATCH_LIST_STYLE  = { maxHeight: 260, overflowY: "auto" };
 const SCROLL_LIST_STYLE = { maxHeight: 140, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 };
 const MATCH_ROW_STYLE   = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "nowrap", gap: 12 };
@@ -42,10 +36,22 @@ const MATCH_ICON_STYLE  = { flexShrink: 0, display: "inline-flex" };
 const MATCH_NAME_STYLE  = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 const MATCH_BADGE_STYLE = { flexShrink: 0, whiteSpace: "nowrap" };
 const MATCH_DATE_STYLE  = { flexShrink: 0, whiteSpace: "nowrap" };
+const TIMER_STYLE       = { fontSize: 12, color: "#475569", fontVariantNumeric: "tabular-nums" };
+const COUNT_STYLE       = { fontSize: 13, fontWeight: 600, color: "#1e3a8a", fontVariantNumeric: "tabular-nums" };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+
+// Formats seconds as m:ss, or h:mm:ss for long uploads.
+function formatDuration(totalSeconds) {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const ss = String(sec).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
 
 function normalizeFileKey(name) {
   return (name || "").toString().trim().replace(/\.pdf$/i, "")
@@ -183,12 +189,29 @@ export default function UploadRecordsModal({
   const [results, setResults] = useState([]);       // saved rows (server or offline)
   const [failures, setFailures] = useState([]);     // { name, error } from the last run
   const [isUploading, setIsUploading] = useState(false);
+  const [elapsed, setElapsed] = useState(0);        // seconds since upload started
+  const [uploadTotal, setUploadTotal] = useState(0); // files in this run
+  const [doneCount, setDoneCount] = useState(0);    // files finished in this run
   const fileRef = useRef(null);
+  const startedAtRef = useRef(0);
+
+  // Elapsed-time ticker. Runs only while an upload is in progress and is
+  // cleared automatically when the upload ends or the modal unmounts.
+  useEffect(() => {
+    if (!isUploading) return undefined;
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isUploading]);
 
   const limitReached = queue.length >= MAX_UPLOAD;
   const slotsLeft = Math.max(0, MAX_UPLOAD - queue.length);
   const toSend = queue.filter((q) => q.status !== "done" && q.status !== "queued");
-  const misfiled = results.filter((r) => r.routed);
+
+  // Records the server moved to another section are saved there, but they are
+  // not listed in this modal.
+  const visibleResults = results.filter((r) => !r.routed);
 
   const overallProgress = queue.length
     ? queue.reduce((sum, q) => {
@@ -228,7 +251,6 @@ export default function UploadRecordsModal({
       added.push({
         id: `${Date.now()}-${Math.random()}`,
         file, status: "pending", progress: 0, error: null,
-        routedTo: null, warning: null,
       });
       count++;
     }
@@ -248,6 +270,10 @@ export default function UploadRecordsModal({
     const todo = queue.filter((q) => q.status !== "done" && q.status !== "queued");
     if (todo.length === 0) { showNotif("Please add at least one file.", "error"); return; }
 
+    startedAtRef.current = Date.now();
+    setElapsed(0);
+    setDoneCount(0);
+    setUploadTotal(todo.length);
     setIsUploading(true);
     const saved = [];
     const failed = [];
@@ -272,12 +298,7 @@ export default function UploadRecordsModal({
         if (!isOnline()) { await saveOffline(); continue; }
         const data = await uploadWithRetry(`${api}/records`, item.file, (pct) => patch({ progress: pct }));
         saved.push(data);
-        patch({
-          status: "done",
-          progress: 100,
-          routedTo: data.routed ? data.record_type : null,
-          warning: data.warning || null,
-        });
+        patch({ status: "done", progress: 100 });
       } catch (err) {
         let message = err.message || "Upload failed";
         if (err.message === "Cannot reach server.") {
@@ -285,6 +306,8 @@ export default function UploadRecordsModal({
         }
         failed.push({ name: item.file.name, error: message });
         patch({ status: "error", error: message });
+      } finally {
+        setDoneCount((n) => n + 1);
       }
     }
 
@@ -296,7 +319,6 @@ export default function UploadRecordsModal({
       setStage("results");
     }
 
-    const routedCount = saved.filter((r) => r.routed).length;
     const offlineCount = saved.filter((r) => r._pending).length;
 
     if (saved.length > 0) {
@@ -306,9 +328,6 @@ export default function UploadRecordsModal({
           : `${plural(saved.length, "file")} uploaded.`,
         "success",
       );
-    }
-    if (routedCount > 0) {
-      showNotif(`${plural(routedCount, "record")} belong to another section and were saved there. See the warning in this window.`, "error");
     }
     if (failed.length > 0) {
       showNotif(`${plural(failed.length, "file")} could not be saved. Review the list before closing.`, "error");
@@ -331,11 +350,7 @@ export default function UploadRecordsModal({
       case "uploading":
         return <UploadProgressBar value={item.progress || 0} width={140} height={8} />;
       case "done":
-        return item.routedTo
-          ? <span className="upl-match-row__badge" style={MISFILED_BADGE_STYLE} title={item.warning || ""}>
-              Belongs to {SECTION_LABEL[item.routedTo]}
-            </span>
-          : "Done";
+        return "Done";
       case "queued":
         return "Saved offline";
       case "error":
@@ -344,6 +359,9 @@ export default function UploadRecordsModal({
         return "";
     }
   };
+
+  const uploadedNow = Math.min(doneCount, uploadTotal);
+  const remainingNow = Math.max(0, uploadTotal - uploadedNow);
 
   return (
     <div className="overlay" onClick={close}>
@@ -393,10 +411,13 @@ export default function UploadRecordsModal({
               />
               {isUploading ? (
                 <div className="dropzone__uploading" style={{ flexDirection: "column", width: "80%", gap: 8 }}>
-                  <span className="dropzone__uploading-text">
-                    Uploading {plural(toSend.length, "file")}…
+                  <span style={COUNT_STYLE}>
+                    Uploaded {uploadedNow.toLocaleString()} of {uploadTotal.toLocaleString()} records
                   </span>
                   <UploadProgressBar value={overallProgress} height={12} />
+                  <span style={TIMER_STYLE}>
+                    {remainingNow.toLocaleString()} remaining · Elapsed {formatDuration(elapsed)}
+                  </span>
                 </div>
               ) : limitReached ? (
                 <>
@@ -484,29 +505,12 @@ export default function UploadRecordsModal({
                   <div style={{ fontSize: 12, color: "#047857" }}>
                     {results.length.toLocaleString()} of {(results.length + failures.length).toLocaleString()} files saved
                     {failures.length > 0 ? `, ${failures.length.toLocaleString()} failed` : ""}
+                    {elapsed > 0 ? ` · Took ${formatDuration(elapsed)}` : ""}
                   </div>
                 </div>
               </div>
               <UploadProgressBar value={100} height={6} showLabel={false} />
             </div>
-
-            {misfiled.length > 0 && (
-              <div style={WARNING_BOX_STYLE} role="alert">
-                <div style={{ fontSize: 14, fontWeight: 700 }}>
-                  ⚠ {plural(misfiled.length, "record")} belong{misfiled.length === 1 ? "s" : ""} to a different section
-                </div>
-                <div style={{ fontSize: 12 }}>
-                  They were detected from the document and saved to the correct section, so they do not appear in this {label} list.
-                </div>
-                <div style={SCROLL_LIST_STYLE}>
-                  {misfiled.map((r, i) => (
-                    <div key={r.id || i} style={{ fontSize: 12 }}>
-                      <strong>{rowName(r)}</strong>: {r.warning}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {failures.length > 0 && (
               <div style={FAILURE_BOX_STYLE} role="alert">
@@ -527,14 +531,14 @@ export default function UploadRecordsModal({
               <div className="upl-matches-hdr">
                 <span className="upl-matches-hdr__text">Saved records: {results.length.toLocaleString()}</span>
               </div>
-              {results.length === 0 ? (
+              {visibleResults.length === 0 ? (
                 <div className="upl-matches-empty">No records were saved.</div>
               ) : (
                 <div style={MATCH_LIST_STYLE}>
-                  {results.map((r, i) => (
+                  {visibleResults.map((r, i) => (
                     <div
                       key={r.id || i}
-                      className={`upl-match-row${r.routed ? "" : " upl-match-row--new"}`}
+                      className="upl-match-row upl-match-row--new"
                       style={MATCH_ROW_STYLE}
                     >
                       <div className="upl-match-row__left" style={MATCH_LEFT_STYLE}>
@@ -542,15 +546,9 @@ export default function UploadRecordsModal({
                         <span className="upl-match-row__name" style={MATCH_NAME_STYLE} title={rowName(r)}>
                           {rowName(r)}
                         </span>
-                        {r.routed ? (
-                          <span className="upl-match-row__badge" style={MISFILED_BADGE_STYLE}>
-                            Moved to {SECTION_LABEL[r.record_type]}
-                          </span>
-                        ) : (
-                          <span className="upl-match-row__badge" style={MATCH_BADGE_STYLE}>
-                            {r._pending ? "Saved offline" : "Just Uploaded"}
-                          </span>
-                        )}
+                        <span className="upl-match-row__badge" style={MATCH_BADGE_STYLE}>
+                          {r._pending ? "Saved offline" : "Just Uploaded"}
+                        </span>
                       </div>
                       <span className="upl-match-row__date" style={MATCH_DATE_STYLE}>
                         {formatDate(r.uploaded_at || new Date())}

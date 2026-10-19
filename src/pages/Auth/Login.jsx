@@ -1,9 +1,11 @@
 // src/pages/Auth/Login.jsx
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import "./Login.css";
 import { saveOfflineCredential, verifyOfflineLogin } from "../../offline/adapters/offlineLogin";
 import { pushToast } from "../../services/toastService";
+import { usePermissions } from "../../context/PermissionContext";
 
 import bgImage from "../../assets/images/home.jpg";
 import loginLogo from "../../assets/images/scc.png";
@@ -76,12 +78,15 @@ const Login = () => {
   const [lockSecondsRemaining, setLockSecondsRemaining] = useState(0);
   const countdownRef = useRef(null);
 
+  const navigate = useNavigate();
+  const { refresh, restoreFromCache } = usePermissions();
+
   // Already signed in this browser session -> go straight to dashboard
   useEffect(() => {
     if (sessionStorage.getItem("isAuthenticated") === "true") {
-     window.location.replace("/dashboard");
+      navigate("/dashboard", { replace: true });
     }
-  }, []);
+  }, [navigate]);
 
   // Lock countdown timer
   useEffect(() => {
@@ -125,17 +130,25 @@ const Login = () => {
         const userObj = response.data.user || {};
         const loggedUsername = userObj.username || username;
 
-        sessionStorage.setItem("isAuthenticated", "true");
-        sessionStorage.setItem("username", loggedUsername);
-
         // Save hashed credential on this device for future offline login
         await saveOfflineCredential(loggedUsername, password, userObj);
 
         pushToast({ title: "Login successful!", message: msg, success: true, duration: 2000 });
 
-        setTimeout(() => {
-          window.location.href = "/dashboard";
-        }, 400);
+        // Confirm the session in-app, then go straight to the dashboard.
+        // No full page reload, so no extra login screen or loading bar.
+        const signedIn = await refresh();
+        if (signedIn) {
+          navigate("/dashboard", { replace: true });
+          return;
+        }
+
+        pushToast({
+          title: "Login failed",
+          message: "Could not confirm your session. Please try again.",
+          success: false,
+        });
+        setLoading(false);
       } else {
         const locked = msg.toLowerCase().includes("locked");
         setIsLocked(locked);
@@ -162,11 +175,8 @@ const Login = () => {
           const offlineIsAdmin =
             Boolean(u.is_admin) || String(u.role || "").toLowerCase().includes("admin");
 
-          sessionStorage.setItem("isAuthenticated", "true");
-          sessionStorage.setItem("username", offlineUsername);
-
-          // Same shape PermissionContext writes (writeSessionCache), so the
-          // admin flag and role survive an offline reload.
+          // Same shape the session context writes, so the admin flag and role
+          // survive an offline reload.
           localStorage.setItem("cr_session_cache_v1", JSON.stringify({
             username: offlineUsername,
             role: u.role || (offlineIsAdmin ? "Administrator" : "User"),
@@ -181,7 +191,12 @@ const Login = () => {
             success: true,
             duration: 2000,
           });
-          setTimeout(() => { window.location.href = "/dashboard"; }, 400);
+
+          if (restoreFromCache()) {
+            navigate("/dashboard", { replace: true });
+            return;
+          }
+          setLoading(false);
           return;
         }
 

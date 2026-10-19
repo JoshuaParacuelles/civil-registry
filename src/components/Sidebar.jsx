@@ -5,6 +5,8 @@ import "./Sidebar.css";
 // Badge shows up to 99; anything higher reads "99+". The exact count stays in the tooltip.
 const formatBadgeCount = (n) => (n > 99 ? "99+" : String(n));
 
+const ACTIVATE_KEYS = new Set(["Enter", " "]);
+
 // Permissions that make each sync module visible. Mirrors ENTITY_PERMISSIONS in
 // src/offline/syncScope.js, so the badge only counts modules this user can use.
 const SYNC_MODULE_PERMISSIONS = {
@@ -28,6 +30,43 @@ const SYNC_MODULE_LABEL = {
   death: "Death",
   tracking: "Document Tracking",
 };
+
+function MenuIcon({ src, className }) {
+  return (
+    <img
+      src={src}
+      alt=""
+      className={className ? `menu-icon ${className}` : "menu-icon"}
+      width="18"
+      height="18"
+    />
+  );
+}
+
+// A keyboard-accessible menu entry. Enter and Space activate it like a click.
+function MenuItem({ active = false, className, title, ariaLabel, ariaExpanded, onActivate, children }) {
+  const classes = [className, active && "active"].filter(Boolean).join(" ");
+
+  return (
+    <li
+      role="menuitem"
+      tabIndex={0}
+      className={classes || undefined}
+      title={title}
+      aria-label={ariaLabel}
+      aria-expanded={ariaExpanded}
+      onClick={onActivate}
+      onKeyDown={(e) => {
+        if (ACTIVATE_KEYS.has(e.key)) {
+          e.preventDefault();
+          onActivate();
+        }
+      }}
+    >
+      {children}
+    </li>
+  );
+}
 
 const Sidebar = ({
   activeSubMenu,
@@ -59,8 +98,11 @@ const Sidebar = ({
 }) => {
   const { moduleCounts } = useOffline();
 
-  const vitalIsActive = VITAL_CHILDREN ? VITAL_CHILDREN.includes(activeSubMenu) : false;
-  const settingsIsActive = SETTINGS_CHILDREN ? SETTINGS_CHILDREN.includes(activeSubMenu) : false;
+  const vitalIsActive = VITAL_CHILDREN?.includes(activeSubMenu) ?? false;
+  const settingsIsActive = SETTINGS_CHILDREN?.includes(activeSubMenu) ?? false;
+
+  // With labels hidden (collapsed rail), each item still needs an accessible name.
+  const srLabel = (text) => (showLabels ? undefined : text);
 
   const sidebarClasses = [
     "sidebar",
@@ -100,125 +142,164 @@ const Sidebar = ({
           {showLabels && (
             <div className="sidebar-user-info">
               <span className="sidebar-user-name">{displayName}</span>
-              <span className="sidebar-user-role">{isAdminUser ? "Admin Panel" : "Active"}</span>
+              <span className="sidebar-user-role">{isAdminUser ? "Administator" : "Active"}</span>
             </div>
           )}
         </div>
 
         <ul className="sidebar-menu" role="menu">
-          <li role="menuitem" className={activeSubMenu === MENU_KEYS.DASHBOARD ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.DASHBOARD)}>
-            <img src={dashboardIcon} alt="" className="menu-icon" width="18" height="18" />
+          <MenuItem
+            active={activeSubMenu === MENU_KEYS.DASHBOARD}
+            ariaLabel={srLabel("Dashboard")}
+            onActivate={() => handleMenuClick(MENU_KEYS.DASHBOARD)}
+          >
+            <MenuIcon src={dashboardIcon} />
             {showLabels && <span>Dashboard</span>}
-          </li>
-
-          <hr className="menu-separator" />
+          </MenuItem>
 
           {visibleVitalChildren.length > 0 && (
             <>
-              <li role="menuitem" aria-expanded={vitalRecordsOpen} className={`parent-only${vitalIsActive ? " active" : ""}`} onClick={() => handleMenuClick(MENU_KEYS.VITAL)}>
-                <img src={vitalIcon} alt="" className="menu-icon" width="18" height="18" />
+              <MenuItem
+                className="parent-only"
+                active={vitalIsActive}
+                ariaLabel={srLabel("Vital Records Management")}
+                ariaExpanded={vitalRecordsOpen}
+                onActivate={() => handleMenuClick(MENU_KEYS.VITAL)}
+              >
+                <MenuIcon src={vitalIcon} />
                 {showLabels && <span>Vital Records Management</span>}
                 {showLabels && <span className={`arrow${vitalRecordsOpen ? " down" : ""}`} />}
-              </li>
+              </MenuItem>
 
               {showLabels && (
-                <ul className={`submenu ${vitalRecordsOpen ? "open" : ""}`} role="menu">
+                <ul className={`submenu${vitalRecordsOpen ? " open" : ""}`} role="menu">
                   {canAccess("birth_verification") && (
-                    <li role="menuitem" className={activeSubMenu === MENU_KEYS.BIRTH ? "active" : ""} onClick={() => handleSubMenuClick(MENU_KEYS.BIRTH, MENU_KEYS.VITAL)}>
+                    <MenuItem
+                      active={activeSubMenu === MENU_KEYS.BIRTH}
+                      onActivate={() => handleSubMenuClick(MENU_KEYS.BIRTH, MENU_KEYS.VITAL)}
+                    >
                       Birth Verifier
-                    </li>
+                    </MenuItem>
                   )}
                   {canAccess("marriage_verification") && (
-                    <li role="menuitem" className={activeSubMenu === MENU_KEYS.MARRIAGE ? "active" : ""} onClick={() => handleSubMenuClick(MENU_KEYS.MARRIAGE, MENU_KEYS.VITAL)}>
+                    <MenuItem
+                      active={activeSubMenu === MENU_KEYS.MARRIAGE}
+                      onActivate={() => handleSubMenuClick(MENU_KEYS.MARRIAGE, MENU_KEYS.VITAL)}
+                    >
                       Marriage Verifier
-                    </li>
+                    </MenuItem>
                   )}
                   {canAccess("death_verification") && (
-                    <li role="menuitem" className={activeSubMenu === MENU_KEYS.DEATH ? "active" : ""} onClick={() => handleSubMenuClick(MENU_KEYS.DEATH, MENU_KEYS.VITAL)}>
+                    <MenuItem
+                      active={activeSubMenu === MENU_KEYS.DEATH}
+                      onActivate={() => handleSubMenuClick(MENU_KEYS.DEATH, MENU_KEYS.VITAL)}
+                    >
                       Death Verifier
-                    </li>
+                    </MenuItem>
                   )}
                   {canAccess("scims_lookup") && (
-                    <li role="menuitem" className={activeSubMenu === MENU_KEYS.SCIMS ? "active" : ""} onClick={() => handleSubMenuClick(MENU_KEYS.SCIMS, MENU_KEYS.VITAL)}>
+                    <MenuItem
+                      active={activeSubMenu === MENU_KEYS.SCIMS}
+                      onActivate={() => handleSubMenuClick(MENU_KEYS.SCIMS, MENU_KEYS.VITAL)}
+                    >
                       SCIMS Lookup
-                    </li>
+                    </MenuItem>
                   )}
                 </ul>
               )}
-
-              <hr className="menu-separator" />
             </>
           )}
 
           {canAccess("heatmaps") && (
-            <>
-              <li role="menuitem" className={activeSubMenu === MENU_KEYS.HEATMAPS ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.HEATMAPS)}>
-                <img src={heatmapsIcon} alt="" className="menu-icon" width="18" height="18" />
-                {showLabels && <span>Heatmaps</span>}
-              </li>
-              <hr className="menu-separator" />
-            </>
+            <MenuItem
+              active={activeSubMenu === MENU_KEYS.HEATMAPS}
+              ariaLabel={srLabel("Heatmaps")}
+              onActivate={() => handleMenuClick(MENU_KEYS.HEATMAPS)}
+            >
+              <MenuIcon src={heatmapsIcon} />
+              {showLabels && <span>Heatmaps</span>}
+            </MenuItem>
           )}
 
           {canAccess("document_tracking") && (
-            <>
-              <li role="menuitem" className={activeSubMenu === MENU_KEYS.DOCUMENT_TRACKING ? "active" : ""} onClick={() => handleMenuClick(MENU_KEYS.DOCUMENT_TRACKING)}>
-                <img src={trackingIcon} alt="" className="menu-icon" width="18" height="18" />
-                {showLabels && <span>Document Tracking</span>}
-              </li>
-              <hr className="menu-separator" />
-            </>
+            <MenuItem
+              active={activeSubMenu === MENU_KEYS.DOCUMENT_TRACKING}
+              ariaLabel={srLabel("Document Tracking")}
+              onActivate={() => handleMenuClick(MENU_KEYS.DOCUMENT_TRACKING)}
+            >
+              <MenuIcon src={trackingIcon} />
+              {showLabels && <span>Document Tracking</span>}
+            </MenuItem>
           )}
 
           {canAccess("offline_sync") && (
-            <>
-              <li
-                role="menuitem"
-                className={activeSubMenu === MENU_KEYS.OFFLINE_SYNC ? "active" : ""}
-                onClick={() => handleMenuClick(MENU_KEYS.OFFLINE_SYNC)}
-                title={pendingLabel}
-              >
-                <img src={syncIcon} alt="" className="menu-icon menu-icon--sync" width="18" height="18" />
-                {showLabels && <span>Offline Data &amp; Sync</span>}
-                {showLabels && syncTotal > 0 && (
-                  <span className="sync-badge" aria-label={pendingLabel}>
-                    {formatBadgeCount(syncTotal)}
-                  </span>
-                )}
-              </li>
-            </>
+            <MenuItem
+              active={activeSubMenu === MENU_KEYS.OFFLINE_SYNC}
+              title={pendingLabel}
+              ariaLabel={srLabel("Offline Data & Sync")}
+              onActivate={() => handleMenuClick(MENU_KEYS.OFFLINE_SYNC)}
+            >
+              <MenuIcon src={syncIcon} className="menu-icon--sync" />
+              {showLabels && <span>Offline Data &amp; Sync</span>}
+              {showLabels && syncTotal > 0 && (
+                <span className="sync-badge">{formatBadgeCount(syncTotal)}</span>
+              )}
+            </MenuItem>
           )}
 
-          <li role="menuitem" aria-expanded={settingsOpen} className={`parent-only${settingsIsActive ? " active" : ""}`} onClick={() => handleMenuClick(MENU_KEYS.SETTINGS)}>
-            <img src={accountIcon} alt="" className="menu-icon" width="18" height="18" />
+          <MenuItem
+            className="parent-only"
+            active={settingsIsActive}
+            ariaLabel={srLabel("System Settings")}
+            ariaExpanded={settingsOpen}
+            onActivate={() => handleMenuClick(MENU_KEYS.SETTINGS)}
+          >
+            <MenuIcon src={accountIcon} />
             {showLabels && <span>System Settings</span>}
             {showLabels && <span className={`arrow${settingsOpen ? " down" : ""}`} />}
-          </li>
+          </MenuItem>
 
           {showLabels && (
-            <ul className={`submenu ${settingsOpen ? "open" : ""}`} role="menu">
-              <li role="menuitem" className={activeSubMenu === MENU_KEYS.ACCOUNT ? "active" : ""} onClick={() => handleSubMenuClick(MENU_KEYS.ACCOUNT, MENU_KEYS.SETTINGS)}>
+            <ul className={`submenu${settingsOpen ? " open" : ""}`} role="menu">
+              <MenuItem
+                active={activeSubMenu === MENU_KEYS.ACCOUNT}
+                onActivate={() => handleSubMenuClick(MENU_KEYS.ACCOUNT, MENU_KEYS.SETTINGS)}
+              >
                 Update Account
-              </li>
+              </MenuItem>
               {canAccess("audit_logs") && (
-                <li role="menuitem" className={activeSubMenu === MENU_KEYS.AUDIT ? "active" : ""} onClick={() => handleSubMenuClick(MENU_KEYS.AUDIT, MENU_KEYS.SETTINGS)}>
+                <MenuItem
+                  active={activeSubMenu === MENU_KEYS.AUDIT}
+                  onActivate={() => handleSubMenuClick(MENU_KEYS.AUDIT, MENU_KEYS.SETTINGS)}
+                >
                   Audit Logs
-                </li>
+                </MenuItem>
               )}
               {canAccess("role_management") && (
-                <li role="menuitem" className={activeSubMenu === MENU_KEYS.ROLE_MANAGEMENT ? "active" : ""} onClick={() => handleSubMenuClick(MENU_KEYS.ROLE_MANAGEMENT, MENU_KEYS.SETTINGS)}>
+                <MenuItem
+                  active={activeSubMenu === MENU_KEYS.ROLE_MANAGEMENT}
+                  onActivate={() => handleSubMenuClick(MENU_KEYS.ROLE_MANAGEMENT, MENU_KEYS.SETTINGS)}
+                >
                   Role Management
-                </li>
+                </MenuItem>
               )}
-              <li role="menuitem" className={activeSubMenu === MENU_KEYS.DISPLAY ? "active" : ""} onClick={() => handleSubMenuClick(MENU_KEYS.DISPLAY, MENU_KEYS.SETTINGS)}>
+              <MenuItem
+                active={activeSubMenu === MENU_KEYS.DISPLAY}
+                onActivate={() => handleSubMenuClick(MENU_KEYS.DISPLAY, MENU_KEYS.SETTINGS)}
+              >
                 Display
-              </li>
+              </MenuItem>
             </ul>
           )}
         </ul>
 
         <div className="sidebar-footer">
-          <button className="footer-item" onClick={() => setShowLogoutModal(true)} type="button">
+          <button
+            className="footer-item"
+            onClick={() => setShowLogoutModal(true)}
+            type="button"
+            aria-label={srLabel("Logout")}
+          >
             <img src={logoutIcon} alt="" className="menu-icon" width="18" height="18" />
             {showLabels && <span>Logout</span>}
           </button>

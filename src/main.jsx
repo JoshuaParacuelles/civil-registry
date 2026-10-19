@@ -3,6 +3,8 @@ import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
+import "./styles/darkTheme.css";
+import { applyStoredDisplayPrefs } from "./utils/displayPrefs";
 import { PermissionProvider } from "./context/PermissionContext";
 import { OfflineProvider } from "./context/OfflineContext";
 import { RefreshProvider } from "./context/RefreshContext";
@@ -10,14 +12,16 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 import Login from "./pages/Auth/Login";
 import AccessDenied from "./pages/Auth/AccessDenied";
 import HomePreloader from "./routes/HomePreloader";
-import LoadingScreen from "./routes/LoadingScreen";
 import ToastContainer from "./components/ToastContainer";
 import GlobalRealtime from "./components/GlobalRealtime";
 
-// Home is the shell for every dashboard page (charts, maps, tables). Loading it
-// lazily keeps all of that out of the initial bundle the login page downloads.
-const loadHome = () => import("./pages/Home/Home");
-const Home = lazy(loadHome);
+// Home is the shell for every dashboard page. Loading it lazily keeps the
+// dashboard code out of the initial bundle that the login page downloads.
+const Home = lazy(() => import("./pages/Home/Home"));
+
+// Apply the saved theme, zoom and contrast before the first render so the
+// app never paints in the wrong mode after a restart.
+applyStoredDisplayPrefs();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -39,11 +43,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 
               {/* Protected shell. One pathless layout route keeps Home mounted
                   while you move between pages; Home reads the URL itself to
-                  decide which page to show. */}
+                  decide which page to show.
+                  The Suspense fallback is null on purpose: after login, the
+                  dashboard's own skeleton handles loading, so no extra
+                  loading screen appears. */}
               <Route
                 element={
                   <ProtectedRoute module="dashboard">
-                    <Suspense fallback={<LoadingScreen />}>
+                    <Suspense fallback={null}>
                       <Home />
                     </Suspense>
                   </ProtectedRoute>

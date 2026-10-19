@@ -872,3 +872,11 @@ html[data-theme="dark"] .ui-skeleton-surface {
   background: #1a1d23;
   border-color: #2f343d;
 }
+
+/* ── 17. Page background and native controls ───────────────────── */
+html[data-theme="dark"],
+html[data-theme="dark"] body {
+  background-color: #0f1115;
+  color: #f1f5f9;
+  color-scheme: dark;
+}

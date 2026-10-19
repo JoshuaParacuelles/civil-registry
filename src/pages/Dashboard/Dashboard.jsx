@@ -372,7 +372,9 @@ const DonutChart = ({ slices = [], size = 130 }) => {
       .slice(0, i)
       .reduce((sum, slice) => sum + (Number(slice.count || 0) / total) * Math.PI * 2, 0);
     const val   = Number(sl.count || 0);
-    const sweep = (val / total) * Math.PI * 2;
+    // Cap just below a full turn so a single 100% slice still draws a ring
+    // (identical start and end points would render nothing).
+    const sweep = Math.min((val / total) * Math.PI * 2, Math.PI * 2 - 0.0001);
     const end   = angle + sweep;
     const la    = sweep > Math.PI ? 1 : 0;
     const x1  = cx + r  * Math.cos(angle), y1  = cy + r  * Math.sin(angle);
@@ -652,18 +654,13 @@ const GrowthTable = ({ rows = [] }) => {
 };
 
 /* ══ MONTH HEATMAP ═══════════════════════════════════════════════════════════ */
+const toMonthMap = (rows) =>
+  Object.fromEntries(safeArr(rows).map((r) => [Number(r.month_num), Number(r.count || 0)]));
+
 const MonthHeatmap = ({ byMonth = [], reqByMonth = [] }) => {
   const months = MONTH_SHORT.slice(1);
-
-  const recMap = Object.fromEntries(
-    safeArr(byMonth).map((r)  => [Number(r.month_num), Number(r.count || 0)])
-  );
-  const reqMap = Object.fromEntries(
-    safeArr(reqByMonth).map((r) => [Number(r.month_num), Number(r.count || 0)])
-  );
-
-  const maxRec = Math.max(...Object.values(recMap), 1);
-  const maxReq = Math.max(...Object.values(reqMap), 1);
+  const recMap = toMonthMap(byMonth);
+  const reqMap = toMonthMap(reqByMonth);
 
   const hasRecData = Object.values(recMap).some((v) => v > 0);
   const hasReqData = Object.values(reqMap).some((v) => v > 0);
@@ -674,34 +671,37 @@ const MonthHeatmap = ({ byMonth = [], reqByMonth = [] }) => {
     );
   }
 
-  const renderRow = (label, map, maxVal, baseColor) => (
-    <div className="an-heatmap-row">
-      <div className="an-heatmap-track-label">{label}</div>
-      {months.map((m, i) => {
-        const monthNum = i + 1;
-        const val = map[monthNum] || 0;
-        if (!Object.values(map).some((v) => v > 0)) {
+  const renderRow = (label, map, baseColor) => {
+    const maxVal = Math.max(...Object.values(map), 1);
+    const hasAny = Object.values(map).some((v) => v > 0);
+
+    return (
+      <div className="an-heatmap-row">
+        <div className="an-heatmap-track-label">{label}</div>
+        {months.map((m, i) => {
+          const val = map[i + 1] || 0;
+          if (!hasAny) {
+            return (
+              <div key={m} className="an-heatmap-cell" title={`${m}: no data`}>
+                <span className="an-heatmap-empty">—</span>
+              </div>
+            );
+          }
+          const alphaHex = Math.round(15 + (val / maxVal) * 80).toString(16).padStart(2, "0");
           return (
-            <div key={m} className="an-heatmap-cell" title={`${m}: no data`}>
-              <span className="an-heatmap-empty">—</span>
+            <div
+              key={m}
+              className="an-heatmap-cell"
+              title={`${m}: ${val > 0 ? fmtNum(val) : "no"} ${label.toLowerCase()}`}
+              style={{ background: val > 0 ? `${baseColor}${alphaHex}` : "transparent" }}
+            >
+              <span style={{ opacity: val > 0 ? 1 : 0 }}>{fmtNum(val)}</span>
             </div>
           );
-        }
-        const alpha    = Math.round(15 + (val / maxVal) * 80);
-        const alphaHex = alpha.toString(16).padStart(2, "0");
-        return (
-          <div
-            key={m}
-            className="an-heatmap-cell"
-            title={`${m}: ${val > 0 ? fmtNum(val) : "no"} ${label.toLowerCase()}`}
-            style={{ background: val > 0 ? `${baseColor}${alphaHex}` : "transparent" }}
-          >
-            <span style={{ opacity: val > 0 ? 1 : 0 }}>{fmtNum(val)}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="an-heatmap">
@@ -711,8 +711,8 @@ const MonthHeatmap = ({ byMonth = [], reqByMonth = [] }) => {
           <div key={m} className="an-heatmap-month-label">{m}</div>
         ))}
       </div>
-      {renderRow("Records",  recMap, maxRec, "#378ADD")}
-      {renderRow("Requests", reqMap, maxReq, "#1D9E75")}
+      {renderRow("Records", recMap, "#378ADD")}
+      {renderRow("Requests", reqMap, "#1D9E75")}
     </div>
   );
 };

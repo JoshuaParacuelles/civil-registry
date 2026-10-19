@@ -55,7 +55,8 @@ const PermissionContext = createContext({
   waking:               false,
   error:                null,
   hasAccess:            () => false,
-  refresh:              async () => {},
+  refresh:              async () => false,
+  restoreFromCache:     () => false,
   clearPerms:           () => {},
   logout:               async () => {},
 });
@@ -109,8 +110,8 @@ export function PermissionProvider({ children }) {
     }
   }, [clearPerms]);
 
-  // Used only when the server cannot be reached. Returns true if a saved
-  // session was restored.
+  // Restores the saved session. Used when the server cannot be reached and
+  // by the offline login path. Returns true if a saved session was restored.
   const restoreFromCache = useCallback(() => {
     const c = readSessionCache();
     if (!c) return false;
@@ -127,6 +128,8 @@ export function PermissionProvider({ children }) {
     return true;
   }, []);
 
+  // Confirms the session with the server. Resolves to true when the user is
+  // signed in, so callers can navigate without a full page reload.
   const refresh = useCallback(() => {
     if (inFlight.current) return inFlight.current;
 
@@ -138,12 +141,17 @@ export function PermissionProvider({ children }) {
       let wakingTimer = null;
       if (firstLoad) wakingTimer = setTimeout(() => setWaking(true), 2000);
 
+      // The server could not confirm the session: on the first load, keep the
+      // user in with the saved session if there is one, otherwise log out.
+      const fallBackOrLogOut = () => {
+        if (firstLoad && restoreFromCache()) return true;
+        if (firstLoad) clearPerms();
+        return false;
+      };
+
       try {
         // Browser already knows it is offline: skip the network wait.
-        if (!navigator.onLine && restoreFromCache()) {
-          setError(null);
-          return;
-        }
+        if (!navigator.onLine && restoreFromCache()) return true;
 
         const res = await fetchWithTimeout(`${API}/api/session`, {
           credentials: "include",
@@ -153,14 +161,13 @@ export function PermissionProvider({ children }) {
         // A real 401 means the session expired: log out and forget the cache.
         if (res.status === 401) {
           clearPerms();
-          return;
+          return false;
         }
 
         if (!res.ok) {
           console.warn("[Permissions] /api/session returned status", res.status);
           setError(`Server returned ${res.status}`);
-          if (firstLoad && !restoreFromCache()) clearPerms();
-          return;
+          return fallBackOrLogOut();
         }
 
         const data = await res.json();
@@ -208,9 +215,11 @@ export function PermissionProvider({ children }) {
           const uname = userObj.username || data.username;
           if (uname) sessionStorage.setItem("username", uname);
           sessionStorage.setItem("isAuthenticated", "true");
-        } else {
-          clearPerms();
+          return true;
         }
+
+        clearPerms();
+        return false;
       } catch (e) {
         if (e.name === "AbortError") {
           console.error("[Permissions] /api/session timed out after", FETCH_TIMEOUT_MS, "ms");
@@ -219,9 +228,7 @@ export function PermissionProvider({ children }) {
           console.error("[Permissions] /api/session failed:", e);
           setError("Could not reach the server.");
         }
-        // Server unreachable: keep the user in with the saved session if we
-        // have one, otherwise treat as logged out.
-        if (firstLoad && !restoreFromCache()) clearPerms();
+        return fallBackOrLogOut();
       } finally {
         hasLoadedOnce.current = true;
         if (wakingTimer) clearTimeout(wakingTimer);
@@ -248,7 +255,7 @@ export function PermissionProvider({ children }) {
     const onPageShow = (e) => {
       if (!e.persisted) return;        // true only when restored from bfcache
       if (!navigator.onLine) return;   // offline mode: don't kick the user out
-      hasLoadedOnce.current = false;   // treat as first load: LoadingScreen + clearPerms if expired
+     hasLoadedOnce.current = false;   // treat as first load: LoadingScreen + clearPerms if expired
       refresh();
     };
     const onOnline = () => { refresh(); };
@@ -281,9 +288,10 @@ export function PermissionProvider({ children }) {
     error,
     hasAccess,
     refresh,
+    restoreFromCache,
     clearPerms,
     logout,
-  }), [role, permissions, isAdmin, loading, waking, error, hasAccess, refresh, clearPerms, logout]);
+  }), [role, permissions, isAdmin, loading, waking, error, hasAccess, refresh, restoreFromCache, clearPerms, logout]);
 
   return (
     <PermissionContext.Provider value={value}>

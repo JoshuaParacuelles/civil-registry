@@ -1,17 +1,23 @@
 /* ===== Sidebar: single source of truth for all sidebar styles =====
    Colors come from the theme tokens in index.css. No hardcoded colors here. */
 
+/* ---------- Sidebar container ----------
+   Sized from the top and bottom edges of the viewport, not 100vh, so it
+   follows the real window at every text size. The whole sidebar scrolls. */
+
 .sidebar {
   width: var(--sidebar-width);
   background: var(--sidebar-bg);
   color: var(--sidebar-text);
   display: flex;
   flex-direction: column;
-  height: 100vh;
   position: fixed;
   top: 0;
+  bottom: 0;
   left: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   z-index: 1000;
   box-shadow: var(--shadow-sidebar);
   transition:
@@ -19,25 +25,39 @@
     left var(--transition-sidebar),
     transform var(--transition-sidebar);
   will-change: width, transform;
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
 }
+
+.sidebar::-webkit-scrollbar { width: 6px; }
+
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 999px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover { background: #52525b; }
 
 .sidebar.collapsed { width: var(--sidebar-collapsed-width); }
 
-.sidebar > * { position: relative; z-index: 1; }
-
-/* ---------- Header ---------- */
+/* ---------- Header (stays at the top while the sidebar scrolls) ---------- */
 
 .sidebar-header {
   display: flex;
   align-items: center;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--sidebar-border);
-  flex-shrink: 0;
-  height: var(--topbar-height);
-  overflow: hidden;
-  background: var(--sidebar-bg-deeper);
   gap: 11px;
+  height: var(--topbar-height);
   min-width: 0;
+  padding: 0 14px;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--sidebar-bg-deeper);
+  border-bottom: 1px solid var(--sidebar-border);
 }
 
 .sidebar.collapsed .sidebar-header {
@@ -49,10 +69,10 @@
 .logo-img {
   width: 38px;
   height: 38px;
-  object-fit: contain;
   flex-shrink: 0;
-  background: transparent;
+  object-fit: contain;
   display: block;
+  background: transparent;
   filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.5));
 }
 
@@ -60,12 +80,12 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-width: 0;
   gap: 2px;
-  opacity: 1;
+  min-width: 0;
   overflow: hidden;
-  transition: opacity var(--transition-sidebar), width var(--transition-sidebar);
   white-space: nowrap;
+  opacity: 1;
+  transition: opacity var(--transition-sidebar), width var(--transition-sidebar);
 }
 
 .sidebar.collapsed .sidebar-brand-text {
@@ -78,33 +98,30 @@
   font-family: var(--font-display);
   font-size: 13.5px;
   font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
   color: var(--sidebar-text-strong);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: 0.01em;
-  line-height: 1.25;
 }
 
 .sidebar-brand-subtitle {
   font-size: 10.5px;
   font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.03em;
   color: var(--sidebar-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: 0.03em;
-  line-height: 1.25;
 }
 
-/* ---------- Body / user block ---------- */
+/* ---------- User block ---------- */
 
 .sidebar-body {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
 }
 
 .sidebar-user {
@@ -125,92 +142,67 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 0;
   gap: 3px;
+  min-width: 0;
 }
 
 .sidebar-user-name {
+  max-width: 180px;
   font-size: 13.5px;
   font-weight: 700;
   color: var(--sidebar-text-strong);
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-align: center;
-  max-width: 180px;
 }
 
 .sidebar-user-role {
   font-size: 10.5px;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--sidebar-text-muted);
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: 0.04em;
-  text-align: center;
-  text-transform: uppercase;
 }
 
-/* ---------- Menu list ---------- */
+/* ---------- Menu ---------- */
 
 .sidebar-menu {
   list-style: none;
   display: flex;
   flex-direction: column;
-  padding: 16px 16px 16px 12px;
   margin: 0;
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;            /* itinago ang scrollbar, scrollable pa rin */
+  padding: 16px 10px 24px 12px;
 }
-
-.sidebar-menu::-webkit-scrollbar { display: none; width: 0; }
-
-/* Every direct child keeps its natural height so nothing gets squeezed to zero. */
-.sidebar-menu > * {
-  flex-shrink: 0;
-}
-
-.sidebar-group-label {
-  font-size: 9.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--sidebar-text-faint);
-  padding: 10px 10px 5px;
-  list-style: none;
-  display: block;
-}
-
-.sidebar.collapsed .sidebar-group-label { display: none; }
 
 .sidebar-menu > li {
   position: relative;
-  padding: 9px 10px;
-  min-height: 52px;
-  margin-bottom: 18px;
-  cursor: pointer;
-  border-radius: 9px;
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
-  color: var(--sidebar-text);
-  font-size: 12.5px;
-  font-weight: 500;
+  min-height: 52px;
+  padding: 9px 10px;
+  margin-bottom: 18px;
+  border-radius: 9px;
+  cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  font-size: 12.5px;
+  font-weight: 500;
   letter-spacing: 0.1px;
+  color: var(--sidebar-text);
   white-space: nowrap;
   overflow: hidden;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
-.sidebar-menu > li:last-of-type:not(.parent-only) {
-  margin-bottom: 0;
-}
+/* Parent groups have no margin of their own. Their submenu supplies the gap,
+   so the spacing animates together with the submenu's height. */
+.sidebar-menu > li.parent-only { margin-bottom: 0; }
 
 /* Label text takes the remaining space and truncates. */
 .sidebar-menu > li > span:not(.arrow):not(.sync-badge) {
@@ -221,43 +213,31 @@
   text-overflow: ellipsis;
 }
 
-/* Parent groups have no margin of their own. The gap below them comes from
-   their submenu, so it animates together with the submenu's height. */
-.sidebar-menu > li.parent-only {
-  margin-bottom: 0;
-}
-
-/* Hover: subtle, neutral. */
 .sidebar-menu > li:hover {
   background: var(--sidebar-hover-subtle, rgba(255, 255, 255, 0.05));
 }
 
 .sidebar-menu > li:active { transform: scale(0.99); }
 
-/* Active main item: lighter navy fill. */
 .sidebar-menu > li.active {
   background: var(--sidebar-active-subtle, rgba(255, 255, 255, 0.09));
   color: var(--sidebar-text-strong);
 }
 
-/* Collapsed rail has no submenus rendered, so parents keep their normal gap. */
+/* Icon-only rail: center items. Margins stay the same. */
 .sidebar.collapsed .sidebar-menu > li {
   justify-content: center;
   padding: 9px 0;
-  margin-bottom: 18px;
 }
 
 /* ---------- Icons ---------- */
 
-.sidebar .menu-icon,
-.sidebar-menu .menu-icon,
-.sidebar-footer .menu-icon {
+.menu-icon {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
   object-fit: contain;
   display: block;
-  filter: none;
   opacity: 0.8;
   transition: opacity 0.15s ease;
 }
@@ -278,9 +258,9 @@
   min-width: 6px;
   max-width: 6px;
   display: inline-block;
+  padding: 0;
   border: solid var(--sidebar-icon-muted);
   border-width: 0 1.5px 1.5px 0;
-  padding: 0;
   transform: rotate(45deg);
   transition: transform 0.2s ease, border-color 0.2s ease;
 }
@@ -290,10 +270,10 @@
   border-color: var(--sidebar-text-strong);
 }
 
-.sidebar-menu > li:hover .arrow  { border-color: var(--sidebar-text-strong); }
-.sidebar-menu > li.active .arrow { border-color: var(--sidebar-text-strong); }
-
-.sidebar.collapsed .sidebar-menu > li .arrow { display: none; }
+.sidebar-menu > li:hover .arrow,
+.sidebar-menu > li.active .arrow {
+  border-color: var(--sidebar-text-strong);
+}
 
 /* ---------- Sync badge (Offline Data & Sync) ---------- */
 
@@ -304,14 +284,14 @@
   height: 18px;
   padding: 0 6px;
   border-radius: 9px;
-  background: var(--sidebar-badge-bg);
-  color: var(--sidebar-badge-text);
-  font-size: 10.5px;
-  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 10.5px;
+  font-weight: 700;
   line-height: 1;
+  background: var(--sidebar-badge-bg);
+  color: var(--sidebar-badge-text);
 }
 
 .sidebar-menu > li.active .sync-badge {
@@ -319,19 +299,14 @@
   color: var(--sidebar-text-strong);
 }
 
-.sidebar.collapsed .sidebar-menu > li .sync-badge { display: none; }
-
 /* ---------- Submenu ----------
    The submenu <ul> is a sibling of its parent <li>, not nested inside it,
-   so clicks inside submenu items never bubble to the parent's onClick.
-
-   The 18px gap below the group lives in the submenu's padding-bottom. It is
-   always there (open or closed), so the spacing never snaps, and it animates
-   with the same height transition as the items. */
+   so clicks inside submenu items never reach the parent's onClick.
+   The 18px group gap is the submenu's bottom padding, so it animates with
+   the submenu's height and never snaps. */
 
 .sidebar-menu > .submenu {
   list-style: none;
-  flex-shrink: 0;
   margin: 0;
   padding: 0 0 18px;
   max-height: 0;
@@ -347,19 +322,16 @@
 
 .sidebar-menu > .submenu.open {
   max-height: 600px;
+  padding-top: 2px;
   opacity: 1;
   visibility: visible;
-  padding-top: 2px;
 }
 
-/* Last group in the menu doesn't need a gap below it. */
-.sidebar-menu > .submenu:last-child {
-  padding-bottom: 0;
-}
+.sidebar-menu > .submenu:last-child { padding-bottom: 0; }
 
-/* Submenu items: text starts under the parent label.
-   Parent text x = 12px menu padding + 10px li padding + 18px icon + 10px gap = 50px.
-   Submenu bullet is centered under the parent icon. */
+/* Text starts under the parent label:
+   12px menu padding + 10px item padding + 18px icon + 10px gap = 50px.
+   The bullet sits under the parent icon. */
 .submenu li {
   position: relative;
   display: flex;
@@ -378,9 +350,7 @@
   transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
-.submenu li:last-child {
-  margin-bottom: 0;
-}
+.submenu li:last-child { margin-bottom: 0; }
 
 .submenu li::before {
   content: "";
@@ -393,7 +363,6 @@
   border-radius: 50%;
   background: var(--sidebar-icon-muted);
   transition: background 0.15s ease;
-  flex-shrink: 0;
 }
 
 .submenu li:hover {
@@ -403,52 +372,61 @@
 
 .submenu li:active { transform: scale(0.99); }
 
-/* Active submenu item: same lighter navy fill, bullet turns bright. */
 .submenu li.active {
   background: var(--sidebar-active-subtle, rgba(255, 255, 255, 0.09));
   color: var(--sidebar-text-strong);
 }
 
-.submenu li.active::before {
-  background: var(--sidebar-text-strong);
+.submenu li.active::before { background: var(--sidebar-text-strong); }
+
+/* ---------- Keyboard focus ----------
+   Items can be reached with Tab. The ring shows for keyboard users only. */
+
+.sidebar-menu > li:focus,
+.submenu li:focus,
+.sidebar-footer .footer-item:focus {
+  outline: none;
 }
 
-/* ---------- Separator (hidden) ---------- */
+.sidebar-menu > li:focus-visible,
+.submenu li:focus-visible,
+.sidebar-footer .footer-item:focus-visible {
+  outline: 2px solid var(--sidebar-text-strong);
+  outline-offset: -2px;
+}
 
-.menu-separator { display: none !important; }
-
-/* ---------- Footer (logout) ---------- */
+/* ---------- Footer (Logout) ----------
+   Same background as the menu, so Logout no longer looks like a separate
+   black block. The top border separates it from the menu. */
 
 .sidebar-footer {
-  margin-top: auto;
-  padding: 10px 8px 12px;
   flex-shrink: 0;
-  background: var(--sidebar-bg-deeper);
+  padding: 10px 8px 12px;
+  background: var(--sidebar-bg);
   border-top: 1px solid var(--sidebar-border);
 }
 
 .sidebar-footer .footer-item {
-  list-style: none;
-  padding: 10px;
-  margin: 0;
-  cursor: pointer;
-  border-radius: 9px;
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
-  color: var(--sidebar-text-muted);
+  width: 100%;
+  min-height: 42px;
+  padding: 10px;
+  margin: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  font-family: var(--font);
   font-size: 12.5px;
   font-weight: 600;
+  text-align: left;
+  color: var(--sidebar-text-muted);
+  cursor: pointer;
   user-select: none;
-  min-height: 42px;
   white-space: nowrap;
   overflow: hidden;
-  border: none;
-  background: transparent;
-  width: 100%;
-  font-family: var(--font);
-  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
 .sidebar-footer .footer-item:hover {
@@ -469,26 +447,13 @@
   padding: 10px 0;
 }
 
-/* ---------- Tablet (768–1024px): collapsed rail, expands on toggle ---------- */
+/* ---------- Tablet (768–1024px) ----------
+   Tablets start with the icon rail (.collapsed, set by Sidebar.jsx).
+   Expanding it adds .tablet-expanded. */
 
 @media (min-width: 768px) and (max-width: 1024px) {
-  .sidebar { width: var(--sidebar-collapsed-width); }
-
   .sidebar.tablet-expanded {
-    width: var(--sidebar-width);
-    box-shadow: 4px 0 28px rgba(0, 0, 0, 0.30);
-  }
-
-  .sidebar:not(.tablet-expanded) .sidebar-menu > li {
-    justify-content: center;
-    padding: 9px 0;
-  }
-
-  .sidebar:not(.tablet-expanded) .sidebar-group-label { display: none; }
-
-  .sidebar:not(.tablet-expanded) .sidebar-footer .footer-item {
-    justify-content: center;
-    padding: 10px 0;
+    box-shadow: 4px 0 28px rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -496,64 +461,32 @@
 
 @media (max-width: 767px) {
   .sidebar {
+    width: var(--sidebar-width);
     left: calc(-1 * var(--sidebar-width) - 20px);
-    width: 250px !important;
     z-index: 1200;
     box-shadow: 4px 0 36px rgba(0, 0, 0, 0.35);
-    top: 0;
-    bottom: 0;
-    height: 100vh;
-    height: 100dvh;
-    max-height: 100%;
   }
 
   .sidebar.mobile-open { left: 0; }
 
-  .sidebar.mobile-open .sidebar-header {
-    justify-content: flex-start;
-    padding: 0 14px;
-    gap: 11px;
-  }
-
-  .sidebar.mobile-open .sidebar-brand-text {
-    opacity: 1;
-    width: auto;
-    pointer-events: auto;
-  }
-
-  .sidebar-menu {
-    overscroll-behavior: contain;
-    min-height: 0;
-  }
-
-  .sidebar.mobile-open .sidebar-menu > li {
-    justify-content: flex-start;
-    padding: 9px 10px;
-  }
-
-  .sidebar.mobile-open .sidebar-group-label { display: block; }
-
   .sidebar-footer {
-    flex-shrink: 0;
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .sidebar.mobile-open .sidebar-footer .footer-item {
-    justify-content: flex-start;
-    padding: 10px;
   }
 }
 
 /* ---------- Small phones ---------- */
 
 @media (max-width: 480px) {
-  .sidebar { width: 230px !important; left: calc(-230px - 20px); }
+  .sidebar {
+    width: 230px;
+    left: calc(-230px - 20px);
+  }
+
   .sidebar.mobile-open { left: 0; }
 
   .logo-img { width: 32px; height: 32px; }
   .sidebar-brand-title { font-size: 12px; }
   .sidebar-brand-subtitle { font-size: 10px; }
-
   .sidebar-user { padding: 12px 14px; }
 }
 

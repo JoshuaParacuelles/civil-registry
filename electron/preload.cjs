@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld('desktop', {
 
   toggleFullscreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
 
+  // Native page zoom (Small / Default / Large / Extra large).
+  setZoomFactor: (factor) => ipcRenderer.invoke('window:set-zoom', Number(factor)),
+
   // Mo-return og unsubscribe function, kay gi-call kini sa Settings.jsx
   onFullscreenChange: (callback) => {
     const listener = (_event, value) => callback(!!value);
