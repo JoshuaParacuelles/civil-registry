@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import "./UserAvatar.css";
 
 const getInitials = (name = "") =>
@@ -12,17 +12,13 @@ const getInitials = (name = "") =>
 const UserAvatar = ({ src, name = "", size = 56, alt = "", className = "" }) => {
   const [failed, setFailed] = useState(false);
 
-  // A new image URL gets a fresh attempt, even after an earlier failure.
-  useEffect(() => {
-    setFailed(false);
-  }, [src]);
-
   const style = { width: size, height: size, fontSize: Math.round(size * 0.38) };
   const classes = ["user-avatar", className].filter(Boolean).join(" ");
 
   if (src && !failed) {
     return (
       <img
+        key={src}
         src={src}
         alt={alt}
         className={classes}

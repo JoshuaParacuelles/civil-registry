@@ -300,6 +300,7 @@ export function PermissionProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook colocated with its provider
 export function usePermissions() {
   return useContext(PermissionContext);
 }

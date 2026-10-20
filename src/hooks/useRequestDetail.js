@@ -1,12 +1,13 @@
 // src/hooks/useRequestDetail.js
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 const TTL_MS = 15000;
 const TIMEOUT_MS = 6000;
 
-const cache = new Map();          // key -> { data, ts }
-const inflight = new Map();       // key -> Promise
+const cache = new Map();           // key -> { data, ts }
+const inflight = new Map();        // key -> Promise
 const statusOverrides = new Map(); // key -> { status, updated_at }
+const lastKnown = new Map();       // key -> latest data, no TTL; shown while refetching
 
 export const requestKey = (n) =>
   n ? `${n.record_type}:${n.record_id ?? ""}:${n.control_no ?? ""}` : null;
@@ -14,6 +15,19 @@ export const requestKey = (n) =>
 const readFresh = (key) => {
   const hit = key ? cache.get(key) : null;
   return hit && Date.now() - hit.ts < TTL_MS ? hit.data : null;
+};
+
+const withKey = (set, k) => {
+  const next = new Set(set);
+  next.add(k);
+  return next;
+};
+
+const withoutKey = (set, k) => {
+  if (!set.has(k)) return set;
+  const next = new Set(set);
+  next.delete(k);
+  return next;
 };
 
 /**
@@ -56,6 +70,7 @@ export function loadSnapshot(notification, fetcher, { force = false } = {}) {
       if (!data) throw new Error("empty snapshot");
       const merged = applyOverride(key, data);
       cache.set(key, { data: merged, ts: Date.now() });
+      lastKnown.set(key, merged);
       return merged;
     })
     .finally(() => {
@@ -68,7 +83,7 @@ export function loadSnapshot(notification, fetcher, { force = false } = {}) {
 /** Warm the cache (hover / focus / touch). Never throws. */
 export function prefetchRequestSnapshot(notification, fetcher) {
   if (!notification?.request_snapshot) return;
-  loadSnapshot(notification, fetcher).catch(() => {});
+  loadSnapshot(notification, fetcher).catch(() => { /* ignore: prefetch is best-effort, the modal will retry */ });
 }
 
 /**
@@ -85,14 +100,16 @@ export function recordSavedStatus(notification, status, updatedAt) {
   });
   const hit = cache.get(key);
   if (hit) cache.set(key, { data: applyOverride(key, hit.data), ts: hit.ts });
+  const known = lastKnown.get(key);
+  if (known) lastKnown.set(key, applyOverride(key, known));
 }
 
 /**
  * phase:
  *  "idle"     – nothing to fetch
- *  "loading"  – fresh data not here yet
- *  "ready"    – fresh data available
- *  "fallback" – fetch failed; showing the saved copy with a banner
+ *  "loading"  – no data for this request yet
+ *  "ready"    – data available (fresh, or the last copy while refetching)
+ *  "fallback" – last fetch failed; showing the saved copy with a banner
  */
 export function useRequestDetail(notification, fetcher) {
   const hasFetcher = typeof fetcher === "function";
@@ -100,46 +117,55 @@ export function useRequestDetail(notification, fetcher) {
     console.warn("[useRequestDetail] No fetchSnapshot prop passed to NotificationDetailModal.");
   }
   const key = notification?.request_snapshot && hasFetcher ? requestKey(notification) : null;
+
   const [, rerender] = useReducer((x) => x + 1, 0);
-  const failed = useRef(new Set());
-  const held = useRef({ key: null, data: null });
+  const [failedKeys, setFailedKeys] = useState(() => new Set());
+
+  // Latest props for async callbacks. Written in an effect, not during render.
   const fetcherRef = useRef(fetcher);
   const notifRef = useRef(notification);
-  fetcherRef.current = fetcher;
-  notifRef.current = notification;
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+    notifRef.current = notification;
+  });
 
-  const fresh = readFresh(key);
-  if (fresh) held.current = { key, data: fresh };
-  const data = held.current.key === key ? held.current.data : null;
+  // Fresh cache first; otherwise the last row we have for this key.
+  const data = readFresh(key) ?? (key ? lastKnown.get(key) ?? null : null);
 
   useEffect(() => {
     if (!key || readFresh(key)) return undefined;
     let cancelled = false;
-    failed.current.delete(key);
     loadSnapshot(notifRef.current, fetcherRef.current)
-      .catch(() => failed.current.add(key))
-      .finally(() => { if (!cancelled) rerender(); });
+      .then(() => {
+        if (cancelled) return;
+        setFailedKeys((prev) => withoutKey(prev, key));
+        rerender();
+      })
+      .catch(() => {
+        if (!cancelled) setFailedKeys((prev) => withKey(prev, key));
+      });
     return () => { cancelled = true; };
   }, [key]);
 
-  const refresh = useCallback(async () => {
+  // Plain functions (not useCallback) so the compiler can optimize the component.
+  const refresh = async () => {
+    if (!key) return;
     try {
       await loadSnapshot(notifRef.current, fetcherRef.current, { force: true });
     } catch { /* keep showing what we have */ }
     rerender();
-  }, []);
+  };
 
-  const retry = useCallback(() => {
+  const retry = () => {
     if (!key) return;
-    failed.current.delete(key);
-    rerender();
+    setFailedKeys((prev) => withoutKey(prev, key));
     loadSnapshot(notifRef.current, fetcherRef.current, { force: true })
-      .catch(() => failed.current.add(key))
-      .finally(rerender);
-  }, [key]);
+      .then(() => rerender())
+      .catch(() => setFailedKeys((prev) => withKey(prev, key)));
+  };
 
   let phase = "idle";
-  if (key) phase = data ? "ready" : failed.current.has(key) ? "fallback" : "loading";
+  if (key) phase = data ? "ready" : failedKeys.has(key) ? "fallback" : "loading";
 
   return {
     key,

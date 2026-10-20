@@ -848,7 +848,8 @@ const MemoMunicipalityTable = memo(MunicipalityTable);
 const AnalyticsDashboard = ({ recordLinks = {} }) => {
   const { data, loading, error, refetch, stale } = useAnalyticsData();
   const online = useOnlineStatus();
-  const lastLiveAtRef = useRef(null);
+  const [lastLiveAt, setLastLiveAt] = useState(null);
+  const [lastSeenData, setLastSeenData] = useState(null);
   const [tab, setTab] = useState("overview");
 
   // Realtime: i-clear ang backend cache, dayon i-refetch ang dashboard.
@@ -884,14 +885,23 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
   });
 
   // Remember when live (non-cached) data was last on screen, for the banner timestamp.
+  // Runs only when a new data object arrives, not on every render.
   useEffect(() => {
-    if (online && !stale?.fromCache && data?.summary && !data.summary.__failed) {
-      lastLiveAtRef.current = Date.now();
+    if (
+      online &&
+      !stale?.fromCache &&
+      data?.summary &&
+      !data.summary.__failed &&
+      data !== lastSeenData
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- record the new live data object
+      setLastSeenData(data);
+      setLastLiveAt(Date.now());
     }
-  }, [online, stale?.fromCache, data]);
+  }, [online, stale?.fromCache, data, lastSeenData]);
 
   const showOfflineBanner = !online || !!stale?.fromCache;
-  const savedAt = stale?.cachedAt || lastLiveAtRef.current;
+  const savedAt = stale?.cachedAt || lastLiveAt;
 
   const summary  = data.summary  || {};
   const byYear   = safeArr(data.byYear);

@@ -9,19 +9,26 @@ export function emitDataChanged(table) {
 
 /**
  * Nagtawag og onChange() kung naay change sa bisan asang table sa `tables`.
- * - `tables` kinahanglan module-level constant (dili inline array) aron stable.
  * - Debounce: daghang sunod-sunod nga change, usa ra ka tawag.
  */
 export function useDataChanged(onChange, { tables = [], debounceMs = 750 } = {}) {
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+
+  // Keep the latest callback without re-subscribing. Written in an effect, not during render.
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  // A string key keeps the dependency stable even when the caller passes an inline array.
+  const tablesKey = tables.join("|");
 
   useEffect(() => {
+    const watched = tablesKey ? tablesKey.split("|") : [];
     let timer = null;
 
     const handler = (e) => {
       const table = e.detail?.table;
-      if (tables.length && !tables.includes(table)) return;
+      if (watched.length && !watched.includes(table)) return;
 
       clearTimeout(timer);
       timer = setTimeout(() => onChangeRef.current?.(), debounceMs);
@@ -32,5 +39,5 @@ export function useDataChanged(onChange, { tables = [], debounceMs = 750 } = {})
       clearTimeout(timer);
       window.removeEventListener(DATA_CHANGED_EVENT, handler);
     };
-  }, [debounceMs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tablesKey, debounceMs]);
 }

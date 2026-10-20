@@ -19,7 +19,9 @@ export function hardRefresh({ force = false } = {}) {
 
   try {
     sessionStorage.setItem(REFRESH_FLAG, '1');
-  } catch (e) { /* ignore */ }
+} catch {
+  /* ignore: hard refresh cleanup failed, safe to continue */
+}
 
   window.crRefreshSkeleton?.show();
   console.info('[Refresh] Full page reload requested');

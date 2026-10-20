@@ -18,7 +18,7 @@ export default function GlobalRealtime() {
     const channel = supabase.channel("global-data-changes");
 
     ALL_TABLES.forEach((table) => {
-      channel.on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
+      channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
         emitDataChanged(table);
       });
     });

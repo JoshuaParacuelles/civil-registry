@@ -772,6 +772,7 @@ function AssignModal({
       .finally(() => setRolesLoading(false));
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial roles load; state already matches defaults
   useEffect(() => { loadRoles(); }, [loadRoles]);
 
   const typedName = form.username.trim();

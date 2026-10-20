@@ -30,6 +30,7 @@ export default function useSyncStatus() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load from the outbox
     refreshCounts()
 
     // Recount whenever the sync engine reports a change.

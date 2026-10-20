@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
@@ -29,7 +29,7 @@ const MARRIAGE_LIVE_TABLES = ["marriage_records", "marriage_transactions"];
 // Adapter: keeps showNotif("message", "success" | "error") working
 // on top of the shared toastService (which uses success: true/false).
 function useShowNotif() {
-  return (message, type = "success") => {
+  return useCallback((message, type = "success") => {
     const ok = type === "success";
     pushToast({
       title: ok ? "Success" : "Error",
@@ -37,7 +37,7 @@ function useShowNotif() {
       success: ok,
       duration: 5000,
     });
-  };
+  }, []);
 }
 
 // ── Office details ─────────────────────────────────────────────────────────
@@ -399,8 +399,8 @@ function printPdfFromData(pdfData) {
         if (cleaned) return;
         cleaned = true;
         setTimeout(() => {
-          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch {}
-          try { URL.revokeObjectURL(blobUrl); } catch {}
+          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch { /* iframe already removed */ }
+          try { URL.revokeObjectURL(blobUrl); } catch { /* URL already revoked */ }
         }, 1500);
       };
       iframe.onload = () => {
@@ -409,7 +409,7 @@ function printPdfFromData(pdfData) {
         const doPrint = () => {
           try {
             printWindow.focus();
-            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch {}
+            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch { /* print window closed or blocked */ }
             printWindow.print();
             setTimeout(() => { cleanup(); resolve(); }, 2000);
           } catch (err) { cleanup(); reject(err); }
@@ -567,8 +567,8 @@ function printNegativeCertificate(certData) {
           iframe.contentWindow.focus();
           iframe.contentWindow.print();
           setTimeout(() => {
-            try { document.body.removeChild(iframe); } catch {}
-            try { root.unmount(); document.body.removeChild(mountPoint); } catch {}
+            try { document.body.removeChild(iframe); } catch { /* iframe already removed */ }
+            try { root.unmount(); document.body.removeChild(mountPoint); } catch { /* unmount cleanup already done */ }
           }, 2000);
         }, 600);
       };
@@ -809,7 +809,7 @@ const PdfModal = ({ pdfData, pdfError, fileName, onClose, showNotif }) => {
       showNotif?.("This PDF appears to be corrupted and can't be displayed.", "error");
     }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
-  }, [pdfData, pdfError]);
+  }, [pdfData, pdfError, showNotif]);
 
   const handlePrint = async () => {
     if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }
@@ -1145,7 +1145,7 @@ const InlinePdfViewer = ({ pdfData, pdfError, record, onPrint, loadingPdf, showN
       showNotif?.("This PDF appears to be corrupted and can't be displayed.", "error");
     }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
-  }, [pdfData, pdfError]);
+  }, [pdfData, pdfError, showNotif]);
 
   const handlePrint = async () => {
     if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }

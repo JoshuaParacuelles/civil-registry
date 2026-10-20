@@ -7,18 +7,13 @@ export default function PdfModal({ pdfData, pdfError, fileName, onClose, showNot
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
-    if (pdfError) {
-      setPdfUrl("");
-      showNotif?.(pdfError, "error");
-      return undefined;
-    }
     const url = getPdfBlobUrl(pdfData);
     setPdfUrl(url);
     if (pdfData && !url) {
-      showNotif?.("This PDF appears to be corrupted and can't be displayed.", "error");
+      showNotif?.("This PDF could not be displayed — the stored file appears to be corrupted.", "error");
     }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
-  }, [pdfData, pdfError]);
+  }, [pdfData, showNotif]);
 
   const handlePrint = async () => {
     if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }

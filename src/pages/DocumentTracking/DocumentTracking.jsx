@@ -22,10 +22,6 @@ import "./DocumentTracking.css";
 // The server must answer within this time, or the list shows a retry message.
 const LIST_TIMEOUT_MS = 20000;
 
-// Debounce for realtime-triggered refetches so a burst of related writes
-// collapses into a single refetch.
-const REALTIME_DEBOUNCE_MS = 300;
-
 // Delay before the list row (status / active step) is refreshed after a write.
 const LIST_REFRESH_DELAY_MS = 800;
 
@@ -389,7 +385,6 @@ export default function DocumentTracking() {
   const listRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
   const listRefreshTimerRef = useRef(null);
-  const detailRefreshTimerRef = useRef(null);
 
   const detailRef = useRef(null);
   detailRef.current = detail;
@@ -631,6 +626,12 @@ export default function DocumentTracking() {
   // ── Effects: load, selection, realtime, sync ─────────────────────────
   useEffect(() => { loadList(); }, [loadList]);
 
+  // Re-evaluates the posting-period countdown every CLOCK_TICK_MS.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
+
   // Refresh when GlobalRealtime reports a change, and when the database
   // comes back online.
   useEffect(() => {
@@ -649,10 +650,13 @@ export default function DocumentTracking() {
     return () => {
       window.removeEventListener("documents-changed", onChanged);
       unsubDb();
-      clearTimeout(listRefreshTimerRef.current);
-      clearTimeout(detailRefreshTimerRef.current);
     };
   }, [loadList, loadDetail]);
+
+  // Clears the pending list refresh when the page unmounts.
+  useEffect(() => {
+    return () => clearTimeout(listRefreshTimerRef.current);
+  }, []);
 
   useEffect(() => {
     setOpenStage(null);

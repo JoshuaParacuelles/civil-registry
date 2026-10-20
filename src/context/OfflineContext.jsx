@@ -109,6 +109,7 @@ export function OfflineProvider({ children }) {
   useEffect(() => {
     startConnectivityMonitor();
     requestPersistence();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial outbox count load on mount
     refreshCounts();
 
     let started = false;
@@ -218,6 +219,7 @@ export function OfflineProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook colocated with its provider
 export const useOffline = () => {
   const ctx = useContext(OfflineContext);
   if (!ctx) throw new Error('useOffline must be used inside <OfflineProvider>');

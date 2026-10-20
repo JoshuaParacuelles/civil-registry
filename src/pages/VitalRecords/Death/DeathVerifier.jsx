@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
@@ -295,8 +295,8 @@ function printPdfFromData(pdfData) {
         if (cleaned) return;
         cleaned = true;
         setTimeout(() => {
-          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch {}
-          try { URL.revokeObjectURL(blobUrl); } catch {}
+          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch { /* iframe already removed */ }
+          try { URL.revokeObjectURL(blobUrl); } catch { /* URL already revoked */ }
         }, 1500);
       };
       iframe.onload = () => {
@@ -305,7 +305,7 @@ function printPdfFromData(pdfData) {
         const doPrint = () => {
           try {
             printWindow.focus();
-            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch {}
+            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch { /* print window closed or blocked */ }
             printWindow.print();
             setTimeout(() => { cleanup(); resolve(); }, 2000);
           } catch (err) { cleanup(); reject(err); }
@@ -458,8 +458,8 @@ function printNegativeCertificate(certData) {
           iframe.contentWindow.focus();
           iframe.contentWindow.print();
           setTimeout(() => {
-            try { document.body.removeChild(iframe); } catch {}
-            try { root.unmount(); document.body.removeChild(mountPoint); } catch {}
+            try { document.body.removeChild(iframe); } catch { /* iframe already removed */ }
+            try { root.unmount(); document.body.removeChild(mountPoint); } catch { /* unmount cleanup already done */ }
           }, 2000);
         }, 600);
       };

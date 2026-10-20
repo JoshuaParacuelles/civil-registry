@@ -49,6 +49,7 @@ export function RefreshProvider({ children }) {
   return <RefreshContext.Provider value={value}>{children}</RefreshContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook colocated with its provider
 export function useGlobalRefresh() {
   const ctx = useContext(RefreshContext);
   if (!ctx) throw new Error("useGlobalRefresh must be used inside RefreshProvider");
@@ -56,6 +57,7 @@ export function useGlobalRefresh() {
 }
 
 // Registers a page's loader. The latest loader is always called, so no useCallback is needed.
+// eslint-disable-next-line react-refresh/only-export-components -- hook colocated with its provider
 export function useRegisterRefresh(loader) {
   const ctx = useContext(RefreshContext);
   const loaderRef = useRef(loader);

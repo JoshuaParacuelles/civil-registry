@@ -41,7 +41,7 @@ const BIRTH_LIVE_TABLES = ["birth_records", "birth_payments"];
 // Adapter: keeps showNotif("message", "success" | "error") working
 // on top of the shared toastService (which uses success: true/false).
 function useShowNotif() {
-  return (message, type = "success") => {
+  return useCallback((message, type = "success") => {
     const ok = type === "success";
     pushToast({
       title: ok ? "Success" : "Error",
@@ -49,7 +49,7 @@ function useShowNotif() {
       success: ok,
       duration: 5000,
     });
-  };
+  }, []);
 }
 
 // ── Office details ─────────────────────────────────────────────────────────
@@ -368,8 +368,8 @@ function printPdfFromData(pdfData) {
         if (cleaned) return;
         cleaned = true;
         setTimeout(() => {
-          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch {}
-          try { URL.revokeObjectURL(blobUrl); } catch {}
+          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch { /* ignore: iframe already detached */ }
+          try { URL.revokeObjectURL(blobUrl); } catch { /* ignore: URL already revoked */ }
         }, 1500);
       };
       iframe.onload = () => {
@@ -378,7 +378,7 @@ function printPdfFromData(pdfData) {
         const doPrint = () => {
           try {
             printWindow.focus();
-            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch {}
+            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch { /* ignore: onafterprint not supported in this browser */ }
             printWindow.print();
             setTimeout(() => { cleanup(); resolve(); }, 2000);
           } catch (err) { cleanup(); reject(err); }
@@ -618,8 +618,8 @@ function printNegativeCertificate(certData) {
           iframe.contentWindow.focus();
           iframe.contentWindow.print();
           setTimeout(() => {
-            try { document.body.removeChild(iframe); } catch {}
-            try { root.unmount(); document.body.removeChild(mountPoint); } catch {}
+            try { document.body.removeChild(iframe); } catch { /* ignore: iframe already removed */ }
+            try { root.unmount(); document.body.removeChild(mountPoint); } catch { /* ignore: cleanup already completed */ }
           }, 2000);
         }, 600);
       };
@@ -860,7 +860,7 @@ const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
       showNotif?.("This PDF could not be displayed — the stored file appears to be corrupted.", "error");
     }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
-  }, [pdfData]);
+  }, [pdfData, showNotif]);
 
   const handlePrint = async () => {
     if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }
@@ -1176,7 +1176,7 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
       showNotif?.("This PDF could not be displayed — the stored file appears to be corrupted.", "error");
     }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
-  }, [pdfData]);
+  }, [pdfData, showNotif]);
 
   const handlePrint = async () => {
     if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }
@@ -1348,7 +1348,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
     } finally {
       if (recordsAbortRef.current === controller) setLoadingRecords(false);
     }
-  }, []);
+  }, [showNotif]);
 
   // Returns true when the list is up to date, false when it could not be loaded.
   const fetchArchived = useCallback(async () => {
@@ -1369,7 +1369,7 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
     } finally {
       if (archivedAbortRef.current === controller) setLoadingRecords(false);
     }
-  }, []);
+  }, [showNotif]);
 
   useEffect(() => { fetchRecords(); fetchArchived(); }, [fetchRecords, fetchArchived]);
 
@@ -1664,51 +1664,51 @@ export default function UnifiedBirthRegistry({ initialView = null }) {
   }, [archivedRecords]);
 
   const handleBulkDelete = () => {
-  const ids = [...selectedIds];
-  if (ids.length === 0) return;
-  const byId = new Map(archivedRecords.map((r) => [r.id, r]));
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const byId = new Map(archivedRecords.map((r) => [r.id, r]));
 
-  setConfirmModal({
-    title: "Permanently Delete Selected",
-    message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
-    confirmLabel: `Delete ${ids.length}`,
-    confirmColor: "#dc2626",
-    onConfirm: async () => {
-      setConfirmModal(null);
-      setBulkDeleting(true);
+    setConfirmModal({
+      title: "Permanently Delete Selected",
+      message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
+      confirmLabel: `Delete ${ids.length}`,
+      confirmColor: "#dc2626",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setBulkDeleting(true);
 
-      const result = await runBulkDelete({
-        api: API,
-        ids,
-        byId,
-        // Birth:
-        deleteOne: (id, record) => deleteRecordSmart(id, record),
-        // Marriage and Death use this instead:
-        // deleteOne: (id, record) =>
-        //   deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record)),
-      });
+        const result = await runBulkDelete({
+          api: API,
+          ids,
+          byId,
+          // Birth:
+          deleteOne: (id, record) => deleteRecordSmart(id, record),
+          // Marriage and Death use this instead:
+          // deleteOne: (id, record) =>
+          //   deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record)),
+        });
 
-      if (result.deleted > 0) {
-        showNotif(`${result.deleted} record${result.deleted !== 1 ? "s" : ""} deleted.`, "success");
-      }
-      if (result.queued > 0) {
-        showNotif(`${result.queued} will be removed when you're back online.`, "success");
-      }
-      if (result.failedIds.length > 0) {
-        showNotif(
-          `${result.failedIds.length} record${result.failedIds.length !== 1 ? "s" : ""} could not be deleted. They are still selected, so you can try again.`,
-          "error",
-        );
-        setSelectedIds(new Set(result.failedIds));
-      } else {
-        clearSelection();
-      }
+        if (result.deleted > 0) {
+          showNotif(`${result.deleted} record${result.deleted !== 1 ? "s" : ""} deleted.`, "success");
+        }
+        if (result.queued > 0) {
+          showNotif(`${result.queued} will be removed when you're back online.`, "success");
+        }
+        if (result.failedIds.length > 0) {
+          showNotif(
+            `${result.failedIds.length} record${result.failedIds.length !== 1 ? "s" : ""} could not be deleted. They are still selected, so you can try again.`,
+            "error",
+          );
+          setSelectedIds(new Set(result.failedIds));
+        } else {
+          clearSelection();
+        }
 
-      await fetchArchived();
-      setBulkDeleting(false);
-    },
-  });
-};
+        await fetchArchived();
+        setBulkDeleting(false);
+      },
+    });
+  };
 
   /* ── Render ────────────────────────────────────────────────────────────── */
   return (

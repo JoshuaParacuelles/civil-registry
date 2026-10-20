@@ -390,16 +390,19 @@ function DonutChart({ slices, size = 148, stroke = 26 }) {
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
-  let offsetAcc = 0;
+
+  // Start value of each slice, computed up front so no variable changes during render.
+  const offsets = slices.map((_, i) =>
+    slices.slice(0, i).reduce((sum, x) => sum + x.value, 0)
+  );
 
   return (
     <svg className="donut" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {slices.map((s) => {
+      {slices.map((s, i) => {
         const fraction = s.value / total;
         const dash = fraction * circumference;
         const gap = circumference - dash;
-        const rotation = (offsetAcc / total) * 360 - 90;
-        offsetAcc += s.value;
+        const rotation = (offsets[i] / total) * 360 - 90;
         return (
           <circle
             key={s.label}
@@ -848,6 +851,7 @@ export default function Heatmaps() {
 
   useEffect(() => {
     if (isDemo && residentStatus === "idle") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initial resident data load
       loadResidents();
     }
   }, [isDemo, residentStatus, loadResidents]);

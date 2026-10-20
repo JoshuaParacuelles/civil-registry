@@ -356,15 +356,15 @@ const Home = () => {
   useEffect(() => {
     if (VITAL_CHILDREN.includes(activeSubMenu)) {
       setVitalRecordsOpen(true);
-      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
+      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch { /* ignore: storage unavailable (e.g. private mode) */ }
     } else if (SETTINGS_CHILDREN.includes(activeSubMenu)) {
       setSettingsOpen(true);
-      try { localStorage.setItem("settingsOpen", "true"); } catch {}
+      try { localStorage.setItem("settingsOpen", "true"); } catch { /* ignore: storage unavailable (e.g. private mode) */ }
     }
   }, [activeSubMenu]);
 
   useEffect(() => {
-    try { sessionStorage.setItem(SESSION_FLAG_KEY, "true"); } catch {}
+    try { sessionStorage.setItem(SESSION_FLAG_KEY, "true"); } catch { /* ignore: storage unavailable (e.g. private mode) */ }
   }, []);
 
   useEffect(() => {
@@ -531,7 +531,7 @@ const Home = () => {
       if (!target || !canAccess(target.permission)) return;
       goTo(target.menu, { verifierEntry: "archive" });
       setVitalRecordsOpen(true);
-      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch {}
+      try { localStorage.setItem("vitalRecordsOpen", "true"); } catch { /* ignore: storage unavailable (e.g. private mode) */ }
       if (viewport === "mobile") setMobileMenuOpen(false);
     },
     [canAccess, viewport, goTo]

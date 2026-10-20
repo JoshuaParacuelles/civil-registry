@@ -48,7 +48,11 @@ function ConfirmModal({
 }) {
   const dialogRef = useRef(null);
   const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
+
+  // Keep the latest cancel handler for the Escape listener. Written in an effect, not during render.
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
 
   // Focus the cancel button when opened and lock background scroll.
   useEffect(() => {
