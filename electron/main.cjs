@@ -13,7 +13,7 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 // ---------- Backend settings ----------
 
 // Render backend URL. Kinahanglan parehas ang URL sa VITE_API_BASE_URL sa package.json.
-const REMOTE_API_BASE = 'http://127.0.0.1:5000';
+   const REMOTE_API_BASE = 'https://civil-registry-backend.onrender.com';
 
 // Para sa development: i-set ang API_BASE_URL=http://127.0.0.1:5000 aron mogamit sa local app.py
 const API_BASE = (process.env.API_BASE_URL || REMOTE_API_BASE).replace(/\/+$/, '');
