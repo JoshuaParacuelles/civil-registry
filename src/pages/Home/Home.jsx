@@ -22,10 +22,12 @@ import Topbar from "../../components/Topbar";
 import LogoutModal from "../../components/LogoutModal";
 import NotificationBell from "../../components/NotificationBell";
 import NotificationDetailModal from "../../components/NotificationDetailModal";
+import ProfileModal from "../../components/ProfileModal";
 import useNotifications from "../../hooks/useNotifications";
 import { loadSnapshot, prefetchRequestSnapshot, recordSavedStatus } from "../../hooks/useRequestDetail";
 import { fetchSnapshot, saveRequestStatus } from "../../services/requestSnapshotService";
 import { pushToast } from "../../services/toastService";
+import { avatarUrl, fetchProfile } from "../../services/profileService";
 
 import logoImg from "../../assets/icons/sidebar/scc.png";
 import dashboardIcon from "../../assets/icons/sidebar/dashboard.png";
@@ -261,6 +263,11 @@ const Home = () => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // Profile (display name + picture) is owned here so the sidebar and the
+  // edit modal always read the same copy.
+  const [profile, setProfile] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+
   const {
     notifOpen,
     setNotifOpen,
@@ -316,6 +323,26 @@ const Home = () => {
         ],
     [isAdminUser, canAccess]
   );
+
+  // Load the profile once so the sidebar shows the saved name and picture.
+  // Load the profile on mount, and again whenever the window regains focus,
+  // so a name or picture changed in another window shows up here.
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      fetchProfile()
+        .then((data) => {
+          if (!cancelled) setProfile(data);
+        })
+        .catch((err) => console.error("[Home] Could not load profile:", err));
+    };
+    load();
+    window.addEventListener("focus", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", load);
+    };
+  }, []);
 
   // ROUTING: unknown URL under /dashboard -> go to the dashboard.
   useEffect(() => {
@@ -609,7 +636,8 @@ const Home = () => {
     viewport === "tablet"  && !tabletExpanded  ? "sidebar-is-collapsed"       : "",
   ].filter(Boolean).join(" ");
 
-  const displayName = username ? toTitleCase(username) : "Admin";
+  const avatarSrc = avatarUrl(profile);
+  const displayName = profile?.display_name || (username ? toTitleCase(username) : "Admin");
 
   const renderContent = () => {
     if (loading) {
@@ -685,6 +713,8 @@ const Home = () => {
         handleSubMenuClick={handleSubMenuClick}
         setShowLogoutModal={setShowLogoutModal}
         displayName={displayName}
+        avatarSrc={avatarSrc}
+        onOpenProfile={() => setProfileOpen(true)}
         isAdminUser={isAdminUser}
         MENU_KEYS={MENU_KEYS}
         VITAL_CHILDREN={VITAL_CHILDREN}
@@ -727,7 +757,7 @@ const Home = () => {
         </Topbar>
 
         <main className="main-content">
-         <Suspense fallback={null}>
+          <Suspense fallback={null}>
             {renderContent()}
           </Suspense>
         </main>
@@ -759,6 +789,14 @@ const Home = () => {
         REQUEST_STATUS_OPTIONS={REQUEST_STATUS_OPTIONS}
         REQUEST_STATUS_LABELS={REQUEST_STATUS_LABELS}
         fetchSnapshot={fetchSnapshot}
+      />
+
+      <ProfileModal
+        open={profileOpen}
+        username={username}
+        profile={profile}
+        onProfileChange={setProfile}
+        onClose={() => setProfileOpen(false)}
       />
 
       <LogoutModal

@@ -122,8 +122,8 @@
 .sidebar-body {
   display: flex;
   flex-direction: column;
+  flex: 1;
 }
-
 .sidebar-user {
   display: flex;
   flex-direction: column;
@@ -138,16 +138,36 @@
 
 .sidebar.collapsed .sidebar-user { display: none; }
 
-.sidebar-user-info {
-  display: flex;
+/* Clickable avatar + name + role only. Sized to its content, so the empty
+   space around it does nothing when clicked. */
+.sidebar-user-button {
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sidebar-user-button:hover .sidebar-user-name {
+  text-decoration: underline;
+}
+
+.sidebar-user-button:focus-visible {
+  outline: 2px solid var(--sidebar-text-strong);
+  outline-offset: 2px;
 }
 
 .sidebar-user-name {
   max-width: 180px;
+  margin-top: 3px;
   font-size: 13.5px;
   font-weight: 700;
   color: var(--sidebar-text-strong);
@@ -158,6 +178,7 @@
 }
 
 .sidebar-user-role {
+  margin-top: 3px;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -396,12 +417,13 @@
 }
 
 /* ---------- Footer (Logout) ----------
-   Same background as the menu, so Logout no longer looks like a separate
-   black block. The top border separates it from the menu. */
+   Uses the same horizontal padding as the menu (12px outer + 10px inner),
+   so the Logout icon and text line up with the menu icons and labels. */
 
 .sidebar-footer {
   flex-shrink: 0;
-  padding: 10px 8px 12px;
+  margin-top: auto;
+  padding: 10px 12px 12px;
   background: var(--sidebar-bg);
   border-top: 1px solid var(--sidebar-border);
 }

@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { useOffline } from "../context/OfflineContext";
+import UserAvatar from "./UserAvatar";
 import "./Sidebar.css";
 
 // Badge shows up to 99; anything higher reads "99+". The exact count stays in the tooltip.
@@ -83,6 +84,8 @@ const Sidebar = ({
   handleSubMenuClick,
   setShowLogoutModal,
   displayName,
+  avatarSrc,
+  onOpenProfile,
   isAdminUser,
   MENU_KEYS,
   VITAL_CHILDREN,
@@ -140,10 +143,18 @@ const Sidebar = ({
       <div className="sidebar-body">
         <div className="sidebar-user">
           {showLabels && (
-            <div className="sidebar-user-info">
+            <button
+              type="button"
+              className="sidebar-user-button"
+              onClick={onOpenProfile}
+              aria-label={`Edit profile for ${displayName}`}
+            >
+              <UserAvatar src={avatarSrc} name={displayName} size={56} />
               <span className="sidebar-user-name">{displayName}</span>
-              <span className="sidebar-user-role">{isAdminUser ? "Administator" : "Active"}</span>
-            </div>
+              <span className="sidebar-user-role">
+                {isAdminUser ? "Administrator" : "Active"}
+              </span>
+            </button>
           )}
         </div>
 

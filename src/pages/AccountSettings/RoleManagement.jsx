@@ -2,7 +2,9 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { usePermissions } from "../../context/PermissionContext";
 import { useRegisterRefresh } from "../../context/RefreshContext";
 import { pushToast } from "../../services/toastService";
+import { fetchMemberProfiles, memberAvatarUrl } from "../../services/profileService";
 import { syncOfflineAccountsFromServer } from "../../offline/adapters/offlineLogin";
+import UserAvatar from "../../components/UserAvatar";
 import "./RoleManagement.css";
 
 // Use empty string to route via Vite proxy, avoiding CORS/Cookie domain mismatches
@@ -88,6 +90,9 @@ function resolveCategory(entity) {
   return "other";
 }
 
+// Display name from the member's profile, falling back to the login username.
+const memberName = (username, profile) => profile?.display_name || username || "?";
+
 const EMPTY_ASSIGN = {
   username: "", password: "", confirmPassword: "", role_id: "", showPass: false,
 };
@@ -139,6 +144,7 @@ export default function Rolemanagement() {
   const { is_admin } = usePermissions();
 
   const [userRoles,    setUserRoles]    = useState([]);
+  const [profiles,     setProfiles]     = useState({});
   const [loading,      setLoading]      = useState(true);
   const [modal,        setModal]        = useState(null);
   const [assignForm,   setAssignForm]   = useState(EMPTY_ASSIGN);
@@ -177,9 +183,12 @@ export default function Rolemanagement() {
   // last good data.
   const fetchAll = useCallback(async (isSilent = false) => {
     try {
-      const [rolesRes, userRolesRes] = await Promise.all([
+      // Member profiles are non-essential: if they fail, rows fall back to
+      // usernames and initials instead of failing the whole page.
+      const [rolesRes, userRolesRes, memberProfiles] = await Promise.all([
         fetch(`${API}/api/roles`,      { credentials: "include" }),
         fetch(`${API}/api/user-roles`, { credentials: "include" }),
+        fetchMemberProfiles().catch(() => ({})),
       ]);
 
       const checkJson = async (res) => {
@@ -229,7 +238,6 @@ export default function Rolemanagement() {
       await checkJson(rolesRes);
       await checkJson(userRolesRes);
 
-      await rolesRes.json();
       const r2 = await userRolesRes.json();
 
       // Normalise every row so `permissions` is always an array.
@@ -240,6 +248,7 @@ export default function Rolemanagement() {
         }));
 
       setUserRoles(normalise(r2));
+      setProfiles(memberProfiles);
       // Keep this device's offline logins in step with Role Management.
       syncOfflineAccountsFromServer().catch(() => {});
       return true;
@@ -483,11 +492,13 @@ export default function Rolemanagement() {
   // Administrator accounts are managed separately and are excluded from this
   // list. Also scoped to the selected credential category, so a username with
   // one role in each category appears under BOTH tabs as two separate rows.
+  // Search also matches the member's display name.
   const filteredUsers = userRoles
     .filter(u => !u.is_admin)
     .filter(u => resolveCategory(u) === activeCategory)
     .filter(u =>
       (u.username || "").toLowerCase().includes(q) ||
+      (profiles[u.username]?.display_name || "").toLowerCase().includes(q) ||
       (u.role_name && u.role_name.toLowerCase().includes(q))
     );
 
@@ -536,6 +547,7 @@ export default function Rolemanagement() {
       ) : (
         <UsersTable
           users={filteredUsers}
+          profiles={profiles}
           onRemove={openDelete}
           onReset={openReset}
           onUnlock={unlockUser}
@@ -570,6 +582,7 @@ export default function Rolemanagement() {
       {modal === "delete" && deleteTarget && (
         <DeleteModal
           user={deleteTarget}
+          profile={profiles[deleteTarget.username]}
           saving={saving}
           onConfirm={confirmDelete}
           onClose={closeModal}
@@ -579,6 +592,7 @@ export default function Rolemanagement() {
       {modal === "view" && viewTarget && (
         <ViewCredentialsModal
           user={viewTarget}
+          profile={profiles[viewTarget.username]}
           onClose={closeModal}
         />
       )}
@@ -593,7 +607,7 @@ export default function Rolemanagement() {
 //
 // The <colgroup> fixes the column widths so every row lines up. The Actions
 // column is a fixed pixel width so its four buttons always fit on one line.
-function UsersTable({ users, onRemove, onReset, onUnlock, onView }) {
+function UsersTable({ users, profiles, onRemove, onReset, onUnlock, onView }) {
   if (!users.length)
     return <div className="rm-empty">No users assigned yet. Add one to get started.</div>;
 
@@ -623,15 +637,21 @@ function UsersTable({ users, onRemove, onReset, onUnlock, onView }) {
             const isLocked = u.lock_level > 0;
             const isOnline = !!u.is_online;
             const perms    = Array.isArray(u.permissions) ? u.permissions : [];
+            const profile  = profiles[u.username];
+            const name     = memberName(u.username, profile);
             return (
               <tr key={u.id} className={isLocked ? "rm-row--locked" : ""}>
                 <td data-label="User">
                   <div className="rm-user-cell">
-                    <span className={`rm-avatar ${u.is_admin ? "rm-avatar--admin" : ""}`}>
-                      {(u.username || "?")[0].toUpperCase()}
-                    </span>
+                    <UserAvatar
+                      src={memberAvatarUrl(u.username, profile)}
+                      name={name}
+                      size={36}
+                      className={`rm-avatar-user${u.is_admin ? " rm-avatar-user--admin" : ""}`}
+                    />
                     <div>
-                      <span>{u.username}</span>
+                      <span>{name}</span>
+                      {name !== u.username && <span className="rm-user-sub">@{u.username}</span>}
                       {isLocked && <span className="rm-locked-badge">Locked</span>}
                     </div>
                   </div>
@@ -1026,8 +1046,9 @@ function ResetPasswordModal({ username, form, setForm, saving, onSave, onClose }
 }
 
 // ─── DELETE MODAL ─────────────────────────────────────────────────────────────
-function DeleteModal({ user, saving, onConfirm, onClose }) {
+function DeleteModal({ user, profile, saving, onConfirm, onClose }) {
   const categoryLabel = (CATEGORIES.find(c => c.key === resolveCategory(user)) || {}).label;
+  const name = memberName(user.username, profile);
 
   return (
     <Overlay onClose={onClose}>
@@ -1036,11 +1057,15 @@ function DeleteModal({ user, saving, onConfirm, onClose }) {
         <div className="rm-modal__body">
 
           <div className="rm-delete-card">
-            <span className={`rm-avatar rm-avatar--lg ${user.is_admin ? "rm-avatar--admin" : ""}`}>
-              {(user.username || "?")[0].toUpperCase()}
-            </span>
+            <UserAvatar
+              src={memberAvatarUrl(user.username, profile)}
+              name={name}
+              size={44}
+              className={`rm-avatar-user${user.is_admin ? " rm-avatar-user--admin" : ""}`}
+            />
             <div className="rm-delete-card__info">
-              <span className="rm-delete-card__name">{user.username}</span>
+              <span className="rm-delete-card__name">{name}</span>
+              {name !== user.username && <span className="rm-user-sub">@{user.username}</span>}
               <span className={`rm-role-pill ${user.is_admin ? "rm-role-pill--admin" : ""}`} style={{ fontSize: "11px", padding: "2px 10px" }}>
                 {user.role_name}
               </span>
@@ -1070,7 +1095,7 @@ function DeleteModal({ user, saving, onConfirm, onClose }) {
 }
 
 // ─── VIEW CREDENTIALS MODAL ───────────────────────────────────────────────────
-function ViewCredentialsModal({ user, onClose }) {
+function ViewCredentialsModal({ user, profile, onClose }) {
   const [showPass, setShowPass] = useState(false);
   const [copied,   setCopied]   = useState(null);
 
@@ -1089,6 +1114,7 @@ function ViewCredentialsModal({ user, onClose }) {
   });
 
   const categoryLabel = (CATEGORIES.find(c => c.key === resolveCategory(user)) || {}).label;
+  const name = memberName(user.username, profile);
 
   return (
     <Overlay onClose={onClose}>
@@ -1097,11 +1123,15 @@ function ViewCredentialsModal({ user, onClose }) {
         <div className="rm-modal__body">
 
           <div className="rm-creds-hero">
-            <span className={`rm-avatar rm-avatar--xl ${user.is_admin ? "rm-avatar--admin" : ""}`}>
-              {(user.username || "?")[0].toUpperCase()}
-            </span>
+            <UserAvatar
+              src={memberAvatarUrl(user.username, profile)}
+              name={name}
+              size={52}
+              className={`rm-avatar-user${user.is_admin ? " rm-avatar-user--admin" : ""}`}
+            />
             <div className="rm-creds-hero__info">
-              <span className="rm-creds-hero__name">{user.username}</span>
+              <span className="rm-creds-hero__name">{name}</span>
+              {name !== user.username && <span className="rm-user-sub">@{user.username}</span>}
               <span className={`rm-role-pill ${user.is_admin ? "rm-role-pill--admin" : ""}`}>
                 {user.role_name}
               </span>
@@ -1124,6 +1154,13 @@ function ViewCredentialsModal({ user, onClose }) {
                 >
                   {copied === "username" ? <CheckIcon /> : <CopyIcon />}
                 </button>
+              </div>
+            </div>
+
+            <div className="rm-cred-row">
+              <span className="rm-cred-row__label">DISPLAY NAME</span>
+              <div className="rm-cred-row__value-wrap">
+                <span className="rm-cred-row__value">{profile?.display_name || "Not set"}</span>
               </div>
             </div>
 

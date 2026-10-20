@@ -217,25 +217,6 @@
 
 .rm-row--locked { background: #fef2f2 !important; }
 
-/* ── Avatar ── */
-.rm-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--rm-primary);
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.9rem;
-  flex-shrink: 0;
-}
-
-.rm-avatar--admin { background: #f59e0b; }
-.rm-avatar--lg    { width: 44px; height: 44px; font-size: 1.1rem; }
-.rm-avatar--xl    { width: 52px; height: 52px; font-size: 1.3rem; }
-
 /* ── User cell ── */
 .rm-user-cell {
   display: flex;
@@ -246,6 +227,24 @@
 
 .rm-user-cell > div {
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── Member avatar (profile picture, or initials when none is set) ── */
+.rm-wrap .rm-avatar-user {
+  background: var(--rm-primary);
+  color: #fff;
+  border: none;
+  font-weight: 700;
+}
+
+.rm-wrap .rm-avatar-user--admin { background: #f59e0b; }
+
+/* Login username shown under the display name. */
+.rm-user-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--rm-text-3);
   overflow-wrap: anywhere;
 }
 
