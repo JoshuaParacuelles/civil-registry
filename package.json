@@ -4,7 +4,7 @@
   "description": "Civil Registry System",
   "author": "Civil Registry Team",
   "private": true,
-  "version": "1.0.24",
+  "version": "1.0.25",
   "type": "module",
   "main": "electron/main.cjs",
   "allowScripts": {
@@ -31,6 +31,15 @@
       "electron/**/*",
       "build/icon.ico",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend-server",
+        "to": "backend-server",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "publish": [
       {
