@@ -23,19 +23,17 @@ import "./DocumentTracking.css";
 // The server must answer within this time, or the list shows a retry message.
 const LIST_TIMEOUT_MS = 20000;
 
-// Delay before the list row (status / active step) is refreshed after a write.
-const LIST_REFRESH_DELAY_MS = 800;
-
-// Coalesces bursts of realtime signals (one user action can fire several).
-const REALTIME_DEBOUNCE_MS = 300;
+// One debounced refresh path for writes, realtime signals, and reconnects.
+// Coalesces bursts so one user action causes one list/detail reload.
+const REFRESH_DEBOUNCE_MS = 300;
 
 // How often the posting-period countdown re-evaluates.
 const CLOCK_TICK_MS = 30000;
 
 const DOCUMENT_PAGE_SIZE = 50;
 
-// How long a locally created/removed document is protected from a stale
-// server or cache copy.
+// How long a locally removed document is protected from a stale server or
+// cache copy.
 const LOCAL_GUARD_MS = 10000;
 
 // Length of the delete/archive animation before the row is taken out of the list.
@@ -273,15 +271,23 @@ const DetailSkeleton = () => (
 // ─────────────────────────────────────────────────────────────────────────
 
 const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect, isNew, leaving }) {
-  const style = STATUS_STYLES[doc.status] || STATUS_STYLES["In review"];
+  // Rows still being saved (or queued offline) are shown but cannot be opened yet.
+  const saving = Boolean(doc.pending);
+  const style = saving
+    ? STATUS_STYLES["In review"]
+    : STATUS_STYLES[doc.status] || STATUS_STYLES["In review"];
+  const badgeText = saving ? (doc.queued ? "Waiting to sync" : "Saving…") : doc.status;
+
   return (
     <button
       className="dt-row"
       data-selected={selected}
       data-new={isNew}
       data-leaving={leaving}
-      aria-disabled={leaving}
-      onClick={() => { if (!leaving) onSelect(doc.id); }}
+      data-pending={saving}
+      aria-disabled={leaving || saving}
+      disabled={saving}
+      onClick={() => { if (!leaving && !saving) onSelect(doc.id); }}
     >
       <div className="dt-row-main">
         <span className="dt-row-id">
@@ -299,7 +305,7 @@ const DocumentRow = memo(function DocumentRow({ doc, selected, onSelect, isNew, 
       </div>
       <div className="dt-row-side">
         <span className="dt-badge" style={{ color: style.fg, background: style.bg }}>
-          {doc.status}
+          {badgeText}
         </span>
       </div>
     </button>
@@ -338,10 +344,14 @@ export default function DocumentTracking() {
   const [visibleCount, setVisibleCount] = useState(DOCUMENT_PAGE_SIZE);
   const [filter, setFilter] = useState("All");
 
-  // Documents created/removed on this device. Each entry: { archived, ts }.
-  // Used so a stale server or cache copy does not undo a change the user just made.
-  const localCreatedRef = useRef(new Map());
+  // Documents removed on this device. Each entry: { archived, ts }.
+  // Stops a stale server or cache copy from bringing back a removed row.
   const localRemovedRef = useRef(new Map());
+  // Documents created on this device and confirmed by the server. Each entry: { archived, ts }.
+  const localCreatedRef = useRef(new Map());
+  // Creates still being saved, or queued offline. Keyed by temporary id.
+  // Kept until the server lists the same doc_number, so no timer can drop them.
+  const pendingCreatesRef = useRef(new Map());
 
   // Row animation state.
   const [justCreatedId, setJustCreatedId] = useState(null);
@@ -388,8 +398,7 @@ export default function DocumentTracking() {
   // Request-id tickets so an older response can never overwrite a newer one.
   const listRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
-  const listRefreshTimerRef = useRef(null);
-  const realtimeTimerRef = useRef(null);
+  const refreshTimerRef = useRef(null);
 
   const detailRef = useRef(null);
   detailRef.current = detail;
@@ -411,10 +420,10 @@ export default function DocumentTracking() {
   useEffect(() => () => clearTimeout(saveTimerRef.current), []);
 
   // Puts rows on screen for the current view. Keeps the selection when it
-  // still exists, otherwise selects the first row.
+  // still exists, otherwise selects the first saved (non-pending) row.
   //
-  // Recently created documents stay on screen until the server returns them.
-  // Recently removed documents stay hidden even if a stale copy still lists them.
+  // Rows still being created stay on screen until the server lists the same
+  // doc_number. Recently removed rows stay hidden even if a stale copy lists them.
   const applyRows = useCallback((rows, archivedView) => {
     const now = Date.now();
 
@@ -435,30 +444,50 @@ export default function DocumentTracking() {
       // Archive shows only archived.
       .filter((d) => (archivedView ? d.archived : !d.archived));
     const serverIds = new Set(serverRows.map((d) => String(d.id)));
+    const serverNumbers = new Set(serverRows.map((d) => d.docNumber));
 
-    // The server now has these created documents, so they no longer need a guard.
+    // The server now has these documents, so they no longer need a guard.
     for (const id of serverIds) localCreatedRef.current.delete(id);
 
-    // Keep recently created documents the server does not return yet.
-    const pending = documentsRef.current.filter((d) => {
-      const e = localCreatedRef.current.get(String(d.id));
-      return e && isFresh(e) && !serverIds.has(String(d.id));
-    });
-    const pendingIds = new Set(pending.map((d) => String(d.id)));
+    // Creates still in flight. Dropped once the server lists the same doc_number.
+    const creates = [];
+    for (const [key, row] of pendingCreatesRef.current) {
+      if (serverNumbers.has(row.docNumber)) {
+        pendingCreatesRef.current.delete(key);
+      } else if (!archivedView) {
+        creates.push(row);
+      }
+    }
 
-    // Hide recently removed documents even if the server or cache still lists them.
+    // Confirmed creates the server does not return yet.
+    const confirmed = documentsRef.current.filter((d) => {
+      if (d.pending) return false;
+      const e = localCreatedRef.current.get(String(d.id));
+      return Boolean(e) && isFresh(e) && !serverIds.has(String(d.id));
+    });
+
+    // Server rows, minus those removed on this device.
     const kept = serverRows.filter((d) => {
-      if (pendingIds.has(String(d.id))) return false;
       const e = localRemovedRef.current.get(String(d.id));
       return !(e && isFresh(e));
     });
 
-    const mapped = [...pending, ...kept];
+    // Combine and de-duplicate by id.
+    const seen = new Set();
+    const mapped = [];
+    for (const d of [...creates, ...confirmed, ...kept]) {
+      const k = String(d.id);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      mapped.push(d);
+    }
 
     documentsRef.current = mapped;
     setDocuments(mapped);
     setSelectedId((prev) =>
-      prev != null && mapped.some((d) => d.id === prev) ? prev : (mapped[0]?.id ?? null)
+      prev != null && mapped.some((d) => d.id === prev)
+        ? prev
+        : (mapped.find((d) => !d.pending)?.id ?? null)
     );
     return mapped;
   }, []);
@@ -499,14 +528,6 @@ export default function DocumentTracking() {
     }
   }, [applyRows]);
 
-  const scheduleListRefresh = useCallback(() => {
-    clearTimeout(listRefreshTimerRef.current);
-    listRefreshTimerRef.current = setTimeout(
-      () => loadList({ silent: true }),
-      LIST_REFRESH_DELAY_MS
-    );
-  }, [loadList]);
-
   // Loads the selected document. Silent refreshes are skipped while that
   // document still has unsettled writes; the last write to settle triggers one.
   // Returns true when the detail is up to date, false when the server failed.
@@ -544,11 +565,22 @@ export default function DocumentTracking() {
     }
   }, []);
 
+  // The single debounced refresh path. Used after writes, by realtime
+  // signals, by the global documents-changed event, and after reconnects.
+  const scheduleRefresh = useCallback(() => {
+    clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      loadList({ silent: true });
+      if (selectedIdRef.current != null) {
+        loadDetail(selectedIdRef.current, { silent: true });
+      }
+    }, REFRESH_DEBOUNCE_MS);
+  }, [loadList, loadDetail]);
+
   // Manual refresh (the global Refresh button via RefreshContext).
   // The list reloads non-silently so the loading state shows when nothing is
   // cached. The detail reloads silently so its card does not flash.
   // Throws on failure so the Topbar shows a failed state.
-  // Top level of the component, after loadDetail, so it follows the Rules of Hooks.
   const refreshAll = useCallback(async () => {
     const listOk = await loadList();
     if (!listOk) throw new Error("Could not refresh the document list.");
@@ -573,12 +605,10 @@ export default function DocumentTracking() {
     const remaining = (pendingWritesRef.current.get(key) || 1) - 1;
     if (remaining > 0) {
       pendingWritesRef.current.set(key, remaining);
-      return;
+    } else {
+      pendingWritesRef.current.delete(key);
     }
-    pendingWritesRef.current.delete(key);
-    // Last write for this document has settled: pull the server copy once.
-    loadDetail(docId, { silent: true });
-  }, [loadDetail]);
+  }, []);
 
   // Applies a change to the selected document only if it is still the one shown.
   const patchDetail = useCallback((docId, fn) => {
@@ -589,8 +619,8 @@ export default function DocumentTracking() {
   //  1. Update the screen now (apply).
   //  2. Send the request in the background.
   //  3. On success, run onSuccess and confirm.
-  //  4. On failure, show the error and run onError. The write is settled
-  //     afterwards, which re-syncs the document from the server.
+  //  4. On failure, show the error and run onError.
+  //  5. Always schedule one debounced refresh to re-sync from the server.
   const performWrite = useCallback(({
     docId, key, apply, request, successMsg, errorFallback, onSuccess, onError,
   }) => {
@@ -613,7 +643,6 @@ export default function DocumentTracking() {
           );
         }
         flashSaved();
-        scheduleListRefresh();
       })
       .catch((e) => {
         console.error("[DocumentTracking] Action failed:", e);
@@ -625,8 +654,9 @@ export default function DocumentTracking() {
       .finally(() => {
         if (key) inFlightRef.current.delete(key);
         endWrite(docId);
+        scheduleRefresh();
       });
-  }, [patchDetail, flashSaved, scheduleListRefresh, endWrite]);
+  }, [patchDetail, flashSaved, scheduleRefresh, endWrite]);
 
   // ── Effects: load, selection, realtime, sync ─────────────────────────
   useEffect(() => { loadList(); }, [loadList]);
@@ -637,45 +667,31 @@ export default function DocumentTracking() {
     return () => clearInterval(timer);
   }, []);
 
-  // Clears the pending timers when the page unmounts.
+  // Clears the pending refresh timer when the page unmounts.
   useEffect(() => {
-    return () => {
-      clearTimeout(listRefreshTimerRef.current);
-      clearTimeout(realtimeTimerRef.current);
-    };
+    return () => clearTimeout(refreshTimerRef.current);
   }, []);
 
-  // One debounced refresh path for the realtime channel, the global
-  // documents-changed event, and database reconnects.
-  const refreshOpenViews = useCallback(() => {
-    clearTimeout(realtimeTimerRef.current);
-    realtimeTimerRef.current = setTimeout(() => {
-      loadList({ silent: true });
-      if (selectedIdRef.current != null) {
-        loadDetail(selectedIdRef.current, { silent: true });
-      }
-    }, REALTIME_DEBOUNCE_MS);
-  }, [loadList, loadDetail]);
-
-  // Subscribes to the change signal sent by the database trigger. The signal
-  // carries only the table name; the data itself is re-read through the Flask
-  // API, which still enforces login, admin and stage permissions.
+  // Realtime: the database trigger sends a Broadcast signal on
+  // 'document-tracking'. The signal carries only the table name; the data is
+  // re-read through the Flask API, which still enforces login, admin and
+  // stage permissions. Also refreshes on the global event and on reconnect.
   useEffect(() => {
-    window.addEventListener("documents-changed", refreshOpenViews);
+    window.addEventListener("documents-changed", scheduleRefresh);
     const unsubDb = subscribeDb((ok) => {
-      if (ok) refreshOpenViews();
+      if (ok) scheduleRefresh();
     });
     const channel = supabase
       .channel("document-tracking")
-      .on("broadcast", { event: "changed" }, refreshOpenViews)
-      .subscribe();
+      .on("broadcast", { event: "changed" }, scheduleRefresh)
+      .subscribe((status) => console.log("[document-tracking]", status));
 
     return () => {
-      window.removeEventListener("documents-changed", refreshOpenViews);
+      window.removeEventListener("documents-changed", scheduleRefresh);
       unsubDb();
       channel.unsubscribe();
     };
-  }, [refreshOpenViews]);
+  }, [scheduleRefresh]);
 
   useEffect(() => {
     setOpenStage(null);
@@ -690,13 +706,10 @@ export default function DocumentTracking() {
   useEffect(() => {
     let wasSyncing = false;
     return subscribeSyncState((s) => {
-      if (wasSyncing && !s.syncing) {
-        loadList({ silent: true });
-        if (selectedIdRef.current != null) loadDetail(selectedIdRef.current, { silent: true });
-      }
+      if (wasSyncing && !s.syncing) scheduleRefresh();
       wasSyncing = s.syncing;
     });
-  }, [loadList, loadDetail]);
+  }, [scheduleRefresh]);
 
   useEffect(() => {
     if (newDocOpen && newDocNumberRef.current) newDocNumberRef.current.focus();
@@ -766,13 +779,13 @@ export default function DocumentTracking() {
 
   // ── Archive / restore / permanent delete ─────────────────────────────
   // Removes a document from the visible list right away and moves the
-  // selection to the next one. Only changes the screen, not the server.
+  // selection to the next saved row. Only changes the screen, not the server.
   const removeFromListLocally = (id) => {
     const remaining = documentsRef.current.filter((d) => String(d.id) !== String(id));
     documentsRef.current = remaining;
     setDocuments(remaining);
     if (String(selectedIdRef.current) === String(id)) {
-      setSelectedId(remaining[0]?.id ?? null);
+      setSelectedId(remaining.find((d) => !d.pending)?.id ?? null);
       setDetail(null);
     }
   };
@@ -825,7 +838,7 @@ export default function DocumentTracking() {
       onSuccessLocal?.();
       flashSaved();
       notify(successMsg, "success");
-      scheduleListRefresh();
+      scheduleRefresh();
       return;
     }
 
@@ -1068,6 +1081,24 @@ export default function DocumentTracking() {
     setNewDocTypeOther("");
   };
 
+  // Replaces one row in the list (or removes it when nextRow is null).
+  // The new row goes to the top, matching the server's order.
+  const replaceDocumentRow = (oldId, nextRow) => {
+    const next = [
+      ...(nextRow ? [nextRow] : []),
+      ...documentsRef.current.filter(
+        (d) =>
+          String(d.id) !== String(oldId) &&
+          (!nextRow || String(d.id) !== String(nextRow.id))
+      ),
+    ];
+    documentsRef.current = next;
+    setDocuments(next);
+  };
+
+  // The new row appears in the list immediately, marked "Saving…". It is
+  // replaced by the real row when the server confirms, or removed (and the
+  // form reopened with the entered values) when the request fails.
   const submitNewDocument = () => {
     const docNumber = newDocNumber.trim();
     const title = newDocTitle.trim();
@@ -1095,9 +1126,30 @@ export default function DocumentTracking() {
       typeOther: newDocTypeOther,
     };
 
+    const tempKey = `tmp-${Date.now()}`;
+    const tempRow = {
+      id: tempKey,
+      docNumber,
+      title,
+      owner: "Unassigned",
+      activeStage: null,
+      type: resolvedType,
+      status: "In review",
+      updated: formatDate(new Date().toISOString()),
+      rejected: false,
+      archived: false,
+      archivedAt: null,
+      pending: true,
+      queued: false,
+    };
+
     setNewDocError(null);
     setNewDocOpen(false);
     resetNewDocForm();
+
+    // Show the row now, before the server replies.
+    pendingCreatesRef.current.set(tempKey, tempRow);
+    replaceDocumentRow(tempKey, tempRow);
 
     trackingWrite({
       path: "/api/documents",
@@ -1105,38 +1157,41 @@ export default function DocumentTracking() {
       label: `New document ${docNumber}`,
     })
       .then((created) => {
-        if (created?.id != null && viewModeRef.current === "active") {
-          const summary = mapDocumentSummary(created);
-          const key = String(summary.id);
+        if (created?.id != null) {
+          // Confirmed by the server: swap the temporary row for the real one.
+          pendingCreatesRef.current.delete(tempKey);
+          const real = mapDocumentSummary(created);
+          const realKey = String(real.id);
+          localCreatedRef.current.set(realKey, { archived: false, ts: Date.now() });
+          localRemovedRef.current.delete(realKey);
 
-          // Protect the new row from a stale server or cache copy.
-          localCreatedRef.current.set(key, { archived: false, ts: Date.now() });
-          localRemovedRef.current.delete(key);
+          const inActive = viewModeRef.current === "active";
+          replaceDocumentRow(tempKey, inActive ? real : null);
 
-          const next = [summary, ...documentsRef.current.filter((d) => String(d.id) !== key)];
-          documentsRef.current = next;
-          setDocuments(next);
-          setSelectedId(summary.id);
-
-          // Highlight the new row briefly.
-          setJustCreatedId(summary.id);
-          setTimeout(
-            () => setJustCreatedId((current) => (current === summary.id ? null : current)),
-            NEW_ROW_ANIM_MS
-          );
+          if (inActive) {
+            setSelectedId(real.id);
+            setJustCreatedId(real.id);
+            setTimeout(
+              () => setJustCreatedId((current) => (current === real.id ? null : current)),
+              NEW_ROW_ANIM_MS
+            );
+          }
+          flashSaved();
+          notify("Document created.", "success");
+        } else {
+          // Queued offline: keep the row, marked until it syncs.
+          const queuedRow = { ...tempRow, queued: true };
+          pendingCreatesRef.current.set(tempKey, queuedRow);
+          replaceDocumentRow(tempKey, queuedRow);
+          notify("Saved on this device. It will sync when the connection returns.", "success");
         }
-        flashSaved();
-        notify(
-          created?.queued
-            ? "Saved on this device. It will sync when the connection returns."
-            : "Document created.",
-          "success"
-        );
-        scheduleListRefresh();
       })
       .catch((e) => {
         console.error("[DocumentTracking] Failed to create document:", e);
-        const message = e.message || "Could not create this document.";
+        pendingCreatesRef.current.delete(tempKey);
+        replaceDocumentRow(tempKey, null);
+
+        const message = e?.message || "Could not create this document.";
         notify(message, "error");
         // Reopen the form with the entered values so nothing is lost.
         setNewDocNumber(snapshot.docNumber);
@@ -1145,7 +1200,8 @@ export default function DocumentTracking() {
         setNewDocTypeOther(snapshot.typeOther);
         setNewDocError(message);
         setNewDocOpen(true);
-      });
+      })
+      .finally(() => scheduleRefresh());
   };
 
   // ── Confirm dialogs ──────────────────────────────────────────────────
