@@ -4,7 +4,7 @@
   "description": "Civil Registry System",
   "author": "Civil Registry Team",
   "private": true,
-   "version": "1.0.19",
+  "version": "1.0.20",
   "type": "module",
   "main": "electron/main.cjs",
   "allowScripts": {
@@ -16,7 +16,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:build": "cross-env ELECTRON=1 VITE_API_BASE_URL=http://127.0.0.1:5000 vite build && electron-builder --win nsis --publish never",
-    "electron:dist": "cross-env ELECTRON=1 VITE_API_BASE_URL=https://civil-registry-backend.onrender.com vite build && electron-builder --win nsis --publish never",
+    "electron:release": "cross-env ELECTRON=1 VITE_API_BASE_URL=https://civil-registry-backend.onrender.com vite build && electron-builder --win nsis --publish always",
     "electron:start": "electron ."
   },
   "build": {
@@ -46,7 +46,6 @@
       "icon": "build/icon.ico"
     },
     "nsis": {
-      "artifactName": "Civil-Registry-System-Setup-${version}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
