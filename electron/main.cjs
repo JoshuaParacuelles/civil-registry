@@ -13,10 +13,17 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 // ---------- Backend settings ----------
 
 // Render backend URL. Kinahanglan parehas ang URL sa VITE_API_BASE_URL sa package.json.
-const REMOTE_API_BASE = 'http://127.0.0.1:5000';
+const REMOTE_API_BASE = 'https://civil-registry-backend.onrender.com';
 
-// Para sa development: i-set ang API_BASE_URL=http://127.0.0.1:5000 aron mogamit sa local app.py
-const API_BASE = (process.env.API_BASE_URL || REMOTE_API_BASE).replace(/\/+$/, '');
+// Local backend URL (gamit sa development ug local build).
+const LOCAL_API_BASE = 'http://127.0.0.1:5000';
+
+// Packaged app = remote by default. Dev = local by default.
+// Override with API_BASE_URL env var kung gusto nimo i-test ang lain.
+const API_BASE = (
+  process.env.API_BASE_URL || (app.isPackaged ? REMOTE_API_BASE : LOCAL_API_BASE)
+).replace(/\/+$/, '');
+
 const USE_LOCAL_BACKEND = /127\.0\.0\.1|localhost/.test(API_BASE);
 
 const API_PORT = process.env.API_PORT || '5000';
@@ -27,14 +34,14 @@ const API_URLS = USE_LOCAL_BACKEND
 // Local mode lang: backend source/exe location
 const BACKEND_DIR = process.env.BACKEND_DIR || (app.isPackaged
   ? path.join(process.resourcesPath, 'backend-server')
-  : path.join(__dirname, '..', '..', 'backend'));
+  : path.join(__dirname, '..', 'backend'));
 
 const BACKEND_ENTRY = app.isPackaged
   ? path.join(BACKEND_DIR, 'backend.exe')
   : path.join(BACKEND_DIR, 'app.py');
 
-// Kung naa kay virtual environment, i-uncomment ug usba ang path:
-// const PYTHON_EXE = 'C:\\Users\\ACER\\Desktop\\Fcapstone\\backend\\venv\\Scripts\\python.exe';
+// Kung naa kay virtual environment, i-set ang PYTHON_EXE env var o usba dinhi:
+// const PYTHON_EXE = 'C:\\Users\\ACER\\Desktop\\Fcapstone\\civil-registry\\backend\\venv\\Scripts\\python.exe';
 const PYTHON_EXE = process.env.PYTHON_EXE || 'python';
 
 const SKIP_BACKEND = process.env.SKIP_BACKEND === '1';
