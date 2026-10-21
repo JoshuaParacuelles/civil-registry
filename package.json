@@ -24,9 +24,9 @@
     "appId": "ph.civilregistry.desktop",
     "productName": "Civil Registry System",
     "directories": {
-      "output": "release",
-      "buildResources": "build"
-    },
+  "output": "release-1.0.34",
+  "buildResources": "build"
+},
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -63,7 +63,7 @@
   "createStartMenuShortcut": true,
   "shortcutName": "Civil Registry System",
   "artifactName": "Civil-Registry-System-Setup-${version}.${ext}"
-}
+ }
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
