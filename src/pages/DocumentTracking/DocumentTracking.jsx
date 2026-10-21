@@ -2,6 +2,7 @@ import { useState, useMemo, memo, useEffect, useRef, useCallback, useDeferredVal
 import { usePermissions } from "../../context/PermissionContext";
 import { useRegisterRefresh } from "../../context/RefreshContext";
 import { pushToast } from "../../services/toastService";
+import { supabase } from "../../services/supabaseClient";
 import { isDbAvailable, subscribeDb } from "../../offline/connectivityService";
 import { subscribeSyncState } from "../../offline/syncEngine";
 import {
@@ -24,6 +25,9 @@ const LIST_TIMEOUT_MS = 20000;
 
 // Delay before the list row (status / active step) is refreshed after a write.
 const LIST_REFRESH_DELAY_MS = 800;
+
+// Coalesces bursts of realtime signals (one user action can fire several).
+const REALTIME_DEBOUNCE_MS = 300;
 
 // How often the posting-period countdown re-evaluates.
 const CLOCK_TICK_MS = 30000;
@@ -385,6 +389,7 @@ export default function DocumentTracking() {
   const listRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
   const listRefreshTimerRef = useRef(null);
+  const realtimeTimerRef = useRef(null);
 
   const detailRef = useRef(null);
   detailRef.current = detail;
@@ -632,31 +637,45 @@ export default function DocumentTracking() {
     return () => clearInterval(timer);
   }, []);
 
-  // Refresh when GlobalRealtime reports a change, and when the database
-  // comes back online.
+  // Clears the pending timers when the page unmounts.
   useEffect(() => {
-    const onChanged = () => {
+    return () => {
+      clearTimeout(listRefreshTimerRef.current);
+      clearTimeout(realtimeTimerRef.current);
+    };
+  }, []);
+
+  // One debounced refresh path for the realtime channel, the global
+  // documents-changed event, and database reconnects.
+  const refreshOpenViews = useCallback(() => {
+    clearTimeout(realtimeTimerRef.current);
+    realtimeTimerRef.current = setTimeout(() => {
       loadList({ silent: true });
       if (selectedIdRef.current != null) {
         loadDetail(selectedIdRef.current, { silent: true });
       }
-    };
-
-    window.addEventListener("documents-changed", onChanged);
-    const unsubDb = subscribeDb((ok) => {
-      if (ok) onChanged();
-    });
-
-    return () => {
-      window.removeEventListener("documents-changed", onChanged);
-      unsubDb();
-    };
+    }, REALTIME_DEBOUNCE_MS);
   }, [loadList, loadDetail]);
 
-  // Clears the pending list refresh when the page unmounts.
+  // Subscribes to the change signal sent by the database trigger. The signal
+  // carries only the table name; the data itself is re-read through the Flask
+  // API, which still enforces login, admin and stage permissions.
   useEffect(() => {
-    return () => clearTimeout(listRefreshTimerRef.current);
-  }, []);
+    window.addEventListener("documents-changed", refreshOpenViews);
+    const unsubDb = subscribeDb((ok) => {
+      if (ok) refreshOpenViews();
+    });
+    const channel = supabase
+      .channel("document-tracking")
+      .on("broadcast", { event: "changed" }, refreshOpenViews)
+      .subscribe();
+
+    return () => {
+      window.removeEventListener("documents-changed", refreshOpenViews);
+      unsubDb();
+      channel.unsubscribe();
+    };
+  }, [refreshOpenViews]);
 
   useEffect(() => {
     setOpenStage(null);
