@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
@@ -8,7 +8,10 @@ import AccuracyBadge from "../../../components/AccuracyBadge";
 import { Skeleton, SkeletonTable } from "../../../components/Skeleton";
 import UploadRecordsModal from "../../../components/UploadRecordsModal";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
-import { isOnline, checkNow } from "../../../offline/connectivityService";
+import useOnlineStatus from "../../../hooks/useOnlineStatus";
+import { useDataChanged } from "../../../hooks/useDataChanged";
+import { isOnline } from "../../../offline/connectivityService";
+import { subscribeSyncState } from "../../../offline/syncEngine";
 import { newOpId } from "../../../offline/outboxQueue";
 import { apiFetch } from "../../../services/apiFetch";
 import { useRegisterRefresh } from "../../../context/RefreshContext";
@@ -16,18 +19,21 @@ import { runBulkDelete } from "../../../utils/bulkDelete";
 import {
   useVitalData, loadPdfForRecord, deleteRecordSmart, queueUpload, queueTransaction,
 } from "../../../offline/vitalOffline";
-import { verifyArchivePasswordOffline, refreshOfflineCredential } from "../../../offline/archivePassword";
-import { useDataChanged } from "../../../hooks/useDataChanged";
+import {
+  verifyArchivePasswordOffline,
+  refreshOfflineCredential,
+} from "../../../offline/archivePassword";
 
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/death`;
 const ENTITY = "death";
 const FEE = 75;
 
-// Realtime: tables nga mo-trigger og reload sa Death Verifier.
+// Realtime: tables that trigger a reload of the Death Verifier.
 const DEATH_LIVE_TABLES = ["death_records", "death_transactions"];
 
+// Stable function reference. An unstable one causes effect loops.
 function useShowNotif() {
-  return (message, type = "success") => {
+  return useCallback((message, type = "success") => {
     const ok = type === "success";
     pushToast({
       title: ok ? "Success" : "Error",
@@ -35,7 +41,7 @@ function useShowNotif() {
       success: ok,
       duration: 5000,
     });
-  };
+  }, []);
 }
 
 // ── Office details ─────────────────────────────────────────────────────────
@@ -57,22 +63,11 @@ const LOGO_SRC_2 = lcrLogo;
 
 const STEPS = [
   { key: "select",    label: "Select Record" },
-  { key: "payment",  label: "Review & Print" },
+  { key: "payment",   label: "Review & Print" },
   { key: "releasing", label: "Releasing" },
 ];
 
-const VISUALLY_HIDDEN_STYLE = {
-  position: "absolute",
-  width: "1px",
-  height: "1px",
-  padding: 0,
-  margin: "-1px",
-  overflow: "hidden",
-  clip: "rect(0, 0, 0, 0)",
-  whiteSpace: "nowrap",
-  border: 0,
-};
-
+// ── Viewport hook ──────────────────────────────────────────────────────────
 function useViewport() {
   const [width, setWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1024,
@@ -82,17 +77,13 @@ function useViewport() {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
-
   return {
-    width,
-    isMobile: width < 768,
-    isTablet: width >= 768 && width < 1024,
+    isMobile: width < 480,
+    isTablet: width >= 480 && width < 768,
   };
 }
 
 // ── Resilient JSON fetch ───────────────────────────────────────────────────
-// Retries a couple of times on failure (e.g. the server is briefly busy right
-// after an upload) and surfaces the server's real error message.
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchJsonWithRetry(url, { signal, retries = 2, delay = 500 } = {}) {
@@ -113,6 +104,7 @@ async function fetchJsonWithRetry(url, { signal, retries = 2, delay = 500 } = {}
   throw lastErr;
 }
 
+// ── Utilities ──────────────────────────────────────────────────────────────
 const formatDate = (d) => {
   if (!d) return "—";
   const parsed = new Date(d);
@@ -163,10 +155,11 @@ function normalizeDisplayName(filename) {
 
 function getRecordDisplayName(record) {
   if (!record) return "";
-  const first  = cleanNamePart(record.deceased_first_name);
-  const middle = cleanNamePart(record.deceased_middle_name);
-  const last   = cleanNamePart(record.deceased_last_name);
-  const fromParts = formatFullName(first, middle, last);
+  const fromParts = formatFullName(
+    cleanNamePart(record.deceased_first_name),
+    cleanNamePart(record.deceased_middle_name),
+    cleanNamePart(record.deceased_last_name),
+  );
   if (fromParts) return fromParts;
   if (record.deceased_full_name) return toTitleCase(record.deceased_full_name);
   return normalizeDisplayName(record.file_name || "");
@@ -200,8 +193,7 @@ function normalizeForSearch(record) {
 
 function matchesSearch(record, query) {
   if (!query || !query.trim()) return true;
-  const haystack      = normalizeForSearch(record);
-  const haystackWords = haystack.split(/\s+/).filter(Boolean);
+  const haystackWords = normalizeForSearch(record).split(/\s+/).filter(Boolean);
   const queryWords    = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
   return queryWords.every((qw) => haystackWords.some((hw) => hw === qw));
 }
@@ -235,30 +227,71 @@ function getRecordGivenNames(record) {
   return parts[0] || "";
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// PDF DECODING (same logic as Birth: handles plain base64, data URLs,
+// and double base64-encoded data)
+// ─────────────────────────────────────────────────────────────────────────
+function bytesFromBase64(b64) {
+  const cleaned     = b64.replace(/\s/g, "");
+  const byteChars   = atob(cleaned);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  return new Uint8Array(byteNumbers);
+}
+
+function looksLikePdf(bytes) {
+  return (
+    !!bytes && bytes.length >= 4 &&
+    bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
+  );
+}
+
 function createPdfBlobFromData(pdfData) {
   if (!pdfData) return null;
   try {
-    if (pdfData instanceof Blob)
+    if (pdfData instanceof Blob) {
       return pdfData.type === "application/pdf"
         ? pdfData : new Blob([pdfData], { type: "application/pdf" });
+    }
     if (typeof pdfData !== "string") return null;
-    if (pdfData.startsWith("data:application/pdf;base64,")) {
-      const cleaned      = pdfData.replace(/^data:application\/pdf;base64,/i, "").replace(/\s/g, "");
-      const byteChars    = atob(cleaned);
-      const byteNumbers  = new Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-      return new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
+
+    if (pdfData.startsWith("blob:") || pdfData.startsWith("http://") || pdfData.startsWith("https://")) {
+      return null;
     }
-    if (pdfData.startsWith("%PDF"))
-      return new Blob([pdfData], { type: "application/pdf" });
-    if (!pdfData.startsWith("blob:") && !pdfData.startsWith("http://") && !pdfData.startsWith("https://")) {
-      const cleaned     = pdfData.replace(/\s/g, "");
-      const byteChars   = atob(cleaned);
-      const byteNumbers = new Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-      return new Blob([new Uint8Array(byteNumbers)], { type: "application/pdf" });
+
+    let cleaned = pdfData.startsWith("data:application/pdf;base64,")
+      ? pdfData.replace(/^data:application\/pdf;base64,/i, "")
+      : pdfData;
+    cleaned = cleaned.replace(/\s/g, "");
+
+    if (cleaned.startsWith("%PDF")) {
+      return new Blob([cleaned], { type: "application/pdf" });
     }
-    return null;
+
+    let bytes;
+    try {
+      bytes = bytesFromBase64(cleaned);
+    } catch (e) {
+      console.error("Invalid base64 PDF data:", e);
+      return null;
+    }
+
+    if (!looksLikePdf(bytes)) {
+      try {
+        const innerText  = new TextDecoder("ascii").decode(bytes).trim();
+        const innerBytes = bytesFromBase64(innerText);
+        if (looksLikePdf(innerBytes)) bytes = innerBytes;
+      } catch {
+        // fall through to the check below
+      }
+    }
+
+    if (!looksLikePdf(bytes)) {
+      console.error("Decoded PDF data does not start with the %PDF signature.");
+      return null;
+    }
+
+    return new Blob([bytes], { type: "application/pdf" });
   } catch (error) {
     console.error("Failed to create PDF blob:", error);
     return null;
@@ -269,7 +302,7 @@ function getPdfBlobUrl(pdfData) {
   if (!pdfData) return "";
   try {
     if (typeof pdfData === "string") {
-      if (pdfData.startsWith("blob:"))   return pdfData;
+      if (pdfData.startsWith("blob:")) return pdfData;
       if (pdfData.startsWith("http://") || pdfData.startsWith("https://")) return pdfData;
     }
     const blob = createPdfBlobFromData(pdfData);
@@ -295,8 +328,8 @@ function printPdfFromData(pdfData) {
         if (cleaned) return;
         cleaned = true;
         setTimeout(() => {
-          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch { /* iframe already removed */ }
-          try { URL.revokeObjectURL(blobUrl); } catch { /* URL already revoked */ }
+          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch { /* already removed */ }
+          try { URL.revokeObjectURL(blobUrl); } catch { /* already revoked */ }
         }, 1500);
       };
       iframe.onload = () => {
@@ -305,7 +338,7 @@ function printPdfFromData(pdfData) {
         const doPrint = () => {
           try {
             printWindow.focus();
-            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch { /* print window closed or blocked */ }
+            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch { /* not supported */ }
             printWindow.print();
             setTimeout(() => { cleanup(); resolve(); }, 2000);
           } catch (err) { cleanup(); reject(err); }
@@ -319,6 +352,7 @@ function printPdfFromData(pdfData) {
   });
 }
 
+// ── Office Logo ─────────────────────────────────────────────────────────
 const OfficeLogo = ({ className = "" }) => (
   <div className="office-logo-group">
     <img src={LOGO_SRC} alt="Office Seal" className={className} />
@@ -326,6 +360,7 @@ const OfficeLogo = ({ className = "" }) => (
   </div>
 );
 
+// ── Negative Certificate Document (for print) ──────────────────────────────
 function NegativeCertDocument({ certData }) {
   const {
     subjectName, dateOfDeath, fatherName, motherName,
@@ -334,8 +369,8 @@ function NegativeCertDocument({ certData }) {
   } = certData;
 
   const dateStr   = dateOfDeath ? `on ${formatCertDate(dateOfDeath)} ` : "";
-  const fatherStr = (fatherName  || "[Father's Name]").toUpperCase();
-  const motherStr = (motherName  || "[Mother's Name]").toUpperCase();
+  const fatherStr = (fatherName || "[Father's Name]").toUpperCase();
+  const motherStr = (motherName || "[Mother's Name]").toUpperCase();
   const city      = cityMunicipality || "this city/municipality";
   const reqName   = (requestorName || "[Requestor's Name]").toUpperCase();
   const year      = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
@@ -396,6 +431,7 @@ function NegativeCertDocument({ certData }) {
   );
 }
 
+// ── Negative Certificate Print Function ────────────────────────────────────
 function printNegativeCertificate(certData) {
   const mountPoint = document.createElement("div");
   mountPoint.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;";
@@ -441,7 +477,6 @@ function printNegativeCertificate(certData) {
   .neg-print-payment-label { min-width: 90pt; flex-shrink: 0; }
   .neg-print-payment-colon { min-width: 8pt; flex-shrink: 0; margin-right: 4pt; }
   .neg-print-payment-value { flex: 1; font-size: 12pt; color: #000; }
-  .neg-print-payment-blank { flex: 1; min-width: 100pt; height: 14pt; display: inline-block; }
   .neg-cert-doc__highlight { font-weight: bold; color: #000; }
 </style>
 </head>
@@ -458,8 +493,8 @@ function printNegativeCertificate(certData) {
           iframe.contentWindow.focus();
           iframe.contentWindow.print();
           setTimeout(() => {
-            try { document.body.removeChild(iframe); } catch { /* iframe already removed */ }
-            try { root.unmount(); document.body.removeChild(mountPoint); } catch { /* unmount cleanup already done */ }
+            try { document.body.removeChild(iframe); } catch { /* already removed */ }
+            try { root.unmount(); document.body.removeChild(mountPoint); } catch { /* already cleaned */ }
           }, 2000);
         }, 600);
       };
@@ -467,6 +502,8 @@ function printNegativeCertificate(certData) {
     });
   });
 }
+
+/* ── SVG Icon Components ─────────────────────────────────────────────────── */
 
 const IconDocument = ({ className = "" }) => (
   <svg className={`icon-svg icon-svg--md ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -567,6 +604,8 @@ const IconDocumentLg = ({ className = "" }) => (
   </svg>
 );
 
+/* ── Sub-components ──────────────────────────────────────────────────────── */
+
 const ConfirmModal = ({
   title, message, confirmLabel, confirmColor = "#dc2626", onConfirm, onCancel,
 }) => (
@@ -588,14 +627,14 @@ const ConfirmModal = ({
   </div>
 );
 
-const NegCertField = ({ label, required, error, htmlFor, children }) => (
+const NegCertField = ({ label, htmlFor, required, error, children }) => (
   <div className="negcert-info-modal__field">
     <label className="negcert-info-modal__label" htmlFor={htmlFor}>
       {label}
       {required && <span className="negcert-info-modal__required"> *</span>}
     </label>
     {children}
-    {error && <span className="negcert-info-modal__error" role="alert">&#9888; {error}</span>}
+    {error && <span className="negcert-info-modal__error">&#9888; {error}</span>}
   </div>
 );
 
@@ -609,7 +648,7 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
 
   const handleSubmit = () => {
     let valid = true;
-    if (!dateOfDeath)       { setDodError("Date of death is required.");    valid = false; } else setDodError("");
+    if (!dateOfDeath)       { setDodError("Date of death is required.");     valid = false; } else setDodError("");
     if (!fatherName.trim()) { setFatherError("Father's name is required."); valid = false; } else setFatherError("");
     if (!motherName.trim()) { setMotherError("Mother's name is required."); valid = false; } else setMotherError("");
     if (!valid) return;
@@ -634,9 +673,9 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
         </div>
 
         <div className="negcert-info-modal__fields">
-          <NegCertField label="Date of Death" required error={dodError} htmlFor="negcert-date-of-death">
+          <NegCertField label="Date of Death" htmlFor="negcert-dod" required error={dodError}>
             <input
-              id="negcert-date-of-death"
+              id="negcert-dod"
               name="dateOfDeath"
               type="date"
               className={`negcert-info-modal__input${dodError ? " negcert-info-modal__input--error" : ""}`}
@@ -646,12 +685,11 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
             />
           </NegCertField>
 
-          <NegCertField label="Father's Full Name" required error={fatherError} htmlFor="negcert-father-name">
+          <NegCertField label="Father's Full Name" htmlFor="negcert-father" required error={fatherError}>
             <input
-              id="negcert-father-name"
+              id="negcert-father"
               name="fatherName"
               type="text"
-              autoComplete="off"
               className={`negcert-info-modal__input${fatherError ? " negcert-info-modal__input--error" : ""}`}
               value={fatherName}
               onChange={(e) => { setFatherName(e.target.value); if (e.target.value.trim()) setFatherError(""); }}
@@ -659,12 +697,11 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
             />
           </NegCertField>
 
-          <NegCertField label="Mother's Full Name" required error={motherError} htmlFor="negcert-mother-name">
+          <NegCertField label="Mother's Full Name" htmlFor="negcert-mother" required error={motherError}>
             <input
-              id="negcert-mother-name"
+              id="negcert-mother"
               name="motherName"
               type="text"
-              autoComplete="off"
               className={`negcert-info-modal__input${motherError ? " negcert-info-modal__input--error" : ""}`}
               value={motherName}
               onChange={(e) => { setMotherName(e.target.value); if (e.target.value.trim()) setMotherError(""); }}
@@ -675,10 +712,7 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
 
         <div className="modal-acts negcert-info-modal__acts">
           <button className="modal-cancel" onClick={onCancel}>Cancel</button>
-          <button
-            className="modal-confirm negcert-info-modal__submit"
-            onClick={handleSubmit}
-          >
+          <button className="modal-confirm negcert-info-modal__submit" onClick={handleSubmit}>
             Issue Negative Certificate &rarr;
           </button>
         </div>
@@ -688,14 +722,17 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
 };
 
 const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
-  const [pdfUrl, setPdfUrl] = useState("");
+  const [pdfUrl,   setPdfUrl]   = useState("");
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
     const url = getPdfBlobUrl(pdfData);
     setPdfUrl(url);
+    if (pdfData && !url) {
+      showNotif?.("This PDF could not be displayed — the stored file appears to be corrupted.", "error");
+    }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
-  }, [pdfData]);
+  }, [pdfData, showNotif]);
 
   const handlePrint = async () => {
     if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }
@@ -723,7 +760,7 @@ const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
                 {printing ? "Printing…" : "Print"}
               </button>
             )}
-            <button className="hdr-btn hdr-btn--close" onClick={onClose}>✕ Close</button>
+            <button className="hdr-btn hdr-btn--close" onClick={onClose}>&#10005; Close</button>
           </div>
         </div>
         <div className="pdf-body">
@@ -750,10 +787,10 @@ const StepBar = ({ current }) => {
       <div className="ubr-stepbar">
         <div className="ubr-stepbar__inner">
           {STEPS.map((s, i) => {
-            const done = i < idx;
-            const active = i === idx;
-            const mod = done ? "done" : active ? "active" : "pending";
-            const isLast = i === STEPS.length - 1;
+            const done    = i < idx;
+            const active  = i === idx;
+            const mod     = done ? "done" : active ? "active" : "pending";
+            const isLast  = i === STEPS.length - 1;
             const segDone = i < idx;
             return (
               <React.Fragment key={s.key}>
@@ -782,28 +819,22 @@ const StepBar = ({ current }) => {
 
 const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
   const [pwInput, setPwInput] = useState("");
-  const [showPw, setShowPw] = useState(false);
+  const [showPw,  setShowPw]  = useState(false);
   const [loading, setLoading] = useState(false);
 
   const unlockOffline = async (pw) => {
-    try {
-      const result = await verifyArchivePasswordOffline(module, pw);
-
-      if (result === "ok") {
-        showNotif("Unlocked offline.", "success");
-        onUnlock();
-      } else if (result === "wrong") {
-        showNotif("Incorrect password.", "error");
-      } else if (result === "locked") {
-        showNotif("Too many wrong attempts. Try again in 5 minutes.", "error");
-      } else if (result === "unset") {
-        showNotif("No password is set for this module yet.", "error");
-      } else {
-        showNotif("This device hasn't saved the password data yet. Open the app once while online and logged in.", "error");
-      }
-    } catch (error) {
-      console.error("Offline archive password verification failed:", error);
-      showNotif("Unable to verify the offline password.", "error");
+    const result = await verifyArchivePasswordOffline(module, pw);
+    if (result === "ok") {
+      showNotif("Unlocked offline.", "success");
+      onUnlock();
+    } else if (result === "wrong") {
+      showNotif("Incorrect password.", "error");
+    } else if (result === "locked") {
+      showNotif("Too many wrong attempts. Try again in 5 minutes.", "error");
+    } else if (result === "unset") {
+      showNotif("No password is set for this module yet.", "error");
+    } else {
+      showNotif("This device hasn't saved the password data yet. Open the app once while online and logged in, then try again.", "error");
     }
   };
 
@@ -829,17 +860,12 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
 
       const data = await res.json().catch(() => ({}));
       if (data.success) {
-        refreshOfflineCredential();
+        refreshOfflineCredential(module, API);
         onUnlock();
       } else {
         showNotif(data.message || "Incorrect password.", "error");
       }
-    } catch (error) {
-      console.error("Archive password verification failed:", error);
-      showNotif("Unable to verify the archive password.", "error");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
@@ -847,20 +873,18 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
       <div className="pw-gate__icon"><IconLock /></div>
       <p className="pw-gate__desc">{description}</p>
       <div className="pw-gate__form">
-        <label className="pw-lbl" htmlFor="archive-admin-password">Administrator Password</label>
+        <label className="pw-lbl" htmlFor="death-pw-gate-input">Administrator Password</label>
         <div className="pw-input-wrap">
           <input
-            id="archive-admin-password"
-            name="adminPassword"
+            id="death-pw-gate-input"
+            name="password"
             type={showPw ? "text" : "password"}
             value={pwInput}
             onChange={(e) => setPwInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !loading) handleSubmit(); }}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
             placeholder="Enter password"
             className="pw-input"
-            autoComplete="current-password"
             autoFocus
-            disabled={loading}
           />
           <button
             className="pw-toggle"
@@ -868,7 +892,6 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
             onClick={() => setShowPw((v) => !v)}
             title={showPw ? "Hide password" : "Show password"}
             aria-label={showPw ? "Hide password" : "Show password"}
-            disabled={loading}
           >
             {showPw ? <IconEyeOff /> : <IconEye />}
           </button>
@@ -898,9 +921,9 @@ const NegativeCertPreview = ({
   orNumber, onOrNumberChange, onPrint,
 }) => {
   const todayDate = formatTodayLong();
-  const officer = OFFICE_CONFIG.certifyingOfficer;
-  const verified = OFFICE_CONFIG.verifiedBy;
-  const year = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
+  const officer   = OFFICE_CONFIG.certifyingOfficer;
+  const verified  = OFFICE_CONFIG.verifiedBy;
+  const year      = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
 
   return (
     <div className="neg-cert-preview-wrap">
@@ -968,13 +991,13 @@ const NegativeCertPreview = ({
               <span className="neg-cert-doc__payment-value">{OFFICE_CONFIG.amountPaid}</span>
             </div>
             <div className="neg-cert-doc__payment-row">
-              <label className="neg-cert-doc__payment-label" htmlFor="neg-cert-or-number">O.R. Number</label>
+              <span className="neg-cert-doc__payment-label">O.R. Number</span>
               <span className="neg-cert-doc__payment-colon">:</span>
               <input
-                id="neg-cert-or-number"
+                id="death-or-number"
                 name="orNumber"
                 type="text"
-                autoComplete="off"
+                aria-label="O.R. Number"
                 className="neg-cert-doc__payment-value neg-cert-doc__payment-blank neg-cert-doc__or-input"
                 style={{
                   border: "none",
@@ -1009,6 +1032,69 @@ const NegativeCertPreview = ({
   );
 };
 
+const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) => {
+  const displayName           = record ? getRecordDisplayName(record) : "";
+  const [pdfUrl,   setPdfUrl]   = useState("");
+  const [printing, setPrinting] = useState(false);
+
+  useEffect(() => {
+    if (!pdfData) { setPdfUrl(""); return; }
+    const url = getPdfBlobUrl(pdfData);
+    setPdfUrl(url);
+    if (!url) {
+      showNotif?.("This PDF could not be displayed — the stored file appears to be corrupted.", "error");
+    }
+    return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
+  }, [pdfData, showNotif]);
+
+  const handlePrint = async () => {
+    if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }
+    try {
+      setPrinting(true);
+      await printPdfFromData(pdfData);
+      onPrint && onPrint();
+      showNotif?.("Printing selected PDF…", "success");
+    } catch (error) {
+      console.error(error);
+      showNotif?.("Failed to print PDF.", "error");
+    } finally { setPrinting(false); }
+  };
+
+  if (loadingPdf) return (
+    <div className="ui-skeleton-surface">
+      <Skeleton h={34} />
+      <Skeleton h="46vh" style={{ marginTop: 12 }} />
+    </div>
+  );
+
+  if (!pdfUrl) return (
+    <div className="pdf-inline-empty">
+      <span className="pdf-inline-empty__icon"><IconDocumentLg /></span>
+      <div className="pdf-inline-empty__title">No document to display</div>
+      <div className="pdf-inline-empty__sub">Select a record to preview it here.</div>
+    </div>
+  );
+
+  return (
+    <div className="pdf-inline-wrap">
+      <div className="pdf-inline-toolbar">
+        <div className="pdf-inline-toolbar__left">
+          <span className="pdf-inline-toolbar__icon"><IconDocument /></span>
+          <span className="pdf-inline-toolbar__name">{displayName}</span>
+          <span className="pdf-inline-toolbar__badge">Death Certificate</span>
+        </div>
+        <button className="pdf-inline-print-btn" onClick={handlePrint} disabled={printing}>
+          <span className="pdf-inline-print-btn__icon"><IconPrint /></span>
+          {printing ? "Printing…" : "Print"}
+        </button>
+      </div>
+      <div className="pdf-inline-viewer">
+        <iframe key={pdfUrl} src={`${pdfUrl}#toolbar=1&navpanes=0`} title={displayName} className="pdf-inline-iframe" />
+      </div>
+    </div>
+  );
+};
+
 const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
   const father      = getFatherDisplayName(record);
@@ -1035,7 +1121,7 @@ const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, on
       <div className="mobile-record-card__date">{formatDate(record.archived_at)}</div>
       <div className="mobile-record-card__actions">
         <button className="tbl-btn tbl-btn--blue" onClick={onView}>View</button>
-        <button className="tbl-btn tbl-btn--red" onClick={onDelete}>Delete</button>
+        <button className="tbl-btn tbl-btn--red"  onClick={onDelete}>Delete</button>
       </div>
     </div>
   );
@@ -1043,56 +1129,85 @@ const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, on
 
 /* ── Main Component ──────────────────────────────────────────────────────── */
 export default function UnifiedDeathRegistry({ initialView = null }) {
-  const [tab, setTab] = useState(initialView === "archive" ? "archive" : "transaction");
-  const [confirmModal, setConfirmModal] = useState(null);
+  const [tab,             setTab]             = useState(initialView === "archive" ? "archive" : "transaction");
+  const [confirmModal,    setConfirmModal]    = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [pdfModal, setPdfModal] = useState(null);
-  const [negCertModal, setNegCertModal] = useState(null);
-  const [negCertInfo, setNegCertInfo] = useState({ fatherName: "", motherName: "", dateOfDeath: "", requestorName: "" });
-  const [orNumber, setOrNumber] = useState("");
+  const [pdfModal,        setPdfModal]        = useState(null);
+  const [negCertModal,    setNegCertModal]    = useState(null);
+  const [negCertInfo,     setNegCertInfo]     = useState({ fatherName: "", motherName: "", dateOfDeath: "", requestorName: "" });
+  const [orNumber,        setOrNumber]        = useState("");
 
   const showNotif = useShowNotif();
+  const online    = useOnlineStatus();
 
-  const [step, setStep] = useState("select");
-  const [srchFirstName, setSrchFirstName] = useState("");
-  const [srchLastName, setSrchLastName] = useState("");
-  const [hasSearched, setHasSearched] = useState(false);
+  const [step,           setStep]           = useState("select");
+  const [srchFirstName,  setSrchFirstName]  = useState("");
+  const [srchLastName,   setSrchLastName]   = useState("");
+  const [hasSearched,    setHasSearched]    = useState(false);
   const [firstNameError, setFirstNameError] = useState("");
-  const [lastNameError, setLastNameError] = useState("");
+  const [lastNameError,  setLastNameError]  = useState("");
   const [selectedRecord, setSelectedRecord] = useState(null);
-  const [recordStatus, setRecordStatus] = useState(null);
-  const [subjectName, setSubjectName] = useState("");
-  const [payRef, setPayRef] = useState("");
-  const [processing, setProcessing] = useState(false);
+  const [recordStatus,   setRecordStatus]   = useState(null);
+  const [subjectName,    setSubjectName]    = useState("");
+  const [payRef,         setPayRef]         = useState("");
+  const [processing,     setProcessing]     = useState(false);
 
-  const [step2PdfData, setStep2PdfData] = useState(null);
-  const [step2PdfLoading, setStep2PdfLoading] = useState(false);
+  const [step2PdfData,     setStep2PdfData]     = useState(null);
+  const [step2PdfLoading,  setStep2PdfLoading]  = useState(false);
   const [previewLoadingId, setPreviewLoadingId] = useState(null);
 
-  const { allRecords, allArchivedRecords, loadingRecords, fetchRecords, fetchArchived } = useVitalData({
-    entity: ENTITY, api: API, fetchJson: fetchJsonWithRetry,
-    toBlob: createPdfBlobFromData, showNotif,
-  });
-
-  useRegisterRefresh(async () => {
-    await Promise.all([fetchRecords(), fetchArchived()]);
-  });
-
-  useDataChanged(() => {
-    if (isOnline()) { fetchRecords(); fetchArchived(); }
-  }, { tables: DEATH_LIVE_TABLES, debounceMs: 750 });
-
-  const [archiveSearch, setArchiveSearch] = useState("");
+  const [archiveSearch,   setArchiveSearch]   = useState("");
   const [archiveUnlocked, setArchiveUnlocked] = useState(false);
+  const [selectedIds,     setSelectedIds]     = useState(new Set());
+  const [bulkDeleting,    setBulkDeleting]    = useState(false);
 
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const { allRecords, allArchivedRecords, loadingRecords, fetchRecords, fetchArchived } = useVitalData({
+    entity: ENTITY,
+    api: API,
+    fetchJson: fetchJsonWithRetry,
+    toBlob: createPdfBlobFromData,
+    showNotif,
+  });
 
   const { isMobile, isTablet } = useViewport();
   const useCards = isMobile || isTablet;
 
-  const activeIdentityKeys = new Set(allRecords.map(getRecordIdentityKey));
+  // Realtime: reload lists when a record or payment changes on any device.
+  useDataChanged(() => {
+    if (isOnline()) { fetchRecords(); fetchArchived(); }
+  }, { tables: DEATH_LIVE_TABLES, debounceMs: 750 });
 
+  // Top-level refresh button. Throws so the Topbar shows "Refresh failed".
+  useRegisterRefresh(async () => {
+    await Promise.all([fetchRecords(), fetchArchived()]);
+  });
+
+  useEffect(() => {
+    if (online) refreshOfflineCredential("archive_death", API);
+  }, [online]);
+
+  // Connection came back: refresh from the server.
+  const wasOnlineRef = useRef(online);
+  useEffect(() => {
+    if (online && !wasOnlineRef.current) { fetchRecords(); fetchArchived(); }
+    wasOnlineRef.current = online;
+  }, [online, fetchRecords, fetchArchived]);
+
+  // While the outbox drains, refresh as items sync (debounced).
+  useEffect(() => {
+    let timer;
+    let last = { done: 0, syncing: false };
+    const unsub = subscribeSyncState((s) => {
+      const progressed = s.done > last.done || (last.syncing && !s.syncing);
+      last = { done: s.done, syncing: s.syncing };
+      if (!progressed) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => { fetchRecords(); fetchArchived(); }, 800);
+    });
+    return () => { unsub(); clearTimeout(timer); };
+  }, [fetchRecords, fetchArchived]);
+
+  const activeIdentityKeys = new Set(allRecords.map(getRecordIdentityKey));
   const allRecordsForSearch = [
     ...allRecords,
     ...allArchivedRecords
@@ -1113,9 +1228,8 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
 
   const searchResults = hasSearched && searchLN
     ? allRecordsForSearch.filter((r) => {
-        const ln = getRecordLastName(r);
-        const lnWords = ln.split(/\s+/).filter(Boolean);
-        const qWords = searchLN.split(/\s+/).filter(Boolean);
+        const lnWords = getRecordLastName(r).split(/\s+/).filter(Boolean);
+        const qWords  = searchLN.split(/\s+/).filter(Boolean);
         return qWords.every((qw) => lnWords.some((lw) => lw === qw));
       })
     : [];
@@ -1123,7 +1237,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const getAccuracy = (r) =>
     computeAccuracy(
       { lastName: srchLastName, firstName: srchFirstName },
-      { lastName: getRecordLastName(r), firstName: getRecordGivenNames(r) }
+      { lastName: getRecordLastName(r), firstName: getRecordGivenNames(r) },
     );
 
   const sortedResults = [...searchResults].sort((a, b) => {
@@ -1179,8 +1293,10 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     setStep2PdfLoading(true);
     try {
       setStep2PdfData(await loadPdfForRecord(ENTITY, API, record.id, record, createPdfBlobFromData));
-    } catch (err) { showNotif(err.message, "error"); setStep2PdfData(null); }
-    finally { setStep2PdfLoading(false); }
+    } catch (err) {
+      showNotif(err.message, "error");
+      setStep2PdfData(null);
+    } finally { setStep2PdfLoading(false); }
   };
 
   const handleProceedToPayment = async () => {
@@ -1190,7 +1306,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   };
 
   const isPositive = recordStatus === "ACTIVE";
-  const issuedDoc = isPositive
+  const issuedDoc  = isPositive
     ? "Certified True Copy of Death Certificate (Actual)"
     : "Certificate of No Death Record (Negative Certificate)";
 
@@ -1201,17 +1317,17 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     }
     printNegativeCertificate({
       subjectName,
-      dateOfDeath: negCertInfo.dateOfDeath || null,
-      fatherName: negCertInfo.fatherName || null,
-      motherName: negCertInfo.motherName || null,
-      requestorName: negCertInfo.requestorName || null,
-      cityMunicipality: OFFICE_CONFIG.cityMunicipality,
+      dateOfDeath:       negCertInfo.dateOfDeath   || null,
+      fatherName:        negCertInfo.fatherName    || null,
+      motherName:        negCertInfo.motherName    || null,
+      requestorName:     negCertInfo.requestorName || null,
+      cityMunicipality:  OFFICE_CONFIG.cityMunicipality,
       certifyingOfficer: OFFICE_CONFIG.certifyingOfficer,
-      verifiedBy: OFFICE_CONFIG.verifiedBy,
-      amountPaid: OFFICE_CONFIG.amountPaid,
-      orNumber: orNumber.trim(),
-      datePaid: formatTodayLong(),
-      todayDate: formatTodayLong(),
+      verifiedBy:        OFFICE_CONFIG.verifiedBy,
+      amountPaid:        OFFICE_CONFIG.amountPaid,
+      orNumber:          orNumber.trim(),
+      datePaid:          formatTodayLong(),
+      todayDate:         formatTodayLong(),
     });
     showNotif("Printing Negative Certificate…", "success");
   };
@@ -1225,7 +1341,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const handleCompleteTransaction = async () => {
     setProcessing(true);
     const opId = newOpId();
-    const url = `${API}/records/complete`;
+    const url  = `${API}/records/complete`;
     const payload = {
       searchOperator: subjectName, recordStatus,
       recordId: selectedRecord && !selectedRecord._pending ? selectedRecord.id : null,
@@ -1236,13 +1352,16 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
       middle_name: selectedRecord?.deceased_middle_name || "",
       last_name:   selectedRecord?.deceased_last_name   || srchLastName.trim(),
     };
+
     const saveOffline = async () => {
       await queueTransaction(ENTITY, url, payload, subjectName, opId);
       showNotif("No connection. Transaction saved on this device and will sync automatically.", "success");
       return true;
     };
+
     try {
       if (!isOnline()) return await saveOffline();
+
       let res;
       try {
         res = await apiFetch(url, {
@@ -1250,12 +1369,17 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
           headers: { "Content-Type": "application/json", "X-Offline-Op-Id": opId },
           body: JSON.stringify(payload),
         });
-      } catch { return await saveOffline(); }
-      if (res.status >= 500 && !(await checkNow())) return await saveOffline();
+      } catch {
+        return await saveOffline();
+      }
 
       let data = {};
-      try { data = await res.json(); } catch { /* non-JSON */ }
-      if (!res.ok || data?.error) throw new Error(data?.error || "Failed to save the transaction. Please try again.");
+      try { data = await res.json(); } catch { /* non-JSON body */ }
+
+      if (!res.ok || data?.error) {
+        throw new Error(data?.error || "Failed to save the transaction. Please try again.");
+      }
+
       showNotif("Transaction completed successfully!", "success");
       return true;
     } catch (err) {
@@ -1292,9 +1416,9 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     onConfirm: async () => {
       setConfirmModal(null);
       try {
-        const result = await deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record));
-        const name = getRecordDisplayName(record);
-        if (result === "queued") showNotif(`"${name}" deleted offline. It will be removed from the server when you're back online.`, "success");
+        const name   = getRecordDisplayName(record);
+        const result = await deleteRecordSmart(ENTITY, API, id, record, name);
+        if (result === "queued")       showNotif(`"${name}" deleted offline. It will be removed from the server when you're back online.`, "success");
         else if (result === "removed") showNotif(`"${name}" removed from the upload queue.`, "success");
         else { showNotif(`"${name}" deleted.`, "success"); fetchArchived(); }
       } catch (err) { showNotif(err.message, "error"); }
@@ -1305,8 +1429,9 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     ? allArchivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
     : allArchivedRecords;
 
-  const filteredIds = filteredArchived.map((r) => r.id);
-  const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  // ── Bulk selection (Archive) ──────────────────────────────────────────────
+  const filteredIds  = filteredArchived.map((r) => r.id);
+  const allSelected  = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
   const someSelected = !allSelected && filteredIds.some((id) => selectedIds.has(id));
 
   const toggleSelect = (id) =>
@@ -1320,7 +1445,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allSelected) filteredIds.forEach((id) => next.delete(id));
-      else filteredIds.forEach((id) => next.add(id));
+      else             filteredIds.forEach((id) => next.add(id));
       return next;
     });
 
@@ -1330,55 +1455,56 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     setSelectedIds((prev) => {
       if (prev.size === 0) return prev;
       const valid = new Set(allArchivedRecords.map((r) => r.id));
-      const next = new Set([...prev].filter((id) => valid.has(id)));
+      const next  = new Set([...prev].filter((id) => valid.has(id)));
       return next.size === prev.size ? prev : next;
     });
   }, [allArchivedRecords]);
 
-const handleBulkDelete = () => {
-  const ids = [...selectedIds];
-  if (ids.length === 0) return;
-  const byId = new Map(allArchivedRecords.map((r) => [r.id, r]));
+  const handleBulkDelete = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const byId = new Map(allArchivedRecords.map((r) => [r.id, r]));
 
-  setConfirmModal({
-    title: "Permanently Delete Selected",
-    message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
-    confirmLabel: `Delete ${ids.length}`,
-    confirmColor: "#dc2626",
-    onConfirm: async () => {
-      setConfirmModal(null);
-      setBulkDeleting(true);
+    setConfirmModal({
+      title: "Permanently Delete Selected",
+      message: `Permanently delete <strong>${ids.length} record${ids.length !== 1 ? "s" : ""}</strong>? This <strong>cannot be undone</strong>.`,
+      confirmLabel: `Delete ${ids.length}`,
+      confirmColor: "#dc2626",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setBulkDeleting(true);
 
-      const result = await runBulkDelete({
-        api: API,
-        ids,
-        byId,
-        deleteOne: (id, record) =>
-          deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record)),
-      });
+        const result = await runBulkDelete({
+          api: API,
+          ids,
+          byId,
+          deleteOne: (id, record) =>
+            deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record)),
+        });
 
-      if (result.deleted > 0) {
-        showNotif(`${result.deleted} record${result.deleted !== 1 ? "s" : ""} deleted.`, "success");
-      }
-      if (result.queued > 0) {
-        showNotif(`${result.queued} will be removed when you're back online.`, "success");
-      }
-      if (result.failedIds.length > 0) {
-        showNotif(
-          `${result.failedIds.length} record${result.failedIds.length !== 1 ? "s" : ""} could not be deleted. They are still selected, so you can try again.`,
-          "error",
-        );
-        setSelectedIds(new Set(result.failedIds));
-      } else {
-        clearSelection();
-      }
+        if (result.deleted > 0) {
+          showNotif(`${result.deleted} record${result.deleted !== 1 ? "s" : ""} deleted.`, "success");
+        }
+        if (result.queued > 0) {
+          showNotif(`${result.queued} will be removed when you're back online.`, "success");
+        }
+        if (result.failedIds.length > 0) {
+          showNotif(
+            `${result.failedIds.length} record${result.failedIds.length !== 1 ? "s" : ""} could not be deleted. They are still selected, so you can try again.`,
+            "error",
+          );
+          setSelectedIds(new Set(result.failedIds));
+        } else {
+          clearSelection();
+        }
 
-      await fetchArchived();
-      setBulkDeleting(false);
-    },
-  });
-};
+        await fetchArchived();
+        setBulkDeleting(false);
+      },
+    });
+  };
 
+  /* ── Render ────────────────────────────────────────────────────────────── */
   return (
     <div className="ubr-root">
 
@@ -1408,6 +1534,7 @@ const handleBulkDelete = () => {
         />
       )}
 
+      {/* ── Header / Tab bar ──────────────────────────────────────────── */}
       <div className="ubr-header">
         <div className="ubr-header__brand">
           <span className="ubr-header__logo"><IconGrid /></span>
@@ -1429,6 +1556,7 @@ const handleBulkDelete = () => {
         </div>
       </div>
 
+      {/* ── Transaction Tab ───────────────────────────────────────────── */}
       {tab === "transaction" && (
         <div className="ubr-body">
           <div className="ubr-tx">
@@ -1436,6 +1564,7 @@ const handleBulkDelete = () => {
             <div className="ubr-tx__scroll">
               <div className="ubr-card">
 
+                {/* Step 1 — Select */}
                 {step === "select" && (
                   <>
                     <div className="step-scroll">
@@ -1446,35 +1575,33 @@ const handleBulkDelete = () => {
                         <div className="search-form">
                           <div className="search-form__row">
                             <div className="field">
-                              <label className="field-label" htmlFor="search-last-name">Last Name</label>
+                              <label className="field-label" htmlFor="death-search-last-name">Last Name</label>
                               <input
-                                id="search-last-name"
+                                id="death-search-last-name"
                                 name="lastName"
                                 className={`field-input${lastNameError ? " field-input--error" : ""}`}
                                 type="text"
-                                autoComplete="family-name"
                                 value={srchLastName}
                                 onChange={(e) => { setSrchLastName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setLastNameError(""); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
                                 placeholder="e.g. Dela Cruz"
                                 autoFocus
                               />
-                              {lastNameError && <span className="field-error-msg" role="alert">&#9888; {lastNameError}</span>}
+                              {lastNameError && <span className="field-error-msg">&#9888; {lastNameError}</span>}
                             </div>
                             <div className="field">
-                              <label className="field-label" htmlFor="search-first-name">First Name</label>
+                              <label className="field-label" htmlFor="death-search-first-name">First Name</label>
                               <input
-                                id="search-first-name"
+                                id="death-search-first-name"
                                 name="firstName"
                                 className={`field-input${firstNameError ? " field-input--error" : ""}`}
                                 type="text"
-                                autoComplete="given-name"
                                 value={srchFirstName}
                                 onChange={(e) => { setSrchFirstName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setFirstNameError(""); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
                                 placeholder="e.g. Juan"
                               />
-                              {firstNameError && <span className="field-error-msg" role="alert">&#9888; {firstNameError}</span>}
+                              {firstNameError && <span className="field-error-msg">&#9888; {firstNameError}</span>}
                             </div>
                             <button className="search-btn" onClick={handleSearch}>Search</button>
                           </div>
@@ -1505,14 +1632,14 @@ const handleBulkDelete = () => {
                             ) : (
                               <>
                                 {sortedResults.map((r) => {
-                                  const display = getRecordDisplayName(r);
-                                  const father = getFatherDisplayName(r);
-                                  const mother = getMotherDisplayName(r);
+                                  const display       = getRecordDisplayName(r);
+                                  const father        = getFatherDisplayName(r);
+                                  const mother        = getMotherDisplayName(r);
                                   const isLoadingPrev = previewLoadingId === r.id;
-                                  const isSelected =
+                                  const isSelected    =
                                     selectedRecord?.id === r.id &&
                                     !!selectedRecord?._isArchived === !!r._isArchived;
-                                  const accuracy = getAccuracy(r);
+                                  const accuracy      = getAccuracy(r);
 
                                   return (
                                     <div
@@ -1583,6 +1710,7 @@ const handleBulkDelete = () => {
                   </>
                 )}
 
+                {/* Step 2 — Review & Print */}
                 {step === "payment" && (
                   <>
                     <div className="step-scroll">
@@ -1626,6 +1754,7 @@ const handleBulkDelete = () => {
                   </>
                 )}
 
+                {/* Step 3 — Release */}
                 {step === "releasing" && (
                   <>
                     <div className="step-scroll">
@@ -1678,6 +1807,7 @@ const handleBulkDelete = () => {
         </div>
       )}
 
+      {/* ── Archive Tab ───────────────────────────────────────────────── */}
       {tab === "archive" && (
         <div className="tab-wrap">
           {!archiveUnlocked ? (
@@ -1713,16 +1843,14 @@ const handleBulkDelete = () => {
                 </button>
                 <div className="srch-wrap">
                   <span className="srch-icon"><IconSearch /></span>
-                  <label style={VISUALLY_HIDDEN_STYLE} htmlFor="archive-search-input">Search archived records</label>
                   <input
-                    id="archive-search-input"
+                    id="death-archive-search"
                     name="archiveSearch"
+                    aria-label="Search archived records"
                     value={archiveSearch}
                     onChange={(e) => setArchiveSearch(e.target.value)}
                     placeholder="Search archived…"
                     className="srch-input"
-                    type="search"
-                    autoComplete="off"
                   />
                 </div>
               </div>
