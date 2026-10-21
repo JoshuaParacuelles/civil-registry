@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import ReactDOM from "react-dom/client";
 import "../VitalRecords.css";
 import sccLogo from "../../../assets/images/scc.png";
@@ -8,10 +8,7 @@ import AccuracyBadge from "../../../components/AccuracyBadge";
 import { Skeleton, SkeletonTable } from "../../../components/Skeleton";
 import UploadRecordsModal from "../../../components/UploadRecordsModal";
 import { computeAccuracy } from "../../../utils/matchAccuracy";
-import useOnlineStatus from "../../../hooks/useOnlineStatus";
-import { useDataChanged } from "../../../hooks/useDataChanged";
-import { isOnline } from "../../../offline/connectivityService";
-import { subscribeSyncState } from "../../../offline/syncEngine";
+import { isOnline, checkNow } from "../../../offline/connectivityService";
 import { newOpId } from "../../../offline/outboxQueue";
 import { apiFetch } from "../../../services/apiFetch";
 import { useRegisterRefresh } from "../../../context/RefreshContext";
@@ -19,19 +16,18 @@ import { runBulkDelete } from "../../../utils/bulkDelete";
 import {
   useVitalData, loadPdfForRecord, deleteRecordSmart, queueUpload, queueTransaction,
 } from "../../../offline/vitalOffline";
-import {
-  verifyArchivePasswordOffline,
-  refreshOfflineCredential,
-} from "../../../offline/archivePassword";
+import { verifyArchivePasswordOffline, refreshOfflineCredential } from "../../../offline/archivePassword";
+import { useDataChanged } from "../../../hooks/useDataChanged";
 
 const API = `${import.meta.env.VITE_API_BASE_URL || ""}/api/death`;
 const ENTITY = "death";
 const FEE = 75;
 
-// Realtime: tables that trigger a reload of the Death Verifier.
+// Realtime: tables nga mo-trigger og reload sa Death Verifier.
 const DEATH_LIVE_TABLES = ["death_records", "death_transactions"];
 
-// Stable function reference. An unstable one causes effect loops.
+// Adapter: keeps showNotif("message", "success" | "error") working
+// on top of the shared toastService (which uses success: true/false).
 function useShowNotif() {
   return useCallback((message, type = "success") => {
     const ok = type === "success";
@@ -62,12 +58,11 @@ const LOGO_SRC = sccLogo;
 const LOGO_SRC_2 = lcrLogo;
 
 const STEPS = [
-  { key: "select",    label: "Select Record" },
-  { key: "payment",   label: "Review & Print" },
+  { key: "select", label: "Select Record" },
+  { key: "payment", label: "Review & Print" },
   { key: "releasing", label: "Releasing" },
 ];
 
-// ── Viewport hook ──────────────────────────────────────────────────────────
 function useViewport() {
   const [width, setWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1024,
@@ -77,9 +72,11 @@ function useViewport() {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
   return {
-    isMobile: width < 480,
-    isTablet: width >= 480 && width < 768,
+    width,
+    isMobile: width < 768,
+    isTablet: width >= 768 && width < 1024,
   };
 }
 
@@ -104,7 +101,6 @@ async function fetchJsonWithRetry(url, { signal, retries = 2, delay = 500 } = {}
   throw lastErr;
 }
 
-// ── Utilities ──────────────────────────────────────────────────────────────
 const formatDate = (d) => {
   if (!d) return "—";
   const parsed = new Date(d);
@@ -155,11 +151,10 @@ function normalizeDisplayName(filename) {
 
 function getRecordDisplayName(record) {
   if (!record) return "";
-  const fromParts = formatFullName(
-    cleanNamePart(record.deceased_first_name),
-    cleanNamePart(record.deceased_middle_name),
-    cleanNamePart(record.deceased_last_name),
-  );
+  const first = cleanNamePart(record.deceased_first_name);
+  const middle = cleanNamePart(record.deceased_middle_name);
+  const last = cleanNamePart(record.deceased_last_name);
+  const fromParts = formatFullName(first, middle, last);
   if (fromParts) return fromParts;
   if (record.deceased_full_name) return toTitleCase(record.deceased_full_name);
   return normalizeDisplayName(record.file_name || "");
@@ -176,14 +171,14 @@ function getMotherDisplayName(record) {
 }
 
 function getRecordIdentityKey(record) {
-  const name   = getRecordDisplayName(record).trim().toUpperCase();
+  const name = getRecordDisplayName(record).trim().toUpperCase();
   const father = getFatherDisplayName(record).trim().toUpperCase();
   const mother = getMotherDisplayName(record).trim().toUpperCase();
   return `${name}|${father}|${mother}`;
 }
 
 function normalizeForSearch(record) {
-  const name     = getRecordDisplayName(record);
+  const name = getRecordDisplayName(record);
   const fileName = (record.file_name || "").replace(/\.pdf$/i, "")
     .replace(/[_,]+/g, " ").replace(/-+/g, " ").trim();
   const father = getFatherDisplayName(record);
@@ -193,8 +188,9 @@ function normalizeForSearch(record) {
 
 function matchesSearch(record, query) {
   if (!query || !query.trim()) return true;
-  const haystackWords = normalizeForSearch(record).split(/\s+/).filter(Boolean);
-  const queryWords    = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  const haystack = normalizeForSearch(record);
+  const haystackWords = haystack.split(/\s+/).filter(Boolean);
+  const queryWords = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
   return queryWords.every((qw) => haystackWords.some((hw) => hw === qw));
 }
 
@@ -219,7 +215,7 @@ function getRecordFirstName(record) {
 
 // First + middle name, used only for the accuracy score.
 function getRecordGivenNames(record) {
-  const first  = cleanNamePart(record?.deceased_first_name);
+  const first = cleanNamePart(record?.deceased_first_name);
   const middle = cleanNamePart(record?.deceased_middle_name);
   if (first) return [first, middle].filter(Boolean).join(" ");
   const parts = cleanNamePart(record?.deceased_full_name).split(/\s+/).filter(Boolean);
@@ -227,23 +223,25 @@ function getRecordGivenNames(record) {
   return parts[0] || "";
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// PDF DECODING (same logic as Birth: handles plain base64, data URLs,
-// and double base64-encoded data)
-// ─────────────────────────────────────────────────────────────────────────
-function bytesFromBase64(b64) {
-  const cleaned     = b64.replace(/\s/g, "");
-  const byteChars   = atob(cleaned);
+function looksLikePdfBytes(bytes) {
+  if (!bytes || bytes.length < 5) return false;
+  let i = 0;
+  while (
+    i < bytes.length &&
+    (bytes[i] === 0x20 || bytes[i] === 0x0a || bytes[i] === 0x0d || bytes[i] === 0x09)
+  ) i++;
+  if (i + 5 > bytes.length) return false;
+  let sig = "";
+  for (let j = i; j < i + 5; j++) sig += String.fromCharCode(bytes[j]);
+  return sig === "%PDF-";
+}
+
+function base64ToBytes(b64) {
+  const cleaned = (b64 || "").replace(/\s/g, "");
+  const byteChars = atob(cleaned);
   const byteNumbers = new Array(byteChars.length);
   for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
   return new Uint8Array(byteNumbers);
-}
-
-function looksLikePdf(bytes) {
-  return (
-    !!bytes && bytes.length >= 4 &&
-    bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
-  );
 }
 
 function createPdfBlobFromData(pdfData) {
@@ -259,35 +257,35 @@ function createPdfBlobFromData(pdfData) {
       return null;
     }
 
-    let cleaned = pdfData.startsWith("data:application/pdf;base64,")
+    if (pdfData.startsWith("%PDF")) {
+      return new Blob([pdfData], { type: "application/pdf" });
+    }
+
+    let base64Str = pdfData.startsWith("data:application/pdf;base64,")
       ? pdfData.replace(/^data:application\/pdf;base64,/i, "")
       : pdfData;
-    cleaned = cleaned.replace(/\s/g, "");
-
-    if (cleaned.startsWith("%PDF")) {
-      return new Blob([cleaned], { type: "application/pdf" });
-    }
 
     let bytes;
     try {
-      bytes = bytesFromBase64(cleaned);
+      bytes = base64ToBytes(base64Str);
     } catch (e) {
-      console.error("Invalid base64 PDF data:", e);
+      console.error("PDF base64 decode failed:", e);
       return null;
     }
 
-    if (!looksLikePdf(bytes)) {
+    if (!looksLikePdfBytes(bytes)) {
       try {
-        const innerText  = new TextDecoder("ascii").decode(bytes).trim();
-        const innerBytes = bytesFromBase64(innerText);
-        if (looksLikePdf(innerBytes)) bytes = innerBytes;
+        let innerStr = "";
+        for (let i = 0; i < bytes.length; i++) innerStr += String.fromCharCode(bytes[i]);
+        const innerBytes = base64ToBytes(innerStr.replace(/\s/g, ""));
+        if (looksLikePdfBytes(innerBytes)) bytes = innerBytes;
       } catch {
-        // fall through to the check below
+        // fall through
       }
     }
 
-    if (!looksLikePdf(bytes)) {
-      console.error("Decoded PDF data does not start with the %PDF signature.");
+    if (!looksLikePdfBytes(bytes)) {
+      console.error("PDF data does not contain a valid %PDF- header after decode attempts.");
       return null;
     }
 
@@ -318,9 +316,9 @@ function printPdfFromData(pdfData) {
   return new Promise((resolve, reject) => {
     try {
       const blob = createPdfBlobFromData(pdfData);
-      if (!blob) { reject(new Error("Invalid PDF data.")); return; }
+      if (!blob) { reject(new Error("This PDF is corrupted or invalid and cannot be printed.")); return; }
       const blobUrl = URL.createObjectURL(blob);
-      const iframe  = document.createElement("iframe");
+      const iframe = document.createElement("iframe");
       iframe.className = "print-iframe";
       iframe.setAttribute("aria-hidden", "true");
       let cleaned = false;
@@ -328,8 +326,8 @@ function printPdfFromData(pdfData) {
         if (cleaned) return;
         cleaned = true;
         setTimeout(() => {
-          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch { /* already removed */ }
-          try { URL.revokeObjectURL(blobUrl); } catch { /* already revoked */ }
+          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch { /* iframe already removed */ }
+          try { URL.revokeObjectURL(blobUrl); } catch { /* URL already revoked */ }
         }, 1500);
       };
       iframe.onload = () => {
@@ -338,7 +336,7 @@ function printPdfFromData(pdfData) {
         const doPrint = () => {
           try {
             printWindow.focus();
-            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch { /* not supported */ }
+            try { printWindow.onafterprint = () => { cleanup(); resolve(); }; } catch { /* print window closed or blocked */ }
             printWindow.print();
             setTimeout(() => { cleanup(); resolve(); }, 2000);
           } catch (err) { cleanup(); reject(err); }
@@ -352,7 +350,6 @@ function printPdfFromData(pdfData) {
   });
 }
 
-// ── Office Logo ─────────────────────────────────────────────────────────
 const OfficeLogo = ({ className = "" }) => (
   <div className="office-logo-group">
     <img src={LOGO_SRC} alt="Office Seal" className={className} />
@@ -360,7 +357,6 @@ const OfficeLogo = ({ className = "" }) => (
   </div>
 );
 
-// ── Negative Certificate Document (for print) ──────────────────────────────
 function NegativeCertDocument({ certData }) {
   const {
     subjectName, dateOfDeath, fatherName, motherName,
@@ -368,12 +364,12 @@ function NegativeCertDocument({ certData }) {
     verifiedBy, amountPaid, todayDate, orNumber, datePaid,
   } = certData;
 
-  const dateStr   = dateOfDeath ? `on ${formatCertDate(dateOfDeath)} ` : "";
+  const dateStr = dateOfDeath ? `on ${formatCertDate(dateOfDeath)} ` : "";
   const fatherStr = (fatherName || "[Father's Name]").toUpperCase();
   const motherStr = (motherName || "[Mother's Name]").toUpperCase();
-  const city      = cityMunicipality || "this city/municipality";
-  const reqName   = (requestorName || "[Requestor's Name]").toUpperCase();
-  const year      = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
+  const city = cityMunicipality || "this city/municipality";
+  const reqName = (requestorName || "[Requestor's Name]").toUpperCase();
+  const year = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
 
   return (
     <div className="neg-print-page">
@@ -383,20 +379,20 @@ function NegativeCertDocument({ certData }) {
       <p className="neg-print-date">{todayDate}</p>
       <p className="neg-print-salutation">TO WHOM IT MAY CONCERN:</p>
       <p className="neg-print-para">
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of death of&nbsp;
+        We certify that this office has no records of death of{" "}
         <strong className="neg-cert-doc__highlight">{(subjectName || "").toUpperCase()}</strong>
-        &nbsp;who is alleged to have died {dateStr}in {city}, child of&nbsp;
+        {" "}who is alleged to have died {dateStr}in {city}, child of{" "}
         <strong className="neg-cert-doc__highlight">{fatherStr}</strong> and{" "}
         <strong className="neg-cert-doc__highlight">{motherStr}</strong>, hence, we cannot issue,
         as requested, a true copy of his/her Certificate of Death or transcription from
         the Register of Deaths.
       </p>
       <p className="neg-print-para">
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Death for the
+        We also certify that the records of Death for the
         year <strong>{year}</strong> are still intact in the archives of this office.
       </p>
       <p className="neg-print-para">
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This certification is issued to&nbsp;
+        This certification is issued to{" "}
         <strong className="neg-cert-doc__highlight">{reqName}</strong> upon his/her request.
       </p>
       <div className="neg-print-sig-block">
@@ -431,7 +427,6 @@ function NegativeCertDocument({ certData }) {
   );
 }
 
-// ── Negative Certificate Print Function ────────────────────────────────────
 function printNegativeCertificate(certData) {
   const mountPoint = document.createElement("div");
   mountPoint.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;";
@@ -452,9 +447,12 @@ function printNegativeCertificate(certData) {
   html, body { width: 100%; height: 100%; }
   body {
     font-family: "Times New Roman", Times, serif;
-    font-size: 12pt; color: #000; background: #fff;
+    font-size: 12pt;
+    color: #000;
+    background: #fff;
     padding: 1.2in 1in 1in 1in;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
     line-height: 1.6;
   }
   .neg-print-page { width: 100%; position: relative; }
@@ -477,6 +475,7 @@ function printNegativeCertificate(certData) {
   .neg-print-payment-label { min-width: 90pt; flex-shrink: 0; }
   .neg-print-payment-colon { min-width: 8pt; flex-shrink: 0; margin-right: 4pt; }
   .neg-print-payment-value { flex: 1; font-size: 12pt; color: #000; }
+  .neg-print-payment-blank { flex: 1; min-width: 100pt; height: 14pt; display: inline-block; }
   .neg-cert-doc__highlight { font-weight: bold; color: #000; }
 </style>
 </head>
@@ -488,13 +487,15 @@ function printNegativeCertificate(certData) {
       document.body.appendChild(iframe);
       iframe.onload = () => {
         const doc = iframe.contentDocument || iframe.contentWindow.document;
-        doc.open(); doc.write(fullHtml); doc.close();
+        doc.open();
+        doc.write(fullHtml);
+        doc.close();
         setTimeout(() => {
           iframe.contentWindow.focus();
           iframe.contentWindow.print();
           setTimeout(() => {
-            try { document.body.removeChild(iframe); } catch { /* already removed */ }
-            try { root.unmount(); document.body.removeChild(mountPoint); } catch { /* already cleaned */ }
+            try { document.body.removeChild(iframe); } catch { /* iframe already removed */ }
+            try { root.unmount(); document.body.removeChild(mountPoint); } catch { /* unmount cleanup already done */ }
           }, 2000);
         }, 600);
       };
@@ -502,8 +503,6 @@ function printNegativeCertificate(certData) {
     });
   });
 }
-
-/* ── SVG Icon Components ─────────────────────────────────────────────────── */
 
 const IconDocument = ({ className = "" }) => (
   <svg className={`icon-svg icon-svg--md ${className}`} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -604,8 +603,6 @@ const IconDocumentLg = ({ className = "" }) => (
   </svg>
 );
 
-/* ── Sub-components ──────────────────────────────────────────────────────── */
-
 const ConfirmModal = ({
   title, message, confirmLabel, confirmColor = "#dc2626", onConfirm, onCancel,
 }) => (
@@ -630,8 +627,7 @@ const ConfirmModal = ({
 const NegCertField = ({ label, htmlFor, required, error, children }) => (
   <div className="negcert-info-modal__field">
     <label className="negcert-info-modal__label" htmlFor={htmlFor}>
-      {label}
-      {required && <span className="negcert-info-modal__required"> *</span>}
+      {label} {required && <span className="negcert-info-modal__required"> *</span>}
     </label>
     {children}
     {error && <span className="negcert-info-modal__error">&#9888; {error}</span>}
@@ -640,22 +636,22 @@ const NegCertField = ({ label, htmlFor, required, error, children }) => (
 
 const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) => {
   const [dateOfDeath, setDateOfDeath] = useState("");
-  const [fatherName,  setFatherName]  = useState("");
-  const [motherName,  setMotherName]  = useState("");
-  const [dodError,    setDodError]    = useState("");
+  const [fatherName, setFatherName] = useState("");
+  const [motherName, setMotherName] = useState("");
+  const [dodError, setDodError] = useState("");
   const [fatherError, setFatherError] = useState("");
   const [motherError, setMotherError] = useState("");
 
   const handleSubmit = () => {
     let valid = true;
-    if (!dateOfDeath)       { setDodError("Date of death is required.");     valid = false; } else setDodError("");
+    if (!dateOfDeath) { setDodError("Date of death is required."); valid = false; } else setDodError("");
     if (!fatherName.trim()) { setFatherError("Father's name is required."); valid = false; } else setFatherError("");
     if (!motherName.trim()) { setMotherError("Mother's name is required."); valid = false; } else setMotherError("");
     if (!valid) return;
     onSubmit({
       dateOfDeath,
-      fatherName:    fatherName.trim(),
-      motherName:    motherName.trim(),
+      fatherName: fatherName.trim(),
+      motherName: motherName.trim(),
       requestorName: requestorName || subjectName || "",
     });
   };
@@ -667,15 +663,15 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
           <div className="negcert-info-modal__hdr-text">
             <h3 className="negcert-info-modal__title">Negative Certificate Details</h3>
             <p className="negcert-info-modal__sub">
-              For&nbsp;<strong className="negcert-info-modal__name">{subjectName || "this person"}</strong>
+              For <strong className="negcert-info-modal__name">{subjectName || "this person"}</strong>
             </p>
           </div>
         </div>
 
         <div className="negcert-info-modal__fields">
-          <NegCertField label="Date of Death" htmlFor="negcert-dod" required error={dodError}>
+          <NegCertField label="Date of Death" htmlFor="negcert-date-of-death" required error={dodError}>
             <input
-              id="negcert-dod"
+              id="negcert-date-of-death"
               name="dateOfDeath"
               type="date"
               className={`negcert-info-modal__input${dodError ? " negcert-info-modal__input--error" : ""}`}
@@ -685,9 +681,9 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
             />
           </NegCertField>
 
-          <NegCertField label="Father's Full Name" htmlFor="negcert-father" required error={fatherError}>
+          <NegCertField label="Father's Full Name" htmlFor="negcert-father-name" required error={fatherError}>
             <input
-              id="negcert-father"
+              id="negcert-father-name"
               name="fatherName"
               type="text"
               className={`negcert-info-modal__input${fatherError ? " negcert-info-modal__input--error" : ""}`}
@@ -697,9 +693,9 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
             />
           </NegCertField>
 
-          <NegCertField label="Mother's Full Name" htmlFor="negcert-mother" required error={motherError}>
+          <NegCertField label="Mother's Full Name" htmlFor="negcert-mother-name" required error={motherError}>
             <input
-              id="negcert-mother"
+              id="negcert-mother-name"
               name="motherName"
               type="text"
               className={`negcert-info-modal__input${motherError ? " negcert-info-modal__input--error" : ""}`}
@@ -712,7 +708,10 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
 
         <div className="modal-acts negcert-info-modal__acts">
           <button className="modal-cancel" onClick={onCancel}>Cancel</button>
-          <button className="modal-confirm negcert-info-modal__submit" onClick={handleSubmit}>
+          <button
+            className="modal-confirm negcert-info-modal__submit"
+            onClick={handleSubmit}
+          >
             Issue Negative Certificate &rarr;
           </button>
         </div>
@@ -721,18 +720,23 @@ const NegCertInfoModal = ({ subjectName, requestorName, onSubmit, onCancel }) =>
   );
 };
 
-const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
-  const [pdfUrl,   setPdfUrl]   = useState("");
+const PdfModal = ({ pdfData, pdfError, fileName, onClose, showNotif }) => {
+  const [pdfUrl, setPdfUrl] = useState("");
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
+    if (pdfError) {
+      setPdfUrl("");
+      showNotif?.(pdfError, "error");
+      return;
+    }
     const url = getPdfBlobUrl(pdfData);
     setPdfUrl(url);
     if (pdfData && !url) {
-      showNotif?.("This PDF could not be displayed — the stored file appears to be corrupted.", "error");
+      showNotif?.("This PDF appears to be corrupted and can't be displayed.", "error");
     }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
-  }, [pdfData, showNotif]);
+  }, [pdfData, pdfError, showNotif]);
 
   const handlePrint = async () => {
     if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }
@@ -742,7 +746,7 @@ const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
       showNotif?.("Printing selected PDF…", "success");
     } catch (error) {
       console.error(error);
-      showNotif?.("Failed to print PDF.", "error");
+      showNotif?.(error.message || "Failed to print PDF.", "error");
     } finally { setPrinting(false); }
   };
 
@@ -760,7 +764,7 @@ const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
                 {printing ? "Printing…" : "Print"}
               </button>
             )}
-            <button className="hdr-btn hdr-btn--close" onClick={onClose}>&#10005; Close</button>
+            <button className="hdr-btn hdr-btn--close" onClick={onClose}>✕ Close</button>
           </div>
         </div>
         <div className="pdf-body">
@@ -770,7 +774,9 @@ const PdfModal = ({ pdfData, fileName, onClose, showNotif }) => {
             <div className="pdf-inline-empty">
               <span className="pdf-inline-empty__icon"><IconDocumentLg /></span>
               <div className="pdf-inline-empty__title">Unable to display PDF</div>
-              <div className="pdf-inline-empty__sub">The selected PDF is empty or invalid.</div>
+              <div className="pdf-inline-empty__sub">
+                {pdfError || "The selected PDF is empty or invalid."}
+              </div>
             </div>
           )}
         </div>
@@ -787,10 +793,10 @@ const StepBar = ({ current }) => {
       <div className="ubr-stepbar">
         <div className="ubr-stepbar__inner">
           {STEPS.map((s, i) => {
-            const done    = i < idx;
-            const active  = i === idx;
-            const mod     = done ? "done" : active ? "active" : "pending";
-            const isLast  = i === STEPS.length - 1;
+            const done = i < idx;
+            const active = i === idx;
+            const mod = done ? "done" : active ? "active" : "pending";
+            const isLast = i === STEPS.length - 1;
             const segDone = i < idx;
             return (
               <React.Fragment key={s.key}>
@@ -819,22 +825,28 @@ const StepBar = ({ current }) => {
 
 const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
   const [pwInput, setPwInput] = useState("");
-  const [showPw,  setShowPw]  = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const unlockOffline = async (pw) => {
-    const result = await verifyArchivePasswordOffline(module, pw);
-    if (result === "ok") {
-      showNotif("Unlocked offline.", "success");
-      onUnlock();
-    } else if (result === "wrong") {
-      showNotif("Incorrect password.", "error");
-    } else if (result === "locked") {
-      showNotif("Too many wrong attempts. Try again in 5 minutes.", "error");
-    } else if (result === "unset") {
-      showNotif("No password is set for this module yet.", "error");
-    } else {
-      showNotif("This device hasn't saved the password data yet. Open the app once while online and logged in, then try again.", "error");
+    try {
+      const result = await verifyArchivePasswordOffline(module, pw);
+
+      if (result === "ok") {
+        showNotif("Unlocked offline.", "success");
+        onUnlock();
+      } else if (result === "wrong") {
+        showNotif("Incorrect password.", "error");
+      } else if (result === "locked") {
+        showNotif("Too many wrong attempts. Try again in 5 minutes.", "error");
+      } else if (result === "unset") {
+        showNotif("No password is set for this module yet.", "error");
+      } else {
+        showNotif("This device hasn't saved the password data yet. Open the app once while online and logged in.", "error");
+      }
+    } catch (error) {
+      console.error("Offline archive password verification failed:", error);
+      showNotif("Unable to verify the offline password.", "error");
     }
   };
 
@@ -865,26 +877,35 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
       } else {
         showNotif(data.message || "Incorrect password.", "error");
       }
-    } finally { setLoading(false); }
+    } catch (error) {
+      console.error("Archive password verification failed:", error);
+      showNotif("Unable to verify the archive password.", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="pw-gate">
-      <div className="pw-gate__icon"><IconLock /></div>
+      <div className="pw-gate__icon">
+        <IconLock />
+      </div>
       <p className="pw-gate__desc">{description}</p>
       <div className="pw-gate__form">
-        <label className="pw-lbl" htmlFor="death-pw-gate-input">Administrator Password</label>
+        <label className="pw-lbl" htmlFor="death-admin-password">Administrator Password</label>
         <div className="pw-input-wrap">
           <input
-            id="death-pw-gate-input"
-            name="password"
+            id="death-admin-password"
+            name="adminPassword"
             type={showPw ? "text" : "password"}
             value={pwInput}
             onChange={(e) => setPwInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !loading) handleSubmit(); }}
             placeholder="Enter password"
             className="pw-input"
+            autoComplete="current-password"
             autoFocus
+            disabled={loading}
           />
           <button
             className="pw-toggle"
@@ -892,6 +913,7 @@ const PasswordGate = ({ module, description, onUnlock, showNotif }) => {
             onClick={() => setShowPw((v) => !v)}
             title={showPw ? "Hide password" : "Show password"}
             aria-label={showPw ? "Hide password" : "Show password"}
+            disabled={loading}
           >
             {showPw ? <IconEyeOff /> : <IconEye />}
           </button>
@@ -921,9 +943,9 @@ const NegativeCertPreview = ({
   orNumber, onOrNumberChange, onPrint,
 }) => {
   const todayDate = formatTodayLong();
-  const officer   = OFFICE_CONFIG.certifyingOfficer;
-  const verified  = OFFICE_CONFIG.verifiedBy;
-  const year      = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
+  const officer = OFFICE_CONFIG.certifyingOfficer;
+  const verified = OFFICE_CONFIG.verifiedBy;
+  const year = dateOfDeath ? new Date(dateOfDeath).getFullYear() : new Date().getFullYear();
 
   return (
     <div className="neg-cert-preview-wrap">
@@ -946,7 +968,7 @@ const NegativeCertPreview = ({
           <p className="neg-cert-doc__date">{todayDate}</p>
           <p className="neg-cert-doc__salutation">TO WHOM IT MAY CONCERN:</p>
           <p className="neg-cert-doc__para">
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We certify that this office has no records of death of{" "}
+            We certify that this office has no records of death of{" "}
             <strong className="neg-cert-doc__highlight">{(subjectName || "").toUpperCase()}</strong>{" "}
             who is alleged to have died on{" "}
             {dateOfDeath
@@ -964,10 +986,10 @@ const NegativeCertPreview = ({
             }, hence, we cannot issue, as requested, a true copy of his/her Certificate of Death or transcription from the Register of Deaths.
           </p>
           <p className="neg-cert-doc__para">
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;We also certify that the records of Death for the year <strong>{year}</strong> are still intact in the archives of this office.
+            We also certify that the records of Death for the year <strong>{year}</strong> are still intact in the archives of this office.
           </p>
           <p className="neg-cert-doc__para">
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This certification is issued to{" "}
+            This certification is issued to{" "}
             {requestorName
               ? <strong className="neg-cert-doc__highlight">{requestorName.toUpperCase()}</strong>
               : <strong className="neg-cert-doc__highlight neg-cert-doc__placeholder">[REQUESTOR'S NAME]</strong>
@@ -1032,20 +1054,25 @@ const NegativeCertPreview = ({
   );
 };
 
-const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) => {
-  const displayName           = record ? getRecordDisplayName(record) : "";
-  const [pdfUrl,   setPdfUrl]   = useState("");
+const InlinePdfViewer = ({ pdfData, pdfError, record, onPrint, loadingPdf, showNotif }) => {
+  const displayName = record ? getRecordDisplayName(record) : "";
+  const [pdfUrl, setPdfUrl] = useState("");
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
+    if (pdfError) {
+      setPdfUrl("");
+      showNotif?.(pdfError, "error");
+      return;
+    }
     if (!pdfData) { setPdfUrl(""); return; }
     const url = getPdfBlobUrl(pdfData);
     setPdfUrl(url);
-    if (!url) {
-      showNotif?.("This PDF could not be displayed — the stored file appears to be corrupted.", "error");
+    if (pdfData && !url) {
+      showNotif?.("This PDF appears to be corrupted and can't be displayed.", "error");
     }
     return () => { if (url && url.startsWith("blob:")) URL.revokeObjectURL(url); };
-  }, [pdfData, showNotif]);
+  }, [pdfData, pdfError, showNotif]);
 
   const handlePrint = async () => {
     if (!pdfData) { showNotif?.("No PDF available to print.", "error"); return; }
@@ -1056,7 +1083,7 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
       showNotif?.("Printing selected PDF…", "success");
     } catch (error) {
       console.error(error);
-      showNotif?.("Failed to print PDF.", "error");
+      showNotif?.(error.message || "Failed to print PDF.", "error");
     } finally { setPrinting(false); }
   };
 
@@ -1070,8 +1097,12 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
   if (!pdfUrl) return (
     <div className="pdf-inline-empty">
       <span className="pdf-inline-empty__icon"><IconDocumentLg /></span>
-      <div className="pdf-inline-empty__title">No document to display</div>
-      <div className="pdf-inline-empty__sub">Select a record to preview it here.</div>
+      <div className="pdf-inline-empty__title">
+        {pdfError ? "Unable to display PDF" : "No document to display"}
+      </div>
+      <div className="pdf-inline-empty__sub">
+        {pdfError || "Select a record to preview it here."}
+      </div>
     </div>
   );
 
@@ -1097,8 +1128,8 @@ const InlinePdfViewer = ({ pdfData, record, onPrint, loadingPdf, showNotif }) =>
 
 const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, onDelete }) => {
   const displayName = getRecordDisplayName(record);
-  const father      = getFatherDisplayName(record);
-  const mother      = getMotherDisplayName(record);
+  const father = getFatherDisplayName(record);
+  const mother = getMotherDisplayName(record);
   return (
     <div className={`mobile-record-card${selected ? " mobile-record-card--selected" : ""}`}>
       <div className="mobile-record-card__top">
@@ -1121,7 +1152,7 @@ const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, on
       <div className="mobile-record-card__date">{formatDate(record.archived_at)}</div>
       <div className="mobile-record-card__actions">
         <button className="tbl-btn tbl-btn--blue" onClick={onView}>View</button>
-        <button className="tbl-btn tbl-btn--red"  onClick={onDelete}>Delete</button>
+        <button className="tbl-btn tbl-btn--red" onClick={onDelete}>Delete</button>
       </div>
     </div>
   );
@@ -1129,85 +1160,57 @@ const MobileRecordCardArchive = ({ record, index, selected, onToggle, onView, on
 
 /* ── Main Component ──────────────────────────────────────────────────────── */
 export default function UnifiedDeathRegistry({ initialView = null }) {
-  const [tab,             setTab]             = useState(initialView === "archive" ? "archive" : "transaction");
-  const [confirmModal,    setConfirmModal]    = useState(null);
+  const [tab, setTab] = useState(initialView === "archive" ? "archive" : "transaction");
+  const [confirmModal, setConfirmModal] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [pdfModal,        setPdfModal]        = useState(null);
-  const [negCertModal,    setNegCertModal]    = useState(null);
-  const [negCertInfo,     setNegCertInfo]     = useState({ fatherName: "", motherName: "", dateOfDeath: "", requestorName: "" });
-  const [orNumber,        setOrNumber]        = useState("");
+  const [pdfModal, setPdfModal] = useState(null);
+  const [negCertModal, setNegCertModal] = useState(null);
+  const [negCertInfo, setNegCertInfo] = useState({ fatherName: "", motherName: "", dateOfDeath: "", requestorName: "" });
+  const [orNumber, setOrNumber] = useState("");
 
   const showNotif = useShowNotif();
-  const online    = useOnlineStatus();
 
-  const [step,           setStep]           = useState("select");
-  const [srchFirstName,  setSrchFirstName]  = useState("");
-  const [srchLastName,   setSrchLastName]   = useState("");
-  const [hasSearched,    setHasSearched]    = useState(false);
+  const [step, setStep] = useState("select");
+  const [srchFirstName, setSrchFirstName] = useState("");
+  const [srchLastName, setSrchLastName] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
   const [firstNameError, setFirstNameError] = useState("");
-  const [lastNameError,  setLastNameError]  = useState("");
+  const [lastNameError, setLastNameError] = useState("");
   const [selectedRecord, setSelectedRecord] = useState(null);
-  const [recordStatus,   setRecordStatus]   = useState(null);
-  const [subjectName,    setSubjectName]    = useState("");
-  const [payRef,         setPayRef]         = useState("");
-  const [processing,     setProcessing]     = useState(false);
+  const [recordStatus, setRecordStatus] = useState(null);
+  const [subjectName, setSubjectName] = useState("");
+  const [payRef, setPayRef] = useState("");
+  const [processing, setProcessing] = useState(false);
 
-  const [step2PdfData,     setStep2PdfData]     = useState(null);
-  const [step2PdfLoading,  setStep2PdfLoading]  = useState(false);
+  const [step2PdfData, setStep2PdfData] = useState(null);
+  const [step2PdfError, setStep2PdfError] = useState("");
+  const [step2PdfLoading, setStep2PdfLoading] = useState(false);
   const [previewLoadingId, setPreviewLoadingId] = useState(null);
 
-  const [archiveSearch,   setArchiveSearch]   = useState("");
-  const [archiveUnlocked, setArchiveUnlocked] = useState(false);
-  const [selectedIds,     setSelectedIds]     = useState(new Set());
-  const [bulkDeleting,    setBulkDeleting]    = useState(false);
-
   const { allRecords, allArchivedRecords, loadingRecords, fetchRecords, fetchArchived } = useVitalData({
-    entity: ENTITY,
-    api: API,
-    fetchJson: fetchJsonWithRetry,
-    toBlob: createPdfBlobFromData,
-    showNotif,
+    entity: ENTITY, api: API, fetchJson: fetchJsonWithRetry,
+    toBlob: createPdfBlobFromData, showNotif,
   });
 
-  const { isMobile, isTablet } = useViewport();
-  const useCards = isMobile || isTablet;
-
-  // Realtime: reload lists when a record or payment changes on any device.
-  useDataChanged(() => {
-    if (isOnline()) { fetchRecords(); fetchArchived(); }
-  }, { tables: DEATH_LIVE_TABLES, debounceMs: 750 });
-
-  // Top-level refresh button. Throws so the Topbar shows "Refresh failed".
   useRegisterRefresh(async () => {
     await Promise.all([fetchRecords(), fetchArchived()]);
   });
 
-  useEffect(() => {
-    if (online) refreshOfflineCredential("archive_death", API);
-  }, [online]);
+  useDataChanged(() => {
+    if (isOnline()) { fetchRecords(); fetchArchived(); }
+  }, { tables: DEATH_LIVE_TABLES, debounceMs: 750 });
 
-  // Connection came back: refresh from the server.
-  const wasOnlineRef = useRef(online);
-  useEffect(() => {
-    if (online && !wasOnlineRef.current) { fetchRecords(); fetchArchived(); }
-    wasOnlineRef.current = online;
-  }, [online, fetchRecords, fetchArchived]);
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const [archiveUnlocked, setArchiveUnlocked] = useState(false);
 
-  // While the outbox drains, refresh as items sync (debounced).
-  useEffect(() => {
-    let timer;
-    let last = { done: 0, syncing: false };
-    const unsub = subscribeSyncState((s) => {
-      const progressed = s.done > last.done || (last.syncing && !s.syncing);
-      last = { done: s.done, syncing: s.syncing };
-      if (!progressed) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => { fetchRecords(); fetchArchived(); }, 800);
-    });
-    return () => { unsub(); clearTimeout(timer); };
-  }, [fetchRecords, fetchArchived]);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const { isMobile, isTablet } = useViewport();
+  const useCards = isMobile || isTablet;
 
   const activeIdentityKeys = new Set(allRecords.map(getRecordIdentityKey));
+
   const allRecordsForSearch = [
     ...allRecords,
     ...allArchivedRecords
@@ -1218,7 +1221,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const handleSearch = () => {
     let valid = true;
     if (!srchFirstName.trim()) { setFirstNameError("First name is required."); valid = false; } else setFirstNameError("");
-    if (!srchLastName.trim())  { setLastNameError("Last name is required.");   valid = false; } else setLastNameError("");
+    if (!srchLastName.trim()) { setLastNameError("Last name is required."); valid = false; } else setLastNameError("");
     if (!valid) return;
     setHasSearched(true);
   };
@@ -1228,8 +1231,9 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
 
   const searchResults = hasSearched && searchLN
     ? allRecordsForSearch.filter((r) => {
-        const lnWords = getRecordLastName(r).split(/\s+/).filter(Boolean);
-        const qWords  = searchLN.split(/\s+/).filter(Boolean);
+        const ln = getRecordLastName(r);
+        const lnWords = ln.split(/\s+/).filter(Boolean);
+        const qWords = searchLN.split(/\s+/).filter(Boolean);
         return qWords.every((qw) => lnWords.some((lw) => lw === qw));
       })
     : [];
@@ -1237,7 +1241,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const getAccuracy = (r) =>
     computeAccuracy(
       { lastName: srchLastName, firstName: srchFirstName },
-      { lastName: getRecordLastName(r), firstName: getRecordGivenNames(r) },
+      { lastName: getRecordLastName(r), firstName: getRecordGivenNames(r) }
     );
 
   const sortedResults = [...searchResults].sort((a, b) => {
@@ -1275,6 +1279,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     setRecordStatus("NOT_FOUND");
     setSubjectName(nameTerm);
     setStep2PdfData(null);
+    setStep2PdfError("");
     showNotif(`Issuing Negative Certificate for "${nameTerm}"`, "success");
     setStep("payment");
   };
@@ -1283,30 +1288,30 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     setPreviewLoadingId(id);
     try {
       const pdfData = await loadPdfForRecord(ENTITY, API, id, record, createPdfBlobFromData);
-      setPdfModal({ pdfData, fileName: getRecordDisplayName(record), id });
+      setPdfModal({ pdfData, pdfError: null, fileName: getRecordDisplayName(record), id });
     } catch (err) { showNotif(err.message, "error"); }
     finally { setPreviewLoadingId(null); }
   };
 
   const loadStep2Pdf = async (record) => {
-    if (!record) { setStep2PdfData(null); return; }
+    if (!record) { setStep2PdfData(null); setStep2PdfError(""); return; }
     setStep2PdfLoading(true);
     try {
       setStep2PdfData(await loadPdfForRecord(ENTITY, API, record.id, record, createPdfBlobFromData));
+      setStep2PdfError("");
     } catch (err) {
-      showNotif(err.message, "error");
-      setStep2PdfData(null);
+      showNotif(err.message, "error"); setStep2PdfData(null); setStep2PdfError(err.message);
     } finally { setStep2PdfLoading(false); }
   };
 
   const handleProceedToPayment = async () => {
     setStep("payment");
     if (selectedRecord) await loadStep2Pdf(selectedRecord);
-    else setStep2PdfData(null);
+    else { setStep2PdfData(null); setStep2PdfError(""); }
   };
 
   const isPositive = recordStatus === "ACTIVE";
-  const issuedDoc  = isPositive
+  const issuedDoc = isPositive
     ? "Certified True Copy of Death Certificate (Actual)"
     : "Certificate of No Death Record (Negative Certificate)";
 
@@ -1317,17 +1322,17 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     }
     printNegativeCertificate({
       subjectName,
-      dateOfDeath:       negCertInfo.dateOfDeath   || null,
-      fatherName:        negCertInfo.fatherName    || null,
-      motherName:        negCertInfo.motherName    || null,
-      requestorName:     negCertInfo.requestorName || null,
-      cityMunicipality:  OFFICE_CONFIG.cityMunicipality,
+      dateOfDeath: negCertInfo.dateOfDeath || null,
+      fatherName: negCertInfo.fatherName || null,
+      motherName: negCertInfo.motherName || null,
+      requestorName: negCertInfo.requestorName || null,
+      cityMunicipality: OFFICE_CONFIG.cityMunicipality,
       certifyingOfficer: OFFICE_CONFIG.certifyingOfficer,
-      verifiedBy:        OFFICE_CONFIG.verifiedBy,
-      amountPaid:        OFFICE_CONFIG.amountPaid,
-      orNumber:          orNumber.trim(),
-      datePaid:          formatTodayLong(),
-      todayDate:         formatTodayLong(),
+      verifiedBy: OFFICE_CONFIG.verifiedBy,
+      amountPaid: OFFICE_CONFIG.amountPaid,
+      orNumber: orNumber.trim(),
+      datePaid: formatTodayLong(),
+      todayDate: formatTodayLong(),
     });
     showNotif("Printing Negative Certificate…", "success");
   };
@@ -1341,27 +1346,24 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const handleCompleteTransaction = async () => {
     setProcessing(true);
     const opId = newOpId();
-    const url  = `${API}/records/complete`;
+    const url = `${API}/records/complete`;
     const payload = {
       searchOperator: subjectName, recordStatus,
       recordId: selectedRecord && !selectedRecord._pending ? selectedRecord.id : null,
       paymentMethod: "cash", paymentReference: payRef,
       paymentAmount: FEE, documentIssued: issuedDoc,
       orNumber: orNumber.trim() || null,
-      first_name:  selectedRecord?.deceased_first_name  || srchFirstName.trim(),
+      first_name: selectedRecord?.deceased_first_name || srchFirstName.trim(),
       middle_name: selectedRecord?.deceased_middle_name || "",
-      last_name:   selectedRecord?.deceased_last_name   || srchLastName.trim(),
+      last_name: selectedRecord?.deceased_last_name || srchLastName.trim(),
     };
-
     const saveOffline = async () => {
       await queueTransaction(ENTITY, url, payload, subjectName, opId);
       showNotif("No connection. Transaction saved on this device and will sync automatically.", "success");
       return true;
     };
-
     try {
       if (!isOnline()) return await saveOffline();
-
       let res;
       try {
         res = await apiFetch(url, {
@@ -1369,17 +1371,12 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
           headers: { "Content-Type": "application/json", "X-Offline-Op-Id": opId },
           body: JSON.stringify(payload),
         });
-      } catch {
-        return await saveOffline();
-      }
+      } catch { return await saveOffline(); }
+      if (res.status >= 500 && !(await checkNow())) return await saveOffline();
 
       let data = {};
-      try { data = await res.json(); } catch { /* non-JSON body */ }
-
-      if (!res.ok || data?.error) {
-        throw new Error(data?.error || "Failed to save the transaction. Please try again.");
-      }
-
+      try { data = await res.json(); } catch { /* non-JSON */ }
+      if (!res.ok || data?.error) throw new Error(data?.error || "Failed to save the transaction. Please try again.");
       showNotif("Transaction completed successfully!", "success");
       return true;
     } catch (err) {
@@ -1395,7 +1392,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     setSrchFirstName(""); setSrchLastName(""); setHasSearched(false);
     setFirstNameError(""); setLastNameError("");
     setSelectedRecord(null); setRecordStatus(null);
-    setSubjectName(""); setPayRef(""); setStep2PdfData(null);
+    setSubjectName(""); setPayRef(""); setStep2PdfData(null); setStep2PdfError("");
     setNegCertInfo({ fatherName: "", motherName: "", dateOfDeath: "", requestorName: "" });
     setOrNumber("");
     fetchRecords(); fetchArchived();
@@ -1404,7 +1401,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
   const handleViewPdf = async (id, record) => {
     try {
       const pdfData = await loadPdfForRecord(ENTITY, API, id, record, createPdfBlobFromData);
-      setPdfModal({ pdfData, fileName: getRecordDisplayName(record), id });
+      setPdfModal({ pdfData, pdfError: null, fileName: getRecordDisplayName(record), id });
     } catch (err) { showNotif(err.message, "error"); }
   };
 
@@ -1416,9 +1413,9 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     onConfirm: async () => {
       setConfirmModal(null);
       try {
-        const name   = getRecordDisplayName(record);
-        const result = await deleteRecordSmart(ENTITY, API, id, record, name);
-        if (result === "queued")       showNotif(`"${name}" deleted offline. It will be removed from the server when you're back online.`, "success");
+        const result = await deleteRecordSmart(ENTITY, API, id, record, getRecordDisplayName(record));
+        const name = getRecordDisplayName(record);
+        if (result === "queued") showNotif(`"${name}" deleted offline. It will be removed from the server when you're back online.`, "success");
         else if (result === "removed") showNotif(`"${name}" removed from the upload queue.`, "success");
         else { showNotif(`"${name}" deleted.`, "success"); fetchArchived(); }
       } catch (err) { showNotif(err.message, "error"); }
@@ -1429,9 +1426,8 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     ? allArchivedRecords.filter((r) => matchesSearch(r, archiveSearch.trim()))
     : allArchivedRecords;
 
-  // ── Bulk selection (Archive) ──────────────────────────────────────────────
-  const filteredIds  = filteredArchived.map((r) => r.id);
-  const allSelected  = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const filteredIds = filteredArchived.map((r) => r.id);
+  const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
   const someSelected = !allSelected && filteredIds.some((id) => selectedIds.has(id));
 
   const toggleSelect = (id) =>
@@ -1445,7 +1441,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allSelected) filteredIds.forEach((id) => next.delete(id));
-      else             filteredIds.forEach((id) => next.add(id));
+      else filteredIds.forEach((id) => next.add(id));
       return next;
     });
 
@@ -1455,7 +1451,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
     setSelectedIds((prev) => {
       if (prev.size === 0) return prev;
       const valid = new Set(allArchivedRecords.map((r) => r.id));
-      const next  = new Set([...prev].filter((id) => valid.has(id)));
+      const next = new Set([...prev].filter((id) => valid.has(id)));
       return next.size === prev.size ? prev : next;
     });
   }, [allArchivedRecords]);
@@ -1534,7 +1530,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
         />
       )}
 
-      {/* ── Header / Tab bar ──────────────────────────────────────────── */}
       <div className="ubr-header">
         <div className="ubr-header__brand">
           <span className="ubr-header__logo"><IconGrid /></span>
@@ -1556,7 +1551,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
         </div>
       </div>
 
-      {/* ── Transaction Tab ───────────────────────────────────────────── */}
       {tab === "transaction" && (
         <div className="ubr-body">
           <div className="ubr-tx">
@@ -1564,7 +1558,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
             <div className="ubr-tx__scroll">
               <div className="ubr-card">
 
-                {/* Step 1 — Select */}
                 {step === "select" && (
                   <>
                     <div className="step-scroll">
@@ -1581,6 +1574,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                                 name="lastName"
                                 className={`field-input${lastNameError ? " field-input--error" : ""}`}
                                 type="text"
+                                autoComplete="family-name"
                                 value={srchLastName}
                                 onChange={(e) => { setSrchLastName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setLastNameError(""); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
@@ -1596,6 +1590,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                                 name="firstName"
                                 className={`field-input${firstNameError ? " field-input--error" : ""}`}
                                 type="text"
+                                autoComplete="given-name"
                                 value={srchFirstName}
                                 onChange={(e) => { setSrchFirstName(e.target.value); setHasSearched(false); if (e.target.value.trim()) setFirstNameError(""); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
@@ -1632,14 +1627,14 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                             ) : (
                               <>
                                 {sortedResults.map((r) => {
-                                  const display       = getRecordDisplayName(r);
-                                  const father        = getFatherDisplayName(r);
-                                  const mother        = getMotherDisplayName(r);
+                                  const display = getRecordDisplayName(r);
+                                  const father = getFatherDisplayName(r);
+                                  const mother = getMotherDisplayName(r);
                                   const isLoadingPrev = previewLoadingId === r.id;
-                                  const isSelected    =
+                                  const isSelected =
                                     selectedRecord?.id === r.id &&
                                     !!selectedRecord?._isArchived === !!r._isArchived;
-                                  const accuracy      = getAccuracy(r);
+                                  const accuracy = getAccuracy(r);
 
                                   return (
                                     <div
@@ -1710,7 +1705,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                   </>
                 )}
 
-                {/* Step 2 — Review & Print */}
                 {step === "payment" && (
                   <>
                     <div className="step-scroll">
@@ -1726,6 +1720,7 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                         {isPositive ? (
                           <InlinePdfViewer
                             pdfData={step2PdfData}
+                            pdfError={step2PdfError}
                             record={selectedRecord}
                             loadingPdf={step2PdfLoading}
                             showNotif={showNotif}
@@ -1754,7 +1749,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
                   </>
                 )}
 
-                {/* Step 3 — Release */}
                 {step === "releasing" && (
                   <>
                     <div className="step-scroll">
@@ -1807,7 +1801,6 @@ export default function UnifiedDeathRegistry({ initialView = null }) {
         </div>
       )}
 
-      {/* ── Archive Tab ───────────────────────────────────────────────── */}
       {tab === "archive" && (
         <div className="tab-wrap">
           {!archiveUnlocked ? (
