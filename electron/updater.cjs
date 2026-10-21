@@ -33,18 +33,12 @@ function initAutoUpdater() {
     logLine(`update available: ${info.version}`);
   });
 
-  autoUpdater.on('update-not-available', (info) => {
-    logLine(`already on latest version: ${info?.version}`);
+  autoUpdater.on('update-not-available', () => {
+    logLine('already on latest version');
   });
 
-  // Log only every 10% to keep the file small.
-  let lastPct = -10;
   autoUpdater.on('download-progress', (p) => {
-    const pct = Math.floor(p.percent);
-    if (pct >= lastPct + 10 || pct === 100) {
-      lastPct = pct;
-      logLine(`downloading: ${pct}%`);
-    }
+    logLine(`downloading: ${Math.round(p.percent)}%`);
   });
 
   autoUpdater.on('update-downloaded', (info) => {
@@ -52,12 +46,12 @@ function initAutoUpdater() {
   });
 
   autoUpdater.on('error', (err) => {
-    logLine(`error: ${err?.stack || err?.message || err}`);
+    logLine(`error: ${err?.message || err}`);
   });
 
   const check = () => {
     autoUpdater.checkForUpdates().catch((err) => {
-      logLine(`check failed: ${err?.stack || err?.message || err}`);
+      logLine(`check failed: ${err?.message || err}`);
     });
   };
 
