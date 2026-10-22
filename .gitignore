@@ -8,8 +8,17 @@ node_modules/
 dist/
 dist-electron/
 release/
+release-*/
 .vercel/
 coverage/
+
+# ---------- Backend build output ----------
+backend/.env
+backend/venv/
+backend/__pycache__/
+backend/build/
+backend/dist/
+backend/*.spec
 
 # ---------- Logs and editor junk ----------
 *.log
@@ -17,11 +26,3 @@ coverage/
 Thumbs.db
 .vscode/
 .idea/
-
-   backend/.env
-   backend/venv/
-   backend/__pycache__/
-   backend/build/
-   backend/dist/
-   backend/*.spec
-   release-*/

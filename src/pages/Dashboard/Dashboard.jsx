@@ -33,14 +33,14 @@ const TYPE_COLORS = {
   Verification: COLORS.verification,
 };
 
-const MONTH_SHORT = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTH_SHORT = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /* ══ HELPERS ═════════════════════════════════════════════════════════════════ */
 const numFmt = new Intl.NumberFormat("en-PH");
 const phpFmt = new Intl.NumberFormat("en-PH", { maximumFractionDigits: 0 });
-const fmtNum  = (v) => numFmt.format(Number(v || 0));
-const fmtPct  = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Number(v).toFixed(1)}%`);
-const fmtPHP  = (v) => `₱${phpFmt.format(Number(v || 0))}`;
+const fmtNum = (v) => numFmt.format(Number(v || 0));
+const fmtPct = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Number(v).toFixed(1)}%`);
+const fmtPHP = (v) => `₱${phpFmt.format(Number(v || 0))}`;
 const EMPTY_ARRAY = Object.freeze([]);
 const safeArr = (v) => (Array.isArray(v) ? v : EMPTY_ARRAY);
 
@@ -122,7 +122,7 @@ const LineChartStaticLayer = memo(function LineChartStaticLayer({ chartLabels, c
       <defs>
         {chartSeries.map((item, index) => (
           <linearGradient key={index} id={`${gradientPrefix}-grad-${index}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={item.color} stopOpacity="0.16" />
+            <stop offset="0%" stopColor={item.color} stopOpacity="0.14" />
             <stop offset="100%" stopColor={item.color} stopOpacity="0.01" />
           </linearGradient>
         ))}
@@ -132,13 +132,13 @@ const LineChartStaticLayer = memo(function LineChartStaticLayer({ chartLabels, c
           <line
             x1={PAD.left} y1={yScale(value)}
             x2={W - PAD.right} y2={yScale(value)}
-            stroke="var(--an-border, rgba(0,0,0,0.08))"
+            stroke="var(--an-border, #e5e7eb)"
             strokeWidth="0.5"
           />
           <text
             x={PAD.left - 6} y={yScale(value) + 4}
             textAnchor="end" fontSize="9"
-            fill="var(--an-text-muted, #94a3b8)"
+            fill="var(--an-text-muted, #6b7280)"
           >
             {fmtNum(value)}
           </text>
@@ -149,7 +149,7 @@ const LineChartStaticLayer = memo(function LineChartStaticLayer({ chartLabels, c
           <text
             key={index} x={xScale(index)} y={H - 4}
             textAnchor="middle" fontSize="9"
-            fill="var(--an-text-muted, #94a3b8)"
+            fill="var(--an-text-muted, #6b7280)"
           >
             {label}
           </text>
@@ -203,7 +203,7 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
   const allValues = chartSeries.flatMap((s) => safeArr(s.data));
   const maxVal = Math.max(...allValues, 1);
   const minVal = Math.min(...allValues, 0);
-  const range  = maxVal - minVal || 1;
+  const range = maxVal - minVal || 1;
 
   const xScale = (i) =>
     chartLabels.length <= 1
@@ -251,7 +251,7 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
           <line
             x1={xScale(hoverIdx)} y1={PAD.top}
             x2={xScale(hoverIdx)} y2={H - PAD.bottom}
-            stroke="var(--an-border-strong, rgba(0,0,0,0.14))"
+            stroke="var(--an-border-strong, #d1d5db)"
             strokeWidth="1"
             strokeDasharray="3 3"
           />
@@ -304,17 +304,17 @@ const LineChart = ({ series = [], labels = [], height = 180, showLegend = true }
 /* ══ BAR CHART ═══════════════════════════════════════════════════════════════ */
 const BarChart = ({
   rows = [],
-  colorKey  = "color",
-  valueKey  = "count",
-  labelKey  = "label",
+  colorKey = "color",
+  valueKey = "count",
+  labelKey = "label",
   showValue = true,
 }) => {
   const maxVal = Math.max(...rows.map((r) => Number(r[valueKey] || 0)), 1);
   return (
     <div className="an-bar-chart">
       {rows.map((row, i) => {
-        const val   = Number(row[valueKey] || 0);
-        const pct   = Math.round((val / maxVal) * 100);
+        const val = Number(row[valueKey] || 0);
+        const pct = Math.round((val / maxVal) * 100);
         const color = row[colorKey] || COLORS.birth;
         return (
           <div key={i} className="an-bar-row">
@@ -340,16 +340,16 @@ const StackedBar = ({ rows = [] }) => {
     <div className="an-stacked-chart">
       {rows.map((row, i) => {
         const total = (row.Birth || 0) + (row.Marriage || 0) + (row.Death || 0);
-        const bPct  = Math.round(((row.Birth    || 0) / maxVal) * 100);
-        const mPct  = Math.round(((row.Marriage || 0) / maxVal) * 100);
-        const dPct  = Math.round(((row.Death    || 0) / maxVal) * 100);
+        const bPct = Math.round(((row.Birth || 0) / maxVal) * 100);
+        const mPct = Math.round(((row.Marriage || 0) / maxVal) * 100);
+        const dPct = Math.round(((row.Death || 0) / maxVal) * 100);
         return (
           <div key={i} className="an-stacked-row">
             <div className="an-stacked-label" title={row.name}>{row.name}</div>
             <div className="an-stacked-track">
-              <div className="an-stacked-seg" style={{ width: `${bPct}%`, background: COLORS.birth    }} title={`Birth: ${row.Birth}`} />
+              <div className="an-stacked-seg" style={{ width: `${bPct}%`, background: COLORS.birth }} title={`Birth: ${row.Birth}`} />
               <div className="an-stacked-seg" style={{ width: `${mPct}%`, background: COLORS.marriage }} title={`Marriage: ${row.Marriage}`} />
-              <div className="an-stacked-seg" style={{ width: `${dPct}%`, background: COLORS.death    }} title={`Death: ${row.Death}`} />
+              <div className="an-stacked-seg" style={{ width: `${dPct}%`, background: COLORS.death }} title={`Death: ${row.Death}`} />
             </div>
             <div className="an-stacked-val">{fmtNum(total)}</div>
           </div>
@@ -371,24 +371,23 @@ const DonutChart = ({ slices = [], size = 130 }) => {
     const angle = -Math.PI / 2 + visibleSlices
       .slice(0, i)
       .reduce((sum, slice) => sum + (Number(slice.count || 0) / total) * Math.PI * 2, 0);
-    const val   = Number(sl.count || 0);
+    const val = Number(sl.count || 0);
     // Cap just below a full turn so a single 100% slice still draws a ring
     // (identical start and end points would render nothing).
     const sweep = Math.min((val / total) * Math.PI * 2, Math.PI * 2 - 0.0001);
-    const end   = angle + sweep;
-    const la    = sweep > Math.PI ? 1 : 0;
-    const x1  = cx + r  * Math.cos(angle), y1  = cy + r  * Math.sin(angle);
-    const x2  = cx + r  * Math.cos(end),   y2  = cy + r  * Math.sin(end);
-    const ix1 = cx + ir * Math.cos(end),   iy1 = cy + ir * Math.sin(end);
+    const end = angle + sweep;
+    const la = sweep > Math.PI ? 1 : 0;
+    const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
+    const x2 = cx + r * Math.cos(end), y2 = cy + r * Math.sin(end);
+    const ix1 = cx + ir * Math.cos(end), iy1 = cy + ir * Math.sin(end);
     const ix2 = cx + ir * Math.cos(angle), iy2 = cy + ir * Math.sin(angle);
     const path = `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${la} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix1.toFixed(2)} ${iy1.toFixed(2)} A ${ir} ${ir} 0 ${la} 0 ${ix2.toFixed(2)} ${iy2.toFixed(2)} Z`;
     return {
-      key:   `${sl.label}-${i}`,
+      key: `${sl.label}-${i}`,
       path,
       color: sl.color,
       label: sl.label,
       count: val,
-      pct:   Math.round((val / total) * 100),
     };
   });
 
@@ -406,23 +405,23 @@ const DonutChart = ({ slices = [], size = 130 }) => {
             key={a.key}
             d={a.path}
             fill={a.color}
-            opacity={hovered == null || hovered === i ? 1 : 0.40}
+            opacity={hovered == null || hovered === i ? 1 : 0.4}
             style={{ cursor: "pointer", transition: "opacity .15s" }}
             onMouseEnter={() => setHovered(i)}
           />
         ))}
         <circle cx={cx} cy={cy} r={ir - 1} fill="var(--an-surface, #ffffff)" />
         <text
-          x={cx} y={cy - 5}
-          textAnchor="middle" fontSize="11" fontWeight="700"
-          fill="var(--an-text, #0f172a)"
+          x={cx} y={cy - 4}
+          textAnchor="middle" fontSize="13" fontWeight="700"
+          fill="var(--an-text, #111827)"
         >
           {active ? fmtNum(active.count) : fmtNum(total)}
         </text>
         <text
           x={cx} y={cy + 10}
           textAnchor="middle" fontSize="8"
-          fill="var(--an-text-muted, #94a3b8)"
+          fill="var(--an-text-muted, #6b7280)"
         >
           {active ? active.label : "total"}
         </text>
@@ -447,93 +446,50 @@ const DonutChart = ({ slices = [], size = 130 }) => {
   );
 };
 
-/* ══ SPARKLINE ═══════════════════════════════════════════════════════════════
-   Minimal single-color trend line: no axes, gridlines, or legend. */
-const Sparkline = ({ data = [], color = COLORS.birth, height = 32 }) => {
-  const values = safeArr(data).map((v) => Number(v) || 0);
-  if (values.length < 2) return null;
-
-  const W = 160, H = height, PAD = 3;
-  const max = Math.max(...values);
-  const min = Math.min(...values, 0);
-  const range = max - min || 1;
-
-  const points = values.map((v, i) => [
-    PAD + (i / (values.length - 1)) * (W - PAD * 2),
-    PAD + (H - PAD * 2) - ((v - min) / range) * (H - PAD * 2),
-  ]);
-
-  const path = points
-    .map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`)
-    .join(" ");
-
-  const [lastX, lastY] = points[points.length - 1];
-
-  return (
-    <svg
-      className="an-sparkline"
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <path d={path} fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={lastX} cy={lastY} r="2.5" fill={color} />
-    </svg>
-  );
-};
-
-/* ══ GROWTH RATE BADGE ═══════════════════════════════════════════════════════ */
+/* ══ DELTA BADGE ═════════════════════════════════════════════════════════════ */
 const GrowthBadge = ({ value }) => {
   if (value == null) return <span className="an-growth-neutral">—</span>;
-  const cls   = value > 0 ? "an-growth-up" : value < 0 ? "an-growth-down" : "an-growth-neutral";
+  const tone = value > 0 ? "up" : value < 0 ? "down" : "neutral";
   const arrow = value > 0 ? "↑" : value < 0 ? "↓" : "→";
   return (
-    <span className={`an-growth-badge ${cls}`}>
+    <span className={`an-delta an-delta--${tone}`}>
       {arrow} {Math.abs(value).toFixed(1)}%
     </span>
   );
 };
 
-/* ══ METRIC CARD ═════════════════════════════════════════════════════════════ */
-const MetricCard = ({ label, value, sub, accent, hero = false, period, trend, onClick }) => {
-  const interactive = typeof onClick === "function";
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onClick();
-    }
-  };
-
-  return (
-    <div
-      className={
-        `an-metric-card${hero ? " an-metric-card--hero" : ""}` +
-        `${interactive ? " an-metric-card--clickable" : ""}`
-      }
-      {...(interactive && {
-        role: "link",
-        tabIndex: 0,
-        onClick,
-        onKeyDown: handleKeyDown,
-        "aria-label": `Open ${label}`,
-      })}
-    >
-      <div className="an-metric-label">
-        {accent && <span className="an-metric-dot" style={{ background: accent }} />}
-        {label}
-      </div>
-      <div className="an-metric-value">{value}</div>
-      <div className="an-metric-footer">
-        <span className="an-metric-sub">{sub}</span>
-      </div>
-      {period && <div className="an-metric-period">{period}</div>}
-      {trend && trend.length > 1 && (
-        <Sparkline data={trend} color={accent || COLORS.birth} height={hero ? 48 : 32} />
-      )}
-    </div>
-  );
-};
+/* ══ KPI STRIP ═══════════════════════════════════════════════════════════════
+   One connected bar of stats separated by dividers, instead of separate cards.
+   item: { label, value, caption, accent, delta: { text, tone }, onClick } */
+const KpiStrip = ({ items = [] }) => (
+  <div className="an-strip">
+    {items.map((it) => {
+      const clickable = typeof it.onClick === "function";
+      return (
+        <button
+          key={it.label}
+          type="button"
+          className={`an-strip-item${clickable ? " an-strip-item--clickable" : ""}`}
+          onClick={clickable ? it.onClick : undefined}
+          disabled={!clickable}
+          aria-label={clickable ? `Open ${it.label}` : undefined}
+        >
+          <div className="an-strip-label">
+            {it.accent && <span className="an-strip-dot" style={{ background: it.accent }} />}
+            <span>{it.label}</span>
+          </div>
+          <div className="an-strip-row">
+            <span className="an-strip-value">{it.value}</span>
+            {it.delta && (
+              <span className={`an-delta an-delta--${it.delta.tone}`}>{it.delta.text}</span>
+            )}
+          </div>
+          {it.caption && <div className="an-strip-caption">{it.caption}</div>}
+        </button>
+      );
+    })}
+  </div>
+);
 
 /* ══ PANEL WRAPPER ═══════════════════════════════════════════════════════════ */
 const Panel = ({ title, sub, children, full = false }) => (
@@ -545,7 +501,6 @@ const Panel = ({ title, sub, children, full = false }) => (
     {children}
   </section>
 );
-
 
 /* ══ EMPTY ═══════════════════════════════════════════════════════════════════ */
 const Empty = ({ msg = "No data available" }) => (
@@ -565,10 +520,10 @@ const MunicipalityTable = ({ rows = [] }) => {
   const max = sorted[0]?.[sortBy] || 1;
 
   const cols = [
-    { key: "cnt",      label: "Total",    color: "#64748b"       },
-    { key: "Birth",    label: "Birth",    color: COLORS.birth    },
+    { key: "cnt",      label: "Total",    color: "#64748b" },
+    { key: "Birth",    label: "Birth",    color: COLORS.birth },
     { key: "Marriage", label: "Marriage", color: COLORS.marriage },
-    { key: "Death",    label: "Death",    color: COLORS.death    },
+    { key: "Death",    label: "Death",    color: COLORS.death },
   ];
 
   return (
@@ -580,7 +535,7 @@ const MunicipalityTable = ({ rows = [] }) => {
             className={`an-muni-sort-btn${sortBy === c.key ? " active" : ""}`}
             style={
               sortBy === c.key
-                ? { borderColor: c.color, color: c.color, background: `${c.color}18` }
+                ? { borderColor: c.color, color: c.color, background: `${c.color}12` }
                 : {}
             }
             onClick={() => setSortBy(c.key)}
@@ -605,9 +560,9 @@ const MunicipalityTable = ({ rows = [] }) => {
                     <div className="an-muni-bar-fill" style={{ width: `${pct}%`, background: col }} />
                   </div>
                   <div className="an-muni-type-pills">
-                    {row.Birth    > 0 && <span className="an-type-pill" style={{ background: `${COLORS.birth}22`,    color: COLORS.birth    }}>B {fmtNum(row.Birth)}</span>}
-                    {row.Marriage > 0 && <span className="an-type-pill" style={{ background: `${COLORS.marriage}22`, color: COLORS.marriage }}>M {fmtNum(row.Marriage)}</span>}
-                    {row.Death    > 0 && <span className="an-type-pill" style={{ background: `${COLORS.death}22`,    color: COLORS.death    }}>D {fmtNum(row.Death)}</span>}
+                    {row.Birth > 0 && <span className="an-type-pill" style={{ background: `${COLORS.birth}1a`, color: COLORS.birth }}>B {fmtNum(row.Birth)}</span>}
+                    {row.Marriage > 0 && <span className="an-type-pill" style={{ background: `${COLORS.marriage}1a`, color: COLORS.marriage }}>M {fmtNum(row.Marriage)}</span>}
+                    {row.Death > 0 && <span className="an-type-pill" style={{ background: `${COLORS.death}1a`, color: COLORS.death }}>D {fmtNum(row.Death)}</span>}
                   </div>
                 </div>
               </div>
@@ -641,9 +596,9 @@ const GrowthTable = ({ rows = [] }) => {
             <tr key={row.label || i}>
               <td className="an-gt-period">{row.label}</td>
               <td className="an-gt-total">{fmtNum(row.count)}</td>
-              <td style={{ color: COLORS.birth,    fontWeight: 700 }}>{fmtNum(row.Birth)}</td>
-              <td style={{ color: COLORS.marriage, fontWeight: 700 }}>{fmtNum(row.Marriage)}</td>
-              <td style={{ color: COLORS.death,    fontWeight: 700 }}>{fmtNum(row.Death)}</td>
+              <td style={{ color: COLORS.birth, fontWeight: 600 }}>{fmtNum(row.Birth)}</td>
+              <td style={{ color: COLORS.marriage, fontWeight: 600 }}>{fmtNum(row.Marriage)}</td>
+              <td style={{ color: COLORS.death, fontWeight: 600 }}>{fmtNum(row.Death)}</td>
               <td><GrowthBadge value={row.mom_growth} /></td>
             </tr>
           ))}
@@ -720,7 +675,7 @@ const MonthHeatmap = ({ byMonth = [], reqByMonth = [] }) => {
 /* ══ TODAY PANEL ═════════════════════════════════════════════════════════════ */
 const TodayPanel = ({ today = {} }) => {
   const breakdown = safeArr(today.requests_breakdown);
-  const payments  = safeArr(today.payments_breakdown);
+  const payments = safeArr(today.payments_breakdown);
 
   return (
     <div className="an-today-grid">
@@ -733,9 +688,8 @@ const TodayPanel = ({ today = {} }) => {
               key={r.label}
               className="an-today-pill"
               style={{
-                background:  `${TYPE_COLORS[r.label] || "#64748b"}22`,
-                color:        TYPE_COLORS[r.label] || "#64748b",
-                borderColor: `${TYPE_COLORS[r.label] || "#64748b"}44`,
+                background: `${TYPE_COLORS[r.label] || "#64748b"}1a`,
+                color: TYPE_COLORS[r.label] || "#64748b",
               }}
             >
               {r.label} {fmtNum(r.count)}
@@ -753,9 +707,8 @@ const TodayPanel = ({ today = {} }) => {
               key={r.label}
               className="an-today-pill"
               style={{
-                background:  `${TYPE_COLORS[r.label] || "#64748b"}22`,
-                color:        TYPE_COLORS[r.label] || "#64748b",
-                borderColor: `${TYPE_COLORS[r.label] || "#64748b"}44`,
+                background: `${TYPE_COLORS[r.label] || "#64748b"}1a`,
+                color: TYPE_COLORS[r.label] || "#64748b",
               }}
             >
               {r.label} {fmtPHP(r.amount)}
@@ -787,13 +740,12 @@ const TodayPanel = ({ today = {} }) => {
 
 /* ══ GROWTH KPI HELPERS ══════════════════════════════════════════════════════ */
 function buildGrowthKpis(growth) {
-  const n         = growth.length;
+  const n = growth.length;
   const latestRow = n >= 1 ? growth[n - 1] : null;
-  const prevRow   = n >= 2 ? growth[n - 2] : null;
+  const prevRow = n >= 2 ? growth[n - 2] : null;
 
-  let momValue  = null;
-  let momLabel  = "Month-over-month request growth";
-  let momAccent = "#64748b";
+  let momValue = null;
+  let momLabel = "Month-over-month request growth";
 
   if (latestRow) {
     if (latestRow.mom_growth != null) {
@@ -805,13 +757,9 @@ function buildGrowthKpis(growth) {
       );
       momLabel = `${latestRow.label} vs ${prevRow.label}`;
     } else {
-      momValue = null;
       momLabel = n === 1
         ? `Only 1 period tracked (${latestRow.label}) — need 2+ for MoM`
         : "Not enough data for comparison";
-    }
-    if (momValue != null) {
-      momAccent = momValue > 0 ? "#16a34a" : momValue < 0 ? "#dc2626" : "#64748b";
     }
   }
 
@@ -823,25 +771,32 @@ function buildGrowthKpis(growth) {
       prevMomValue = prevRow.mom_growth;
       prevMomLabel = `${prevRow.label} vs its previous month`;
     } else {
-      prevMomValue = null;
       prevMomLabel = `${prevRow.label} was the first tracked period`;
     }
   } else if (n === 1) {
     prevMomLabel = "Need 2+ months of requests";
   }
 
-  const momDisplay       = momValue     != null ? fmtPct(momValue)     : (latestRow ? `${fmtNum(latestRow.count)} reqs` : "—");
-  const prevMomDisplay   = prevMomValue != null ? fmtPct(prevMomValue) : "—";
-  const momDisplayAccent = momValue != null ? momAccent : (latestRow ? COLORS.birth : "#64748b");
-
-  return { momDisplay, momLabel, momAccent: momDisplayAccent, prevMomDisplay, prevMomLabel };
+  return {
+    momRaw: momValue,
+    momDisplay: momValue != null ? fmtPct(momValue) : (latestRow ? `${fmtNum(latestRow.count)} reqs` : "—"),
+    momLabel,
+    prevMomRaw: prevMomValue,
+    prevMomDisplay: prevMomValue != null ? fmtPct(prevMomValue) : "—",
+    prevMomLabel,
+  };
 }
+
+const deltaFromPct = (v) => {
+  if (v == null) return null;
+  const tone = v > 0 ? "up" : v < 0 ? "down" : "neutral";
+  return { text: `${v > 0 ? "↑" : v < 0 ? "↓" : "→"} ${Math.abs(v).toFixed(1)}%`, tone };
+};
 
 const MemoLineChart = memo(LineChart);
 const MemoBarChart = memo(BarChart);
 const MemoStackedBar = memo(StackedBar);
 const MemoDonutChart = memo(DonutChart);
-const MemoMetricCard = memo(MetricCard);
 const MemoMunicipalityTable = memo(MunicipalityTable);
 
 /* ══ MAIN ANALYTICS DASHBOARD ════════════════════════════════════════════════ */
@@ -885,7 +840,6 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
   });
 
   // Remember when live (non-cached) data was last on screen, for the banner timestamp.
-  // Runs only when a new data object arrives, not on every render.
   useEffect(() => {
     if (
       online &&
@@ -903,14 +857,14 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
   const showOfflineBanner = !online || !!stale?.fromCache;
   const savedAt = stale?.cachedAt || lastLiveAt;
 
-  const summary  = data.summary  || {};
-  const byYear   = safeArr(data.byYear);
-  const byMonth  = safeArr(data.byMonth);
-  const reqYear  = safeArr(data.reqByYear);
+  const summary = data.summary || {};
+  const byYear = safeArr(data.byYear);
+  const byMonth = safeArr(data.byMonth);
+  const reqYear = safeArr(data.reqByYear);
   const reqMonth = safeArr(data.reqByMonth);
-  const munis    = safeArr(data.topMunicipalities);
-  const growth   = safeArr(data.growthRate);
-  const today    = data.today || {};
+  const munis = safeArr(data.topMunicipalities);
+  const growth = safeArr(data.growthRate);
+  const today = data.today || {};
 
   const byYearSeries = useMemo(() => {
     if (!byYear.length) return [];
@@ -920,19 +874,16 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
   const growthSeries = useMemo(() => {
     if (!growth.length) return [];
     return [
-      { name: "Birth",    data: growth.map((r) => r.Birth    || 0), color: COLORS.birth    },
+      { name: "Birth", data: growth.map((r) => r.Birth || 0), color: COLORS.birth },
       { name: "Marriage", data: growth.map((r) => r.Marriage || 0), color: COLORS.marriage },
-      { name: "Death",    data: growth.map((r) => r.Death    || 0), color: COLORS.death    },
+      { name: "Death", data: growth.map((r) => r.Death || 0), color: COLORS.death },
     ];
   }, [growth]);
 
-  const yearLabels   = useMemo(() => byYear.map((r) => String(r.year)), [byYear]);
+  const yearLabels = useMemo(() => byYear.map((r) => String(r.year)), [byYear]);
   const growthLabels = useMemo(() => growth.map((r) => r.label), [growth]);
 
-  const { momDisplay, momLabel, momAccent, prevMomDisplay, prevMomLabel } = useMemo(
-    () => buildGrowthKpis(growth),
-    [growth]
-  );
+  const growthKpi = useMemo(() => buildGrowthKpis(growth), [growth]);
 
   const heroPeriod = byYear.length
     ? byYear.length > 1
@@ -954,9 +905,9 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     : null;
 
   const donutSlices = useMemo(() => [
-    { label: "Birth",    count: summary.total_birth_records    || 0, color: COLORS.birth    },
+    { label: "Birth", count: summary.total_birth_records || 0, color: COLORS.birth },
     { label: "Marriage", count: summary.total_marriage_records || 0, color: COLORS.marriage },
-    { label: "Death",    count: summary.total_death_records    || 0, color: COLORS.death    },
+    { label: "Death", count: summary.total_death_records || 0, color: COLORS.death },
   ], [summary.total_birth_records, summary.total_marriage_records, summary.total_death_records]);
 
   const byYearRows = useMemo(
@@ -982,9 +933,9 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       .slice(0, 10)
       .map((row) => ({ label: row.name, count: row[key] || 0, color }));
     return {
-      Birth:    top("Birth",    COLORS.birth),
+      Birth: top("Birth", COLORS.birth),
       Marriage: top("Marriage", COLORS.marriage),
-      Death:    top("Death",    COLORS.death),
+      Death: top("Death", COLORS.death),
     };
   }, [munis]);
   const todayRequestRows = useMemo(() => (today.requests_breakdown || []).map((row) => ({
@@ -998,18 +949,86 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     color: TYPE_COLORS[row.label] || "#64748b",
   })), [today.payments_breakdown]);
 
+  // Overview strip: totals + how many were uploaded today (shown as the delta badge).
+  const uploadedToday = summary.uploaded_today_breakdown || {};
+  const totalUploadedToday =
+    (uploadedToday.birth || 0) + (uploadedToday.marriage || 0) + (uploadedToday.death || 0);
+
+  const overviewKpis = [
+    {
+      label: "Total records",
+      value: fmtNum(summary.total_records),
+      caption: heroPeriod ? `All entries · ${heroPeriod}` : "All civil registry entries",
+      accent: COLORS.birth,
+      delta: { text: `+${fmtNum(totalUploadedToday)} today`, tone: totalUploadedToday > 0 ? "up" : "neutral" },
+    },
+    {
+      label: "Birth records",
+      value: fmtNum(summary.total_birth_records),
+      caption: "Birth certificates",
+      accent: COLORS.birth,
+      delta: { text: `+${fmtNum(uploadedToday.birth || 0)} today`, tone: (uploadedToday.birth || 0) > 0 ? "up" : "neutral" },
+      onClick: recordLinks.birth || undefined,
+    },
+    {
+      label: "Marriage records",
+      value: fmtNum(summary.total_marriage_records),
+      caption: "Marriage certificates",
+      accent: COLORS.marriage,
+      delta: { text: `+${fmtNum(uploadedToday.marriage || 0)} today`, tone: (uploadedToday.marriage || 0) > 0 ? "up" : "neutral" },
+      onClick: recordLinks.marriage || undefined,
+    },
+    {
+      label: "Death records",
+      value: fmtNum(summary.total_death_records),
+      caption: "Death certificates",
+      accent: COLORS.death,
+      delta: { text: `+${fmtNum(uploadedToday.death || 0)} today`, tone: (uploadedToday.death || 0) > 0 ? "up" : "neutral" },
+      onClick: recordLinks.death || undefined,
+    },
+  ];
+
+  const growthKpis = [
+    {
+      label: "This month vs last",
+      value: growthKpi.momDisplay,
+      caption: growthKpi.momLabel,
+      accent: growthKpi.momRaw == null ? "#64748b" : growthKpi.momRaw >= 0 ? "#16a34a" : "#dc2626",
+      delta: deltaFromPct(growthKpi.momRaw),
+    },
+    {
+      label: "Last month MoM",
+      value: growthKpi.prevMomDisplay,
+      caption: growthKpi.prevMomLabel,
+      accent: "#64748b",
+      delta: deltaFromPct(growthKpi.prevMomRaw),
+    },
+    {
+      label: "Months tracked",
+      value: fmtNum(growth.length),
+      caption: "Historical request periods",
+      accent: COLORS.birth,
+    },
+    {
+      label: "Highest month",
+      value: growth.length ? fmtNum(Math.max(...growth.map((r) => r.count))) : "—",
+      caption: "Peak request volume period",
+      accent: COLORS.marriage,
+    },
+  ];
+
   const tabs = [
-    { id: "overview",   label: "Overview"    },
-    { id: "trends",     label: "Trends"      },
-    { id: "geographic", label: "Geographic"  },
-    { id: "growth",     label: "Growth Rate" },
-    { id: "today",      label: "Today"       },
+    { id: "overview", label: "Overview" },
+    { id: "trends", label: "Trends" },
+    { id: "geographic", label: "Geographic" },
+    { id: "growth", label: "Growth Rate" },
+    { id: "today", label: "Today" },
   ];
 
   if (loading) {
     return (
       <div className="an-wrapper">
-        <Skeleton h={140} />
+        <Skeleton h={120} />
         <SkeletonGrid count={3} h={92} columns={3} style={{ marginTop: "0.75rem" }} />
         <div style={{ marginTop: "1rem" }}>
           <Skeleton h={320} />
@@ -1037,44 +1056,11 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
         </div>
       )}
 
-      <div className="an-kpi-hero-row">
-        <MemoMetricCard
-          hero
-          label="Total Records"
-          value={fmtNum(summary.total_records)}
-          sub="All civil registry entries"
-          accent={COLORS.birth}
-          period={heroPeriod}
-          trend={byYear.map((r) => r.count)}
-        />
-      </div>
-
-      <div className="an-kpi-secondary-row">
-        <MemoMetricCard
-          hero
-          label="Birth Records"
-          value={fmtNum(summary.total_birth_records)}
-          sub={`${summary.uploaded_today_breakdown?.birth || 0} uploaded today`}
-          accent={COLORS.birth}
-          onClick={recordLinks.birth || undefined}
-        />
-        <MemoMetricCard
-          hero
-          label="Marriage Records"
-          value={fmtNum(summary.total_marriage_records)}
-          sub={`${summary.uploaded_today_breakdown?.marriage || 0} uploaded today`}
-          accent={COLORS.marriage}
-          onClick={recordLinks.marriage || undefined}
-        />
-        <MemoMetricCard
-          hero
-          label="Death Records"
-          value={fmtNum(summary.total_death_records)}
-          sub={`${summary.uploaded_today_breakdown?.death || 0} uploaded today`}
-          accent={COLORS.death}
-          onClick={recordLinks.death || undefined}
-        />
-      </div>
+      {tab === "growth" ? (
+        <KpiStrip items={growthKpis} />
+      ) : (
+        <KpiStrip items={overviewKpis} />
+      )}
 
       <div className="an-tabs" role="tablist">
         {tabs.map((t) => (
@@ -1199,34 +1185,6 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
       {tab === "growth" && (
         <div className="an-tab-content">
-          <div className="an-kpi-grid">
-            <MemoMetricCard
-              label="This month vs last"
-              value={momDisplay}
-              sub={momLabel}
-              accent={momAccent}
-              trend={last12Growth.map((r) => r.count)}
-            />
-            <MemoMetricCard
-              label="Last month MoM"
-              value={prevMomDisplay}
-              sub={prevMomLabel}
-              accent="#64748b"
-            />
-            <MemoMetricCard
-              label="Months tracked"
-              value={fmtNum(growth.length)}
-              sub="Historical request periods"
-              accent={COLORS.birth}
-            />
-            <MemoMetricCard
-              label="Highest month"
-              value={growth.length ? fmtNum(Math.max(...growth.map((r) => r.count))) : "—"}
-              sub="Peak request volume period"
-              accent={COLORS.marriage}
-            />
-          </div>
-
           <Panel
             full
             title="Monthly request volume trend"
