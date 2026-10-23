@@ -525,6 +525,7 @@ const MunicipalityTable = ({ rows = [] }) => {
     { key: "Marriage", label: "Marriage", color: COLORS.marriage },
     { key: "Death",    label: "Death",    color: COLORS.death },
   ];
+  const activeCol = cols.find((c) => c.key === sortBy) || cols[0];
 
   return (
     <div className="an-muni-wrap">
@@ -549,7 +550,6 @@ const MunicipalityTable = ({ rows = [] }) => {
         {sorted.map((row, i) => {
           const val = Number(row[sortBy] || 0);
           const pct = Math.round((val / max) * 100);
-          const col = cols.find((c) => c.key === sortBy)?.color || "#64748b";
           return (
             <div key={row.name} className="an-muni-row">
               <div className="an-muni-rank">{i + 1}</div>
@@ -557,7 +557,7 @@ const MunicipalityTable = ({ rows = [] }) => {
                 <div className="an-muni-name">{row.name}</div>
                 <div className="an-muni-bars">
                   <div className="an-muni-bar-wrap">
-                    <div className="an-muni-bar-fill" style={{ width: `${pct}%`, background: col }} />
+                    <div className="an-muni-bar-fill" style={{ width: `${pct}%`, background: activeCol.color }} />
                   </div>
                   <div className="an-muni-type-pills">
                     {row.Birth > 0 && <span className="an-type-pill" style={{ background: `${COLORS.birth}1a`, color: COLORS.birth }}>B {fmtNum(row.Birth)}</span>}
@@ -566,7 +566,7 @@ const MunicipalityTable = ({ rows = [] }) => {
                   </div>
                 </div>
               </div>
-              <div className="an-muni-total" style={{ color: col }}>{fmtNum(val)}</div>
+              <div className="an-muni-total" style={{ color: activeCol.color }}>{fmtNum(val)}</div>
             </div>
           );
         })}
@@ -666,8 +666,8 @@ const MonthHeatmap = ({ byMonth = [], reqByMonth = [] }) => {
           <div key={m} className="an-heatmap-month-label">{m}</div>
         ))}
       </div>
-      {renderRow("Records", recMap, "#378ADD")}
-      {renderRow("Requests", reqMap, "#1D9E75")}
+      {renderRow("Records", recMap, COLORS.birth)}
+      {renderRow("Requests", reqMap, COLORS.marriage)}
     </div>
   );
 };
@@ -885,6 +885,11 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
   const growthKpi = useMemo(() => buildGrowthKpis(growth), [growth]);
 
+  const highestMonthValue = useMemo(
+    () => (growth.length ? Math.max(...growth.map((r) => r.count)) : null),
+    [growth]
+  );
+
   const heroPeriod = byYear.length
     ? byYear.length > 1
       ? `${byYear[0].year}–${byYear[byYear.length - 1].year}`
@@ -990,28 +995,28 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
   const growthKpis = [
     {
-      label: "This month vs last",
+      label: "This Month vs. Last",
       value: growthKpi.momDisplay,
       caption: growthKpi.momLabel,
       accent: growthKpi.momRaw == null ? "#64748b" : growthKpi.momRaw >= 0 ? "#16a34a" : "#dc2626",
       delta: deltaFromPct(growthKpi.momRaw),
     },
     {
-      label: "Last month MoM",
+      label: "Last Month MoM",
       value: growthKpi.prevMomDisplay,
       caption: growthKpi.prevMomLabel,
       accent: "#64748b",
       delta: deltaFromPct(growthKpi.prevMomRaw),
     },
     {
-      label: "Months tracked",
+      label: "Months Tracked",
       value: fmtNum(growth.length),
       caption: "Historical request periods",
       accent: COLORS.birth,
     },
     {
-      label: "Highest month",
-      value: growth.length ? fmtNum(Math.max(...growth.map((r) => r.count))) : "—",
+      label: "Highest Month",
+      value: highestMonthValue !== null ? fmtNum(highestMonthValue) : "—",
       caption: "Peak request volume period",
       accent: COLORS.marriage,
     },
@@ -1056,11 +1061,8 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
         </div>
       )}
 
-      {tab === "growth" ? (
-        <KpiStrip items={growthKpis} />
-      ) : (
-        <KpiStrip items={overviewKpis} />
-      )}
+      {/* Overview cards stay visible on every tab. */}
+      <KpiStrip items={overviewKpis} />
 
       <div className="an-tabs" role="tablist">
         {tabs.map((t) => (
@@ -1185,6 +1187,9 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
       {tab === "growth" && (
         <div className="an-tab-content">
+          {/* Growth KPIs sit below the overview cards, mirroring the Today layout. */}
+          <KpiStrip items={growthKpis} />
+
           <Panel
             full
             title="Monthly request volume trend"
