@@ -4,10 +4,12 @@ import LoadingScreen from "./LoadingScreen";
 import useHeartbeat from "../hooks/useHeartbeat";
 
 
-useHeartbeat(isAuthenticated);
-
 export default function ProtectedRoute({ module, adminOnly = false, children }) {
   const { hasAccess, is_admin, loading, waking } = usePermissions();
+
+  // Call heartbeat at the TOP of the component, before any conditional return.
+  // hasAccess("dashboard") is true only when the server confirmed this session is logged in.
+  useHeartbeat(hasAccess("dashboard"));
 
   // 1. Launch-time session check only. After login, loading is already false,
   //    so this screen is not shown again.
