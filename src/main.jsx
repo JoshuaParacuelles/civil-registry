@@ -15,6 +15,7 @@ import HomePreloader from "./routes/HomePreloader";
 import ToastContainer from "./components/ToastContainer";
 import GlobalRealtime from "./components/GlobalRealtime";
 import ErrorBoundary from "./components/ErrorBoundary";
+import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import Home from "./pages/Home/Home";
 
 // Apply the saved theme, zoom and contrast before the first render so the
@@ -28,6 +29,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       {/* Router wraps PermissionProvider so Navigate works inside ProtectedRoute */}
       <Router>
         <ToastContainer />
+        {/* Shows the "new version available" banner and registers the service worker. */}
+        <PwaUpdatePrompt />
         {/* One realtime listener for the whole app. Pages subscribe via useDataChanged. */}
         <GlobalRealtime />
         <PermissionProvider>

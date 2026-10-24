@@ -20,15 +20,16 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',
-      injectRegister: 'auto',
+      // Registration is handled by PwaUpdatePrompt (useRegisterSW),
+      // so the plugin must not inject its own registerSW script.
+      injectRegister: null,
       manifest: false, // we ship our own public/manifest.webmanifest
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,jpg,jpeg,svg,webp,woff,woff2,webmanifest}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
-        skipWaiting: true,
-        clientsClaim: true,
+        // No skipWaiting / clientsClaim: the new version waits until the user accepts the update.
         cleanupOutdatedCaches: true,
       },
       devOptions: { enabled: false },
