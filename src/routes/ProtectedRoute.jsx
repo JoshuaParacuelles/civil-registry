@@ -1,6 +1,10 @@
 import { Navigate } from "react-router-dom";
 import { usePermissions } from "../context/PermissionContext";
 import LoadingScreen from "./LoadingScreen";
+import useHeartbeat from "../hooks/useHeartbeat";
+
+
+useHeartbeat(isAuthenticated);
 
 export default function ProtectedRoute({ module, adminOnly = false, children }) {
   const { hasAccess, is_admin, loading, waking } = usePermissions();
