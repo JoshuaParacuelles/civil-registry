@@ -17,35 +17,40 @@ const NOT_CONFIGURED_ERROR = new Error(
 
 const failedResult = () => ({ data: null, error: NOT_CONFIGURED_ERROR });
 
+const CHAINABLE_METHODS = [
+  "select",
+  "insert",
+  "update",
+  "upsert",
+  "delete",
+  "eq",
+  "neq",
+  "in",
+  "is",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "like",
+  "ilike",
+  "or",
+  "not",
+  "match",
+  "filter",
+  "contains",
+  "containedBy",
+  "textSearch",
+  "order",
+  "limit",
+  "range",
+  "single",
+  "maybeSingle",
+];
+
 // Chainable + awaitable: supports .from().select().eq().order().limit() etc.
 const createNoopQuery = () => {
   const query = {};
-  [
-    "select",
-    "insert",
-    "update",
-    "upsert",
-    "delete",
-    "eq",
-    "neq",
-    "in",
-    "is",
-    "gt",
-    "gte",
-    "lt",
-    "lte",
-    "like",
-    "ilike",
-    "or",
-    "not",
-    "match",
-    "filter",
-    "order",
-    "limit",
-    "range",
-    "single",
-    "maybeSingle",
-  ].forEach((method) => {
+  CHAINABLE_METHODS.forEach((method) => {
     query[method] = () => query;
   });
 
@@ -55,13 +60,17 @@ const createNoopQuery = () => {
   return query;
 };
 
+// Status is reported asynchronously (queueMicrotask). A synchronous callback
+// can run before the caller's own `const` is initialized, which throws
+// "Cannot access 'x' before initialization". Deferring avoids that.
 const noopChannel = {
   on() {
     return noopChannel;
   },
   subscribe(callback) {
-    // Tell the caller the channel failed so the UI can show "error" status.
-    if (typeof callback === "function") callback("CHANNEL_ERROR");
+    if (typeof callback === "function") {
+      queueMicrotask(() => callback("CHANNEL_ERROR"));
+    }
     return noopChannel;
   },
   unsubscribe() {
@@ -93,8 +102,8 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn(
     "[supabaseClient] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set. " +
       "Supabase features (notifications, realtime updates) are disabled. " +
-      "On Vercel, add both variables under Project Settings > Environment Variables " +
-      "and redeploy (Vite reads them at build time)."
+      "On Render, add both variables to the static site service under Environment " +
+      "and run Clear build cache & deploy (Vite reads them at build time)."
   );
 } else {
   try {

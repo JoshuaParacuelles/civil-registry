@@ -234,7 +234,12 @@ export default function useNotifications({ username, allowedTypes, onOpenVerifie
 
       fetchNotifications();
 
-      const ch = supabase
+      // Declared with `let` BEFORE the chain. The subscribe callback can run
+      // synchronously (the fallback client does this when Supabase is not
+      // configured), so it must never read a `const` that is still uninitialized.
+      let ch = null;
+
+      ch = supabase
         .channel("home-notification-realtime")
         .on("postgres_changes", { event: "*", schema: "public", table: NOTIFICATION_TABLE }, (payload) => {
           if (payload.eventType === "INSERT") {
@@ -277,8 +282,9 @@ export default function useNotifications({ username, allowedTypes, onOpenVerifie
           filter: `username=eq.${reader}`,
         }, handleReadChange)
         .subscribe((status) => {
-          // Ignore status events from a channel we already closed.
-          if (channel !== ch) return;
+          // `ch` and `channel` are both null during a synchronous callback, so this
+          // passes. Later, a closed or replaced channel no longer matches and is ignored.
+          if (ch !== channel) return;
           if (status === "SUBSCRIBED") {
             statusRef.current = "live";
             setNotifStatus("live");

@@ -20,8 +20,15 @@ export function useRealtimeRefresh({
 
   const refreshRef = useRef(onRefresh);
   const statusRef = useRef(status);
-  refreshRef.current = onRefresh;
-  statusRef.current = status;
+
+  // Refs are updated in effects, not during render, so renders stay pure.
+  useEffect(() => {
+    refreshRef.current = onRefresh;
+  }, [onRefresh]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     let debounceTimer = null;
@@ -98,7 +105,7 @@ export function useRealtimeRefresh({
       window.removeEventListener("online", handleOnline);
       if (channel) supabase.removeChannel(channel);
     };
-    // tables kinahanglan stable (module-level constant)
+    // `tables` must be a stable module-level constant so it is not listed here.
   }, [channelName, debounceMs, pollMs, runOnMount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { status, lastUpdated };
