@@ -42,6 +42,7 @@ const fmtNum = (v) => numFmt.format(Number(v || 0));
 const fmtPct = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Number(v).toFixed(1)}%`);
 const fmtPHP = (v) => `₱${phpFmt.format(Number(v || 0))}`;
 const EMPTY_ARRAY = Object.freeze([]);
+const EMPTY_DATA = Object.freeze({});
 const safeArr = (v) => (Array.isArray(v) ? v : EMPTY_ARRAY);
 
 const useContainerWidth = (fallback = 560) => {
@@ -801,7 +802,16 @@ const MemoMunicipalityTable = memo(MunicipalityTable);
 
 /* ══ MAIN ANALYTICS DASHBOARD ════════════════════════════════════════════════ */
 const AnalyticsDashboard = ({ recordLinks = {} }) => {
-  const { data, loading, error, refetch, stale } = useAnalyticsData();
+  const { data: rawData, loading, error, refetch, stale } = useAnalyticsData();
+
+  // Guard: a failed or missing response must never reach the render path as
+  // null/undefined, otherwise reading data.summary throws and the page goes blank.
+  const data = rawData ?? EMPTY_DATA;
+
+  // A section is "still loading" only while no error has occurred. After an
+  // error, missing sections render their empty state instead of a skeleton forever.
+  const isPending = (key) => !error && data[key] === undefined;
+
   const online = useOnlineStatus();
   const [lastLiveAt, setLastLiveAt] = useState(null);
   const [lastSeenData, setLastSeenData] = useState(null);
@@ -844,7 +854,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
     if (
       online &&
       !stale?.fromCache &&
-      data?.summary &&
+      data.summary &&
       !data.summary.__failed &&
       data !== lastSeenData
     ) {
@@ -1054,8 +1064,8 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
       {error && (
         <div className="an-error-banner">
-          {error}
-          <button className="an-error-retry" onClick={refetch} style={{ marginLeft: 12 }}>
+          {String(error)}
+          <button className="an-error-retry" onClick={() => refetch()} style={{ marginLeft: 12 }}>
             Retry
           </button>
         </div>
@@ -1085,7 +1095,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
               <MemoDonutChart slices={donutSlices} size={130} />
             </Panel>
             <Panel title="Seasonal patterns" sub="Record & request volume by month of year">
-              {data.byMonth === undefined || data.reqByMonth === undefined
+              {isPending("byMonth") || isPending("reqByMonth")
                 ? <Skeleton h={180} />
                 : <MonthHeatmap byMonth={byMonth} reqByMonth={reqMonth} />}
             </Panel>
@@ -1096,7 +1106,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             title="Records uploaded per year"
             sub={heroPeriod ? `Historical civil registry growth, ${heroPeriod}` : "Historical civil registry growth"}
           >
-            {data.byYear === undefined ? <Skeleton h={200} /> : byYear.length ? (
+            {isPending("byYear") ? <Skeleton h={200} /> : byYear.length ? (
               <MemoLineChart series={byYearSeries} labels={yearLabels} height={200} showLegend={false} />
             ) : (
               <Empty msg="No year data" />
@@ -1116,7 +1126,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
                 : "Birth, marriage, and death certificate requests over time"
             }
           >
-            {data.growthRate === undefined ? <Skeleton h={220} /> : growthSeries.length ? (
+            {isPending("growthRate") ? <Skeleton h={220} /> : growthSeries.length ? (
               <MemoLineChart series={growthSeries} labels={growthLabels} height={220} showLegend />
             ) : (
               <Empty msg="No trend data" />
@@ -1125,25 +1135,25 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
 
           <div className="an-two-col">
             <Panel title="Records registered per year" sub="Total civil records entered into the system">
-              {data.byYear === undefined ? <Skeleton h={180} /> : byYear.length ? (
+              {isPending("byYear") ? <Skeleton h={180} /> : byYear.length ? (
                 <MemoBarChart rows={byYearRows} colorKey="color" valueKey="count" labelKey="label" />
               ) : <Empty />}
             </Panel>
             <Panel title="Certificate requests per year" sub="Requests across all document types">
-              {data.reqByYear === undefined ? <Skeleton h={180} /> : reqYear.length ? (
+              {isPending("reqByYear") ? <Skeleton h={180} /> : reqYear.length ? (
                 <MemoBarChart rows={requestYearRows} colorKey="color" valueKey="count" labelKey="label" />
               ) : <Empty />}
             </Panel>
           </div>
 
           <Panel full title="Monthly seasonality — records" sub="Which months see the highest registration activity">
-            {data.byMonth === undefined ? <Skeleton h={180} /> : byMonth.length ? (
+            {isPending("byMonth") ? <Skeleton h={180} /> : byMonth.length ? (
               <MemoBarChart rows={byMonthRows} colorKey="color" valueKey="count" labelKey="label" />
             ) : <Empty />}
           </Panel>
 
           <Panel full title="Monthly seasonality — requests" sub="Certificate request demand by month">
-            {data.reqByMonth === undefined ? <Skeleton h={180} /> : reqMonth.length ? (
+            {isPending("reqByMonth") ? <Skeleton h={180} /> : reqMonth.length ? (
               <MemoBarChart rows={requestMonthRows} colorKey="color" valueKey="count" labelKey="label" />
             ) : <Empty />}
           </Panel>
@@ -1157,7 +1167,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             title="Top municipalities & barangays"
             sub="Ranked by record volume — click a sort key to reorder"
           >
-            {data.topMunicipalities === undefined ? <Skeleton h={300} /> : munis.length ? (
+            {isPending("topMunicipalities") ? <Skeleton h={300} /> : munis.length ? (
               <>
                 <MemoStackedBar rows={topMunicipalityRows} />
                 <div style={{ marginTop: "1.25rem" }}>
@@ -1169,7 +1179,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             )}
           </Panel>
 
-          {data.topMunicipalities !== undefined && munis.length > 0 && (
+          {!isPending("topMunicipalities") && munis.length > 0 && (
             <div className="an-three-col">
               <Panel title="Hotspot analysis — Birth records" sub="Municipalities with concentrated birth registrations">
                 <MemoBarChart rows={hotspots.Birth} colorKey="color" valueKey="count" labelKey="label" />
@@ -1199,7 +1209,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
                 : "All civil registry request types combined with per-type breakdown"
             }
           >
-            {data.growthRate === undefined ? <Skeleton h={240} /> : growthSeries.length ? (
+            {isPending("growthRate") ? <Skeleton h={240} /> : growthSeries.length ? (
               <MemoLineChart series={growthSeries} labels={growthLabels} height={240} showLegend />
             ) : <Empty />}
           </Panel>
@@ -1209,7 +1219,7 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
             title={last12Period ? `Month-over-month growth rate — ${last12Period}` : "Month-over-month growth rate"}
             sub="Positive = more requests than previous month · negative = fewer requests"
           >
-            {data.growthRate === undefined ? <Skeleton h={260} /> : growth.length ? <GrowthTable rows={growth} /> : <Empty />}
+            {isPending("growthRate") ? <Skeleton h={260} /> : growth.length ? <GrowthTable rows={growth} /> : <Empty />}
           </Panel>
         </div>
       )}
@@ -1217,10 +1227,10 @@ const AnalyticsDashboard = ({ recordLinks = {} }) => {
       {tab === "today" && (
         <div className="an-tab-content">
           <Panel full title="Today's activity" sub="Current business day window (6 AM rollover)">
-            {data.today === undefined ? <Skeleton h={240} /> : <TodayPanel today={today} />}
+            {isPending("today") ? <Skeleton h={240} /> : <TodayPanel today={today} />}
           </Panel>
 
-          {data.today === undefined ? <Skeleton h={220} /> : today.requests_breakdown?.length > 0 && (
+          {isPending("today") ? <Skeleton h={220} /> : today.requests_breakdown?.length > 0 && (
             <div className="an-two-col">
               <Panel title="Requests breakdown" sub="Certificate types requested today">
                 <MemoBarChart rows={todayRequestRows} colorKey="color" valueKey="count" labelKey="label" />
